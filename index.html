@@ -36,7 +36,77 @@
         .nest-grid { display: grid; grid-template-columns: repeat(20, 1fr); gap: 2px; margin-top: 10px; width: 100%; background: #964B00; padding: 4px; border-radius: 6px; box-sizing: border-box; } .nest-block { aspect-ratio: 1; background: #5c3a21; border-radius: 1px; cursor: pointer; font-size: 0; transition: background 0.2s; } .nest-block.dug { background: var(--background); border: none; cursor: default; } .nest-block.pillar { background: #7f8c8d; border: 1px solid #2c3e50; cursor: default; } .nest-block.reservoir { background: #3498db; border: 1px dashed #2980b9; cursor: default; } .nest-block:hover { background: #bdc3c7; }
         .boss-word { font-size: 50px; font-weight: bold; color: var(--danger); margin: 20px 0; } .boss-timer { font-size: 40px; font-weight: bold; color: var(--dark); } .food-item-row { width: 100%; display: flex; justify-content: space-between; font-size: 13px; font-weight: bold; margin: 4px 0; }
         .build-btn { flex:1; background:var(--card-bg); color:var(--dark); border:1px solid var(--border); font-size:11px; padding:4px; border-radius:4px; cursor:pointer; }
-    </style>
+    
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+:root{
+ --primary:#4f46e5;
+ --success:#10b981;
+ --danger:#ef4444;
+ --accent:#f59e0b;
+ --background:#f8fafc;
+ --card-bg:rgba(255,255,255,.92);
+ --text:#0f172a;
+ --dark:#020617;
+ --border:#e2e8f0;
+ --input-bg:#fff;
+}
+
+body{
+ font-family:'Inter',sans-serif !important;
+ background:radial-gradient(circle at top left,#dbeafe,#f8fafc 45%) !important;
+}
+
+.container{
+ background:var(--card-bg)!important;
+ backdrop-filter:blur(18px);
+ border-radius:28px!important;
+ border:1px solid rgba(255,255,255,.5);
+ box-shadow:0 20px 60px rgba(0,0,0,.08)!important;
+}
+
+h1,h2,h3{
+ font-weight:800!important;
+ letter-spacing:-0.03em;
+}
+
+.btn,.choice-btn{
+ border-radius:16px!important;
+ transition:all .2s ease!important;
+}
+
+.btn:hover,.choice-btn:hover{
+ transform:translateY(-2px);
+}
+
+input,select,textarea{
+ border-radius:14px!important;
+ border:2px solid var(--border)!important;
+}
+
+#char-display,.character-display{
+ background:#fff;
+ border-radius:20px;
+ padding:24px;
+ box-shadow:0 6px 20px rgba(0,0,0,.06);
+}
+
+.settings-section,.resource-display,.quiz-card,.stats-card{
+ border-radius:20px!important;
+ box-shadow:0 6px 20px rgba(0,0,0,.05);
+}
+
+#quiz-choices-container{
+ gap:12px!important;
+}
+
+.progress-bar,.xp-bar{
+ height:10px;
+ border-radius:999px;
+ overflow:hidden;
+}
+
+</style>
 </head>
 <body>
 
@@ -261,18 +331,19 @@
         
         actieveQuizLijst.sort((a, b) => actieveProgressie[a.kana] - actieveProgressie[b.kana]); const poolGrootte = Math.min(4, actieveQuizLijst.length); huidigTeken = actieveQuizLijst[Math.floor(Math.random() * poolGrootte)]; 
         
-        if (niveau === 'zinnen') {
-            document.getElementById('quiz-text-input-container').style.display = 'none'; document.getElementById('quiz-choices-container').style.display = 'grid'; 
-            document.getElementById('char-display').innerText = huidigTeken.kana; document.getElementById('char-display').style.fontSize = '35px';
-            document.getElementById('meaning-display').innerText = huidigTeken.romaji;
-            document.getElementById('quiz-progress-title').innerText = `Wat is de vertaling?`; genereerMeerkeuzeKnoppen();
-        } else if (huidigeVraagRichting === "normal") { 
-            document.getElementById('char-display').style.fontSize = '65px';
-            document.getElementById('quiz-text-input-container').style.display = 'flex'; document.getElementById('quiz-choices-container').style.display = 'none'; document.getElementById('char-display').innerText = huidigTeken.kana; document.getElementById('quiz-progress-title').innerText = `Typ de Romaji (${huidigTeken.type || 'woord'})`; document.getElementById('quiz-input').focus(); 
-        } else { 
-            document.getElementById('char-display').style.fontSize = '45px';
-            document.getElementById('quiz-text-input-container').style.display = 'none'; document.getElementById('quiz-choices-container').style.display = 'grid'; let displayTekst = huidigTeken.romaji.toUpperCase(); if (niveau === 'woorden') { displayTekst += `\n(${huidigTeken.betekenis})`; } document.getElementById('char-display').innerText = displayTekst; document.getElementById('quiz-progress-title').innerText = `Kies het juiste ${niveau === 'tekens' ? 'teken' : 'woord'}`; genereerMeerkeuzeKnoppen(); 
-        } 
+		if (niveau === 'zinnen') {
+            document.getElementById('quiz-text-input-container').style.display = 'none'; 
+            document.getElementById('quiz-choices-container').style.display = 'grid'; 
+            document.getElementById('char-display').innerText = huidigTeken.kana; 
+            document.getElementById('char-display').style.fontSize = '35px';
+            
+            // HIER IS DE AANPASSING:
+            // We zetten de tekst op "???" of laten hem leeg, in plaats van huidigTeken.romaji
+            document.getElementById('meaning-display').innerText = ''; 
+            
+            document.getElementById('quiz-progress-title').innerText = `Wat is de vertaling van deze zin?`; 
+            genereerMeerkeuzeKnoppen();
+        }
     }
     
     function genereerMeerkeuzeKnoppen() { 
