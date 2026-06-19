@@ -315,3 +315,32 @@ const woordenData = [
     { kana: 'うで', romaji: 'ude', betekenis: 'Arm', type: 'Woord', thema: 'Lichaamsdelen' }, 
     { kana: 'ひざ', romaji: 'hiza', betekenis: 'Knie', type: 'Woord', thema: 'Lichaamsdelen' } 
 ];
+
+const zinnenData = [
+    // Gedag zeggen
+    { kana: "おはようございます", romaji: "ohayou gozaimasu", betekenis: "Goedemorgen", thema: "Gedag zeggen" },
+    { kana: "こんにちは", romaji: "konnichiwa", betekenis: "Hallo / Goedemiddag", thema: "Gedag zeggen" },
+    { kana: "こんばんは", romaji: "konbanwa", betekenis: "Goedenavond", thema: "Gedag zeggen" },
+    { kana: "ありがとうございます", romaji: "arigatou gozaimasu", betekenis: "Dank u wel", thema: "Gedag zeggen" },
+    { kana: "さようなら", romaji: "sayounara", betekenis: "Tot ziens", thema: "Gedag zeggen" },
+
+    // Eten bestellen
+    { kana: "メニューをお願いします", romaji: "menyuu o onegaishimasu", betekenis: "Mag ik het menu, alstublieft?", thema: "Eten bestellen" },
+    { kana: "これをお願いします", romaji: "kore o onegaishimasu", betekenis: "Ik wil graag dit bestellen", thema: "Eten bestellen" },
+    { kana: "おいしいです", romaji: "oishii desu", betekenis: "Het is erg lekker!", thema: "Eten bestellen" },
+    { kana: "お会計をお願いします", romaji: "okaikei o onegaishimasu", betekenis: "Mag ik de rekening, alstublieft?", thema: "Eten bestellen" },
+    { kana: "水をお願いします", romaji: "mizu o onegaishimasu", betekenis: "Mag ik wat water, alstublieft?", thema: "Eten bestellen" },
+
+    // De weg vragen
+    { kana: "すみません、駅はどこですか", romaji: "sumimasen, eki wa doko desu ka", betekenis: "Pardon, waar is het station?", thema: "De weg vragen" },
+    { kana: "トイレはどこですか", romaji: "toire wa doko desu ka", betekenis: "Waar is het toilet?", thema: "De weg vragen" },
+    { kana: "まっすぐ行ってください", romaji: "massugu itte kudasai", betekenis: "Ga rechtdoor", thema: "De weg vragen" },
+    { kana: "右に曲がってください", romaji: "migi ni magatte kudasai", betekenis: "Sla rechtsaf", thema: "De weg vragen" },
+    { kana: "左に曲がってください", romaji: "hidari ni magatte kudasai", betekenis: "Sla linksaf", thema: "De weg vragen" },
+
+    // Noodgevallen / Handig
+    { kana: "英語を話せますか", romaji: "eigo o hanasemasu ka", betekenis: "Spreekt u Engels?", thema: "Handig op reis" },
+    { kana: "わかりません", romaji: "wakarimasen", betekenis: "Ik begrijp het niet", thema: "Handig op reis" },
+    { kana: "助けてください", romaji: "tasukete kudasai", betekenis: "Help mij alstublieft", thema: "Handig op reis" },
+    { kana: "クレジットカードは使えますか", romaji: "kurejitto kaado wa tsukaemasu ka", betekenis: "Kan ik met creditcard betalen?", thema: "Handig op reis" }
+];
