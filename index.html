@@ -210,6 +210,14 @@
             </div>
             <p id="zinnen-note" style="font-size: 12px; color: var(--primary); display: none;">* Zinnen worden altijd gespeeld als meerkeuzevragen.</p>
         </div>
+        <div class="settings-section" id="jlpt-niveau-sectie" style="display:none;">
+            <h4>JLPT-niveau <span style="font-size:11px; font-weight:normal; color:var(--muted);">(optioneel)</span>:</h4>
+            <div class="radio-group" id="jlpt-niveau-group">
+                <label class="radio-label checked"><input type="radio" name="quiz-jlpt" value="alle" checked onchange="updateRadioStyles()"> Alle</label>
+                <label class="radio-label"><input type="radio" name="quiz-jlpt" value="N5" onchange="updateRadioStyles()"> N5 · Beginner</label>
+                <label class="radio-label"><input type="radio" name="quiz-jlpt" value="N4" onchange="updateRadioStyles()"> N4 · Gevorderd</label>
+            </div>
+        </div>
         <div class="settings-section">
             <h4 id="groepen-titel">3. Categorieën:</h4>
             <div style="margin-bottom: 10px; text-align: left;">
@@ -482,6 +490,7 @@
             document.getElementById('richting-group').style.display = 'flex';
             document.getElementById('zinnen-note').style.display = 'none';
         }
+        document.getElementById('jlpt-niveau-sectie').style.display = (niveau === 'tekens') ? 'none' : 'block';
     }
     
     function toggleCheckboxes(status) { document.querySelectorAll('#groups-container input').forEach(cb => { cb.checked = status; cb.parentElement.classList.toggle('checked', status); }); }
@@ -503,6 +512,11 @@
         if (niveau === 'tekens') { actieveQuizLijst = kanaData.filter(item => actieveSelecties.includes(item.groep)); } 
         else if (niveau === 'woorden') { actieveQuizLijst = woordenData.filter(item => actieveSelecties.includes(item.thema)); } 
         else if (niveau === 'zinnen') { actieveQuizLijst = zinnenData.filter(item => actieveSelecties.includes(item.thema)); } 
+        if (niveau !== 'tekens') {
+            const jlptFilter = document.querySelector('input[name="quiz-jlpt"]:checked')?.value || 'alle';
+            if (jlptFilter !== 'alle') actieveQuizLijst = actieveQuizLijst.filter(item => item.niveau === jlptFilter);
+        }
+        if (actieveQuizLijst.length === 0) { alert('Geen items gevonden voor deze combinatie van categorie en JLPT-niveau. Kies een ander niveau of meer categorieën.'); return; }
         switchScreen('screen-quiz'); volgendTeken(); 
     }
     
@@ -592,7 +606,7 @@
         if(tab === 'woorden') { basisData = woordenData; progressie = progressieWoorden; }
         if(tab === 'zinnen') { basisData = zinnenData; progressie = progressieZinnen; }
         const gesorteerdeData = [...basisData].sort((a,b) => progressie[a.kana] - progressie[b.kana]); 
-        gesorteerdeData.forEach(item => { const score = progressie[item.kana]; const percentage = (score / 5) * 100; const tr = document.createElement('tr'); let extraInfo = item.betekenis ? `<br><span style="font-size:11px; font-weight:normal; color:var(--muted);">${item.betekenis}</span>` : ''; tr.innerHTML = `<td style="font-size: 16px; font-weight: bold; color: var(--dark); cursor: pointer;" onclick="spreekJapansUit('${item.kana}')" title="Klik om te horen">${item.kana} 🔊</td><td><strong>${item.romaji}</strong>${extraInfo}</td><td><div class="level-bar"><div class="level-fill" style="width: ${percentage}%; background-color: ${score <= 1 ? 'var(--danger)' : score <= 3 ? '#f1c40f' : 'var(--success)'}"></div></div><span style="font-size: 11px; margin-left: 5px;">${score}/5</span></td>`; tbody.appendChild(tr); }); 
+        gesorteerdeData.forEach(item => { const score = progressie[item.kana]; const percentage = (score / 5) * 100; const tr = document.createElement('tr'); let extraInfo = item.betekenis ? `<br><span style="font-size:11px; font-weight:normal; color:var(--muted);">${item.betekenis}</span>` : ''; let niveauBadge = item.niveau ? `<span style="font-size:10px; font-weight:bold; padding:1px 6px; border-radius:8px; margin-left:5px; background:${item.niveau === 'N4' ? 'var(--budou)' : 'var(--ai)'}; color:#fff;">${item.niveau}</span>` : ''; tr.innerHTML = `<td style="font-size: 16px; font-weight: bold; color: var(--dark); cursor: pointer;" onclick="spreekJapansUit('${item.kana}')" title="Klik om te horen">${item.kana} 🔊${niveauBadge}</td><td><strong>${item.romaji}</strong>${extraInfo}</td><td><div class="level-bar"><div class="level-fill" style="width: ${percentage}%; background-color: ${score <= 1 ? 'var(--danger)' : score <= 3 ? '#f1c40f' : 'var(--success)'}"></div></div><span style="font-size: 11px; margin-left: 5px;">${score}/5</span></td>`; tbody.appendChild(tr); }); 
     }
     async function laadLeaderboard(type) { switchScreen('screen-leaderboard'); document.getElementById('tab-lb-score').classList.toggle('active', type === 'score'); document.getElementById('tab-lb-majors').classList.toggle('active', type === 'majors'); const container = document.getElementById('leaderboard-container'); container.innerHTML = "<p>Laden...</p>"; const orderField = type === 'score' ? 'total_score' : 'majors'; try { const { data, error } = await supabaseClient.from('kana_users').select(`username, ${orderField}`).order(orderField, { ascending: false }).limit(10); if (error) throw error; container.innerHTML = ""; data.forEach((user, index) => { let medaille = `${index + 1}.`; if (index === 0) medaille = "🥇"; if (index === 1) medaille = "🥈"; if (index === 2) medaille = "🥉"; const val = user[orderField]; const suffix = type === 'score' ? 'pts' : 'Majors 🛡️'; const item = document.createElement('div'); item.style.padding = "10px"; item.style.borderBottom = "1px solid var(--border)"; item.style.display = "flex"; item.style.justifyContent = "space-between"; item.style.fontWeight = "bold"; if(user.username === huidigeGebruiker) { item.style.backgroundColor = "color-mix(in srgb, var(--primary) 10%, transparent)"; item.style.color = "var(--primary)"; } item.innerHTML = `<span>${medaille} <span style="text-transform: capitalize;">${user.username}</span></span><span>${val || 0} ${suffix}</span>`; container.appendChild(item); }); } catch(e) { console.warn('Leaderboard laden mislukt:', e); container.innerHTML = "<p>⚠️ Kan het leaderboard niet laden. Controleer je verbinding.</p>"; } }
 
