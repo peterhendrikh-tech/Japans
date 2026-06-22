@@ -5,9 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kana Master - Cloud Editie</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='80' font-size='80'%3E%E2%9B%A9%EF%B8%8F%3C/text%3E%3C/svg%3E">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    <meta name="theme-color" content="#2c4a5e">
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;700;800&family=Zen+Maru+Gothic:wght@400;500;700;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;700;800&family=Zen+Maru+Gothic:wght@400;500;700;900&family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet">
     <style>
         /* ===== Japans thema — tokens =====
            Sumi (墨, inkt) / Washi (和紙, papier) / Ai (藍, indigo) / Shu (朱, vermiljoen) / Matsuba (松葉, pijnboomgroen) / Kincha (金茶, oudgoud) */
@@ -22,6 +25,7 @@
             --ai: #6f9bb5; --primary: var(--ai); --shu: #d9776f; --danger: var(--shu); --matsuba: #84a988; --success: var(--matsuba); --kincha: #d9b56a; --accent: var(--kincha);
             --muted: #b3a48c;
         }
+        [data-font="basis"] { --font-display: 'Noto Sans JP', 'Zen Maru Gothic', sans-serif; }
         * { box-sizing: border-box; }
         body {
             font-family: var(--font-body); background-color: var(--background); color: var(--text); margin: 0; padding: 15px;
@@ -154,7 +158,7 @@
 </head>
 <body>
 <div class="container">
-    <div class="top-controls"><button class="control-btn" id="audio-toggle" onclick="toggleAudio()">🔊 Aan</button><button class="control-btn" id="theme-toggle" onclick="toggleTheme()">🌙</button></div>
+    <div class="top-controls"><button class="control-btn" id="font-toggle" onclick="toggleFont()" title="Wissel tussen Japans en basis lettertype">あ Mincho</button><button class="control-btn" id="audio-toggle" onclick="toggleAudio()">🔊 Aan</button><button class="control-btn" id="theme-toggle" onclick="toggleTheme()">🌙</button></div>
     
     <div id="screen-login" class="screen active">
         <h1>🇯🇵 Kana Master</h1>
@@ -174,11 +178,14 @@
         </div>
 
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-            <button class="btn" onclick="switchScreen('screen-selection')">🏠 Dashboard</button>
+            <button class="btn" onclick="openStats()">📊 Statistieken</button>
             <button class="btn" onclick="switchScreen('screen-selection')">📚 Leren</button>
+            <button class="btn" onclick="laadLeaderboard('score')">🏆 Leaderboard</button>
+            <button class="btn" style="background:var(--budou);" onclick="switchScreen('screen-compare')">🤝 Vrienden</button>
             <button class="btn btn-memory" onclick="startMemoryGame()">🃏 Kana Memory</button>
             <button class="btn btn-drop" onclick="startKanaDropInit()">🌧️ Kana Drop</button>
             <button class="btn btn-accent" onclick="startGalgjeInit()">🔤 Kana Galgje</button>
+            <button class="btn" style="background:var(--special);" onclick="startTekenenInit()">✍️ Teken Training</button>
             <button class="btn btn-collector" onclick="openEcosysteem()">🐜 Imperium</button>
         </div>
     </div>
@@ -256,6 +263,32 @@
     <div id="screen-galgje" class="screen"><h2>🔤 Kana Galgje</h2><button class="btn powerup-btn" id="btn-galgje-hint" onclick="koopGalgjeHint()">🐜 Vraag een mier om een hint (-5 Werksters)</button><div style="font-size: 24px; color: var(--muted); margin-bottom: 10px;" id="galgje-kana-display">-</div><div class="galgje-word" id="galgje-word-display">_ _ _ _</div><div style="color: var(--danger); font-weight: bold; margin-bottom: 15px;" id="galgje-feedback">Fouten: 0 / 6</div><div class="input-container"><input type="text" id="galgje-input" placeholder="Letter" maxlength="1" autocomplete="off" style="text-transform: lowercase; width: 80px;"><button class="quiz-btn" onclick="checkGalgjeAnswer()">Gok</button></div><button class="btn" onclick="startGalgjeInit()" style="display:none; margin-bottom: 10px;" id="galgje-next-btn">Volgende Woord</button><button class="btn btn-secondary" onclick="switchScreen('screen-menu')">Stoppen</button></div>
     <div id="screen-boss" class="screen"><h2>👑 De Bruidsvlucht</h2><p style="color:var(--danger); font-weight:bold;">Eén fout = -50 Majors. Vertaal er 20 goed binnen de tijd!</p><div class="boss-timer" id="boss-timer">60</div><div class="boss-word" id="boss-word">あ</div><div style="font-weight:bold; font-size:20px; margin-bottom:15px;">Reeks: <span id="boss-streak">0/20</span></div><div class="input-container"><input type="text" id="boss-input" placeholder="Romaji..." autocomplete="off"><button class="quiz-btn" onclick="checkBossAnswer()">Go!</button></div></div>
 
+    <div id="screen-draw" class="screen">
+        <h2>✍️ Teken Training <span style="font-size:11px; font-weight:normal; color:var(--muted);">(optioneel)</span></h2>
+        <p style="font-size:12px; color:var(--muted); margin-top:-8px;">Schrijf het teken na met je muis of vinger. Dit controleert geen exacte streekvolgorde — het is bedoeld om de vorm in je motoriek te krijgen.</p>
+        <div class="meaning-hint" id="draw-romaji" style="font-size:20px; font-weight:bold; color:var(--dark);">-</div>
+        <div style="position:relative; width:260px; height:260px; margin:10px auto; background:var(--input-bg); border:2px solid var(--border); border-radius:16px; overflow:hidden;">
+            <div id="draw-ghost" style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:170px; color:var(--border); font-family:var(--font-display); pointer-events:none; user-select:none;"></div>
+            <canvas id="draw-canvas" width="260" height="260" style="position:absolute; inset:0; touch-action:none; cursor:crosshair;"></canvas>
+        </div>
+        <div style="display:flex; gap:8px; margin-bottom:10px;">
+            <button class="btn btn-secondary" style="margin:0;" onclick="wisTekenCanvas()">🧹 Wis</button>
+            <button class="btn" id="btn-draw-ghost" style="margin:0; background:var(--budou);" onclick="toggleTekenGhost()">👻 Toon teken</button>
+            <button class="btn" style="margin:0;" onclick="volgendTekenenItem()">➡️ Volgende</button>
+        </div>
+        <button class="btn btn-secondary" onclick="switchScreen('screen-menu')">Stoppen</button>
+    </div>
+
+    <div id="screen-compare" class="screen">
+        <h2>🤝 Vergelijk met een vriend</h2>
+        <div class="input-container">
+            <input type="text" id="compare-input" placeholder="Gebruikersnaam..." autocomplete="off">
+            <button class="quiz-btn" onclick="vergelijkVriend()">Vergelijk</button>
+        </div>
+        <div id="compare-result"></div>
+        <button class="btn btn-secondary" onclick="switchScreen('screen-menu')" style="margin-top:15px;">Terug naar Menu</button>
+    </div>
+
     <div id="screen-collector" class="screen">
         <h2>🐜 Het Mieren Imperium</h2>
         <p style="font-size:11px; color:var(--danger); font-weight:bold; margin-top:-10px;">💤 Anti-AFK: Pauzeert als je 2 min. niets doet.</p>
@@ -295,7 +328,7 @@
 
     let huidigeGebruiker = null; 
     let progressieKana = {}; let progressieWoorden = {}; let progressieZinnen = {}; 
-    let actieveQuizLijst = []; let huigigSchermModus = "normal"; let huidigeVraagRichting = "normal"; let huidigTeken = null; let isChecking = false; let huidigeStatsTab = 'tekens'; let huidigeMeerkeuzeLijst = []; let audioAan = true; let huidigThema = "light";
+    let actieveQuizLijst = []; let huigigSchermModus = "normal"; let huidigeVraagRichting = "normal"; let huidigTeken = null; let isChecking = false; let huidigeStatsTab = 'tekens'; let huidigeMeerkeuzeLijst = []; let audioAan = true; let huidigThema = "light"; let huidigFont = "japans";
     let ecoStatus = { spentWater: 0, plantStage: 0, ants: 0, media: 0, majors: 0, sproeier: false, prestige: false, rushVragen: 0, plantType: 'none', plantTarget: 3, aphids: 0, nest: Array(400).fill(0), bossBeaten: false, stankTimer: 0, eventCooldown: 0, foodKomkommer: 0, foodBroccoli: 0, foodMuismeloen: 0, alates: 0 };
     let sproeierInterval, prestigeInterval, luizenInterval, nestInterval;
     let laatsteActiviteit = Date.now();
@@ -336,8 +369,31 @@
         else {
             const gisteren = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
             ecoStatus.streak = (ecoStatus.lastActiveDate === gisteren) ? (ecoStatus.streak || 0) + 1 : 1;
+            controleerStreakBeloning();
         }
         ecoStatus.lastActiveDate = vandaag;
+    }
+    function controleerStreakBeloning() {
+        const mijlpalen = { 3: 10, 7: 25, 14: 50, 30: 100, 60: 200, 100: 400, 365: 1500 };
+        const bonus = mijlpalen[ecoStatus.streak];
+        if (bonus) {
+            ecoStatus.majors = (ecoStatus.majors || 0) + bonus;
+            setTimeout(() => { toonMelding(`🔥 ${ecoStatus.streak} dagen op rij! Bonus: +${bonus} Majors 🛡️`, 'success'); toonConfetti(); }, 600);
+        }
+    }
+    function toonConfetti() {
+        const kleuren = ['var(--shu)', 'var(--kincha)', 'var(--matsuba)', 'var(--ai)'];
+        for (let i = 0; i < 36; i++) {
+            const c = document.createElement('div');
+            c.style.position = 'fixed'; c.style.top = '-20px'; c.style.left = (Math.random() * 100) + 'vw';
+            c.style.width = (5 + Math.random() * 5) + 'px'; c.style.height = c.style.width;
+            c.style.background = kleuren[i % kleuren.length]; c.style.opacity = '0.9';
+            c.style.borderRadius = (Math.random() < 0.5 ? '50%' : '2px'); c.style.zIndex = '1001'; c.style.pointerEvents = 'none';
+            c.style.transition = `transform ${1.4 + Math.random()}s ease-in, opacity ${1.4 + Math.random()}s ease-in`;
+            document.body.appendChild(c);
+            requestAnimationFrame(() => { c.style.transform = `translateY(${75 + Math.random() * 25}vh) rotate(${Math.random() * 360}deg)`; c.style.opacity = '0'; });
+            setTimeout(() => c.remove(), 3000);
+        }
     }
     function updateMenuCards() {
         const streakEl = document.getElementById('menu-streak'); if(!streakEl) return;
@@ -372,17 +428,48 @@
     function verhoogScore(item) {
         laatsteActiviteit = Date.now(); let progDB = progressieKana; if (woordenData.includes(item)) progDB = progressieWoorden; if (typeof zinnenData !== 'undefined' && zinnenData.includes(item)) progDB = progressieZinnen;
         if(progDB[item.kana] < 5) progDB[item.kana] += 1;
+        bijwerkenRepetitie(item.kana, true);
         let p = ecoStatus.bossBeaten ? 2 : 1; if(ecoStatus.rushVragen > 0) { ecoStatus.rushVragen--; if(ecoStatus.spentWater > -9999) ecoStatus.spentWater -= p; }
         if(Math.random() < 0.05 && Date.now() > ecoStatus.eventCooldown) { ecoStatus.eventCooldown = Date.now() + 300000; if(confirm("🚨 RANDOM EVENT!\n\nDe buren klagen over de mestlucht! Bakken schoongespoelen (-10 Water) of negeren (5 min geen groei)?")) { if(berekenTotaalScore() - ecoStatus.spentWater >= 10) { ecoStatus.spentWater += 10; alert("Gelukt!"); } else { alert("Te weinig water! Stank blokkeert de boel."); ecoStatus.stankTimer = Date.now() + 300000; } } else { ecoStatus.stankTimer = Date.now() + 300000; } }
         capWater(); saveProgressie();
     }
+    /* ===== Spaced repetition (lichte SM-2-achtige aanpak) =====
+       Per item wordt onthouden wanneer het weer 'aan de beurt' is. Hoe vaker een item goed gaat,
+       hoe langer de wachttijd. Bij een fout antwoord komt het meteen weer in de beurt. */
+    const SRS_WACHTTIJD_MIN = [1, 10, 60, 480, 1440, 4320, 10080]; // 1 min, 10 min, 1u, 8u, 1 dag, 3 dagen, 1 week
+    function srsGroep(niveau) { return niveau === 'tekens' ? 'kana' : (niveau === 'woorden' ? 'woorden' : 'zinnen'); }
+    function bijwerkenRepetitie(kanaKey, juist) {
+        const niveau = document.querySelector('input[name="quiz-niveau"]:checked')?.value || 'tekens';
+        const groep = srsGroep(niveau);
+        if(!ecoStatus.srs) ecoStatus.srs = {};
+        if(!ecoStatus.srs[groep]) ecoStatus.srs[groep] = {};
+        if(juist) {
+            const progressie = groep === 'kana' ? progressieKana : (groep === 'woorden' ? progressieWoorden : progressieZinnen);
+            const idx = Math.min(progressie[kanaKey] || 0, SRS_WACHTTIJD_MIN.length - 1);
+            ecoStatus.srs[groep][kanaKey] = Date.now() + SRS_WACHTTIJD_MIN[idx] * 60000;
+        } else {
+            ecoStatus.srs[groep][kanaKey] = Date.now();
+        }
+    }
     function berekenTotaalScore() { let total = 0; Object.values(progressieKana).forEach(s => total+=s); Object.values(progressieWoorden).forEach(s => total+=s); if(typeof progressieZinnen !== 'undefined') Object.values(progressieZinnen).forEach(s => total+=s); return total * (ecoStatus.bossBeaten ? 2 : 1); }
 
     function switchScreen(id) { laatsteActiviteit = Date.now(); document.querySelectorAll('.screen').forEach(s => s.classList.remove('active')); document.getElementById(id).classList.add('active'); if(id === 'screen-quiz' && huidigeVraagRichting === 'normal') setTimeout(() => document.getElementById('quiz-input').focus(), 50); if(id === 'screen-drop') setTimeout(() => document.getElementById('drop-input').focus(), 50); if(id === 'screen-galgje') setTimeout(() => document.getElementById('galgje-input').focus(), 50); if(id === 'screen-boss') setTimeout(() => document.getElementById('boss-input').focus(), 50); if(id === 'screen-collector') { updateEcoUI(); laadMarktplaats(); tekenNest(); } if(id === 'screen-menu') updateMenuCards(); }
-    function initVoorkeuren() { if(localStorage.getItem('app_audio')) audioAan = localStorage.getItem('app_audio') === 'true'; if(localStorage.getItem('app_theme')) huidigThema = localStorage.getItem('app_theme'); document.documentElement.setAttribute('data-theme', huidigThema); document.getElementById('audio-toggle').innerText = audioAan ? "🔊 Aan" : "🔇 Uit"; document.getElementById('theme-toggle').innerText = huidigThema === 'light' ? "🌙" : "☀️"; const usr = localStorage.getItem('kana_cloud_user'); if(usr){ document.getElementById('username-input').value = usr; login(); } }
-    function toggleTheme() { huidigThema = huidigThema === 'light' ? 'dark' : 'light'; document.documentElement.setAttribute('data-theme', huidigThema); localStorage.setItem('app_theme', huidigThema); initVoorkeuren(); }
-    function toggleAudio() { audioAan = !audioAan; localStorage.setItem('app_audio', audioAan); initVoorkeuren(); }
+    function toepassenVoorkeuren() { document.documentElement.setAttribute('data-theme', huidigThema); document.documentElement.setAttribute('data-font', huidigFont); document.getElementById('audio-toggle').innerText = audioAan ? "🔊 Aan" : "🔇 Uit"; document.getElementById('theme-toggle').innerText = huidigThema === 'light' ? "🌙" : "☀️"; document.getElementById('font-toggle').innerText = huidigFont === 'japans' ? "あ Mincho" : "A Basis"; }
+    function initVoorkeuren() { if(localStorage.getItem('app_audio')) audioAan = localStorage.getItem('app_audio') === 'true'; if(localStorage.getItem('app_theme')) huidigThema = localStorage.getItem('app_theme'); if(localStorage.getItem('app_font')) huidigFont = localStorage.getItem('app_font'); toepassenVoorkeuren(); const usr = localStorage.getItem('kana_cloud_user'); if(usr){ document.getElementById('username-input').value = usr; login(); } }
+    function toggleTheme() { huidigThema = huidigThema === 'light' ? 'dark' : 'light'; localStorage.setItem('app_theme', huidigThema); toepassenVoorkeuren(); }
+    function toggleAudio() { audioAan = !audioAan; localStorage.setItem('app_audio', audioAan); toepassenVoorkeuren(); }
+    function toggleFont() { huidigFont = huidigFont === 'japans' ? 'basis' : 'japans'; localStorage.setItem('app_font', huidigFont); toepassenVoorkeuren(); }
     function spreekJapansUit(tekst) { if(!audioAan || !window.speechSynthesis) return; window.speechSynthesis.cancel(); let u = new SpeechSynthesisUtterance(tekst); u.lang = 'ja-JP'; u.rate = 0.85; window.speechSynthesis.speak(u); }
+    function speelGeluid(type) {
+        if(!audioAan) return;
+        try {
+            const ctx = window._kanaAudioCtx || (window._kanaAudioCtx = new (window.AudioContext || window.webkitAudioContext)());
+            const o = ctx.createOscillator(); const g = ctx.createGain(); o.connect(g); g.connect(ctx.destination);
+            const nu = ctx.currentTime;
+            if(type === 'goed') { o.type = 'sine'; o.frequency.setValueAtTime(523.25, nu); o.frequency.setValueAtTime(783.99, nu + 0.09); g.gain.setValueAtTime(0.16, nu); g.gain.exponentialRampToValueAtTime(0.001, nu + 0.32); o.start(nu); o.stop(nu + 0.32); }
+            else { o.type = 'sawtooth'; o.frequency.setValueAtTime(190, nu); o.frequency.exponentialRampToValueAtTime(110, nu + 0.22); g.gain.setValueAtTime(0.13, nu); g.gain.exponentialRampToValueAtTime(0.001, nu + 0.24); o.start(nu); o.stop(nu + 0.24); }
+        } catch(e) { console.warn('Geluidseffect mislukt:', e); }
+    }
     function speelHuidigTekenAf() { if(huidigTeken) spreekJapansUit(huidigTeken.kana); }
     
     function updateRadioStyles() { 
@@ -426,7 +513,13 @@
         if (huigigSchermModus === "mix" && niveau !== 'zinnen') { huidigeVraagRichting = Math.random() < 0.5 ? "normal" : "reverse"; } 
         else { huidigeVraagRichting = huigigSchermModus; } 
         
-        actieveQuizLijst.sort((a, b) => actieveProgressie[a.kana] - actieveProgressie[b.kana]); const poolGrootte = Math.min(4, actieveQuizLijst.length); huidigTeken = actieveQuizLijst[Math.floor(Math.random() * poolGrootte)]; 
+        actieveQuizLijst.sort((a, b) => actieveProgressie[a.kana] - actieveProgressie[b.kana]);
+        const groep = srsGroep(niveau); const srsData = (ecoStatus.srs && ecoStatus.srs[groep]) || {}; const nu = Date.now();
+        const aanDeBeurt = actieveQuizLijst.filter(item => !srsData[item.kana] || srsData[item.kana] <= nu);
+        let kandidaten;
+        if (aanDeBeurt.length > 0) { kandidaten = aanDeBeurt; }
+        else { kandidaten = actieveQuizLijst.slice(0, Math.min(4, actieveQuizLijst.length)); }
+        huidigTeken = kandidaten[Math.floor(Math.random() * kandidaten.length)];
         
 		if (niveau === 'zinnen') {
             document.getElementById('quiz-text-input-container').style.display = 'none'; 
@@ -476,7 +569,7 @@
         }); 
     }
     
-    function checkTextAnswer() { if(isChecking || !huidigTeken) return; isChecking = true; laatsteActiviteit = Date.now(); const invoer = document.getElementById('quiz-input').value.trim().toLowerCase(); const feedback = document.getElementById('quiz-feedback'); if (invoer === huidigTeken.romaji) { feedback.innerHTML = `Goed zo! 🎉`; feedback.style.color = "var(--success)"; verhoogScore(huidigTeken); setTimeout(volgendTeken, 1000); } else { feedback.innerHTML = `Fout! Het was '${huidigTeken.romaji.toUpperCase()}'`; feedback.style.color = "var(--danger)"; setTimeout(volgendTeken, 2200); } }
+    function checkTextAnswer() { if(isChecking || !huidigTeken) return; isChecking = true; laatsteActiviteit = Date.now(); const invoer = document.getElementById('quiz-input').value.trim().toLowerCase(); const feedback = document.getElementById('quiz-feedback'); if (invoer === huidigTeken.romaji) { speelGeluid('goed'); feedback.innerHTML = `Goed zo! 🎉`; feedback.style.color = "var(--success)"; verhoogScore(huidigTeken); setTimeout(volgendTeken, 1000); } else { speelGeluid('fout'); bijwerkenRepetitie(huidigTeken.kana, false); feedback.innerHTML = `Fout! Het was '${huidigTeken.romaji.toUpperCase()}'`; feedback.style.color = "var(--danger)"; setTimeout(volgendTeken, 2200); } }
     
     function checkChoiceAnswer(index) { 
         if(isChecking || !huidigTeken) return; isChecking = true; laatsteActiviteit = Date.now(); const feedback = document.getElementById('quiz-feedback'); 
@@ -487,8 +580,8 @@
         const knoppen = document.querySelectorAll('#quiz-choices-container .choice-btn'); 
         knoppen.forEach(knop => { if (knop.querySelector('.choice-text').innerText === correcteWaarde) { knop.style.background = 'rgba(76, 107, 79, 0.18)'; knop.style.borderColor = 'var(--success)'; } }); 
         spreekJapansUit(huidigTeken.kana); 
-        if (gekozenWaarde === correcteWaarde) { feedback.innerHTML = `Goed zo! 🎉`; feedback.style.color = "var(--success)"; verhoogScore(huidigTeken); setTimeout(volgendTeken, 1000); } 
-        else { knoppen[index].style.background = 'rgba(171, 58, 53, 0.18)'; knoppen[index].style.borderColor = 'var(--danger)'; feedback.innerHTML = `Helaas! Dit is ${correcteWaarde}`; feedback.style.color = "var(--danger)"; setTimeout(volgendTeken, 2200); } 
+        if (gekozenWaarde === correcteWaarde) { speelGeluid('goed'); feedback.innerHTML = `Goed zo! 🎉`; feedback.style.color = "var(--success)"; verhoogScore(huidigTeken); setTimeout(volgendTeken, 1000); } 
+        else { speelGeluid('fout'); bijwerkenRepetitie(huidigTeken.kana, false); knoppen[index].style.background = 'rgba(171, 58, 53, 0.18)'; knoppen[index].style.borderColor = 'var(--danger)'; feedback.innerHTML = `Helaas! Dit is ${correcteWaarde}`; feedback.style.color = "var(--danger)"; setTimeout(volgendTeken, 2200); } 
     }
 
     function openStats() { switchScreen('screen-stats'); toonStatsTabel('tekens'); }
@@ -504,13 +597,55 @@
     async function laadLeaderboard(type) { switchScreen('screen-leaderboard'); document.getElementById('tab-lb-score').classList.toggle('active', type === 'score'); document.getElementById('tab-lb-majors').classList.toggle('active', type === 'majors'); const container = document.getElementById('leaderboard-container'); container.innerHTML = "<p>Laden...</p>"; const orderField = type === 'score' ? 'total_score' : 'majors'; try { const { data, error } = await supabaseClient.from('kana_users').select(`username, ${orderField}`).order(orderField, { ascending: false }).limit(10); if (error) throw error; container.innerHTML = ""; data.forEach((user, index) => { let medaille = `${index + 1}.`; if (index === 0) medaille = "🥇"; if (index === 1) medaille = "🥈"; if (index === 2) medaille = "🥉"; const val = user[orderField]; const suffix = type === 'score' ? 'pts' : 'Majors 🛡️'; const item = document.createElement('div'); item.style.padding = "10px"; item.style.borderBottom = "1px solid var(--border)"; item.style.display = "flex"; item.style.justifyContent = "space-between"; item.style.fontWeight = "bold"; if(user.username === huidigeGebruiker) { item.style.backgroundColor = "color-mix(in srgb, var(--primary) 10%, transparent)"; item.style.color = "var(--primary)"; } item.innerHTML = `<span>${medaille} <span style="text-transform: capitalize;">${user.username}</span></span><span>${val || 0} ${suffix}</span>`; container.appendChild(item); }); } catch(e) { console.warn('Leaderboard laden mislukt:', e); container.innerHTML = "<p>⚠️ Kan het leaderboard niet laden. Controleer je verbinding.</p>"; } }
 
     let memFlipped=false, memLock=false, mem1, mem2, memMoves=0, memMatches=0; function startMemoryGame() { switchScreen('screen-memory'); const grid = document.getElementById('memory-grid'); grid.innerHTML = ''; memMoves = 0; memMatches = 0; document.getElementById('memory-moves').innerText = memMoves; document.getElementById('memory-score').innerText = memMatches; let pool = [...kanaData].sort(()=>0.5-Math.random()).slice(0,8); let cards = []; pool.forEach(i => { cards.push({t: i.kana, m: i.kana}); cards.push({t: i.romaji, m: i.kana}); }); cards.sort(()=>0.5-Math.random()).forEach(c => { let el = document.createElement('div'); el.className = 'memory-card'; el.innerText = c.t; el.dataset.m = c.m; el.onclick = flipMemoryCard; grid.appendChild(el); }); } function flipMemoryCard() { if(memLock || this === mem1) return; this.classList.add('flipped'); laatsteActiviteit = Date.now(); if(!memFlipped) { memFlipped = true; mem1 = this; return; } mem2 = this; memMoves++; document.getElementById('memory-moves').innerText = memMoves; checkMemoryMatch(); } function checkMemoryMatch() { if(mem1.dataset.m === mem2.dataset.m) { spreekJapansUit(mem1.dataset.m); mem1.onclick = null; mem2.onclick = null; mem1.classList.add('matched'); mem2.classList.add('matched'); memMatches++; document.getElementById('memory-score').innerText = memMatches; [memFlipped, memLock, mem1, mem2] = [false, false, null, null]; if(memMatches === 8) { setTimeout(()=>alert(`Gewonnen in ${memMoves} zetten!`), 500); } } else { memLock = true; setTimeout(() => { mem1.classList.remove('flipped'); mem2.classList.remove('flipped'); [memFlipped, memLock, mem1, mem2] = [false, false, null, null]; }, 1000); } }
-    let dropInterval, dropY=-50, dropSpeed=1.5, dropLives=3, dropScore=0, actieveDropItem=null, dropFrozen=false; function startKanaDropInit() { switchScreen('screen-drop'); dropLives = 3; dropScore = 0; dropSpeed = 1.5; document.getElementById('drop-score').innerText = dropScore; document.getElementById('drop-lives').innerText = '❤️'.repeat(dropLives); document.getElementById('btn-drop-freeze').disabled = ((ecoStatus.ants||0) < 5); startNieuweDrop(); } function startNieuweDrop() { clearInterval(dropInterval); document.getElementById('drop-input').value = ''; const allItems = [...kanaData, ...woordenData]; actieveDropItem = allItems[Math.floor(Math.random() * allItems.length)]; dropY = -50; document.getElementById('drop-item').innerText = actieveDropItem.kana; document.getElementById('drop-item').style.top = dropY + 'px'; dropInterval = setInterval(() => { if(!dropFrozen) { dropY += dropSpeed; document.getElementById('drop-item').style.top = dropY + 'px'; } if(dropY > 230) { clearInterval(dropInterval); dropLives--; document.getElementById('drop-lives').innerText = '❤️'.repeat(dropLives); if(dropLives <= 0) { alert(`Game Over! Score: ${dropScore}`); stopKanaDrop(); } else { startNieuweDrop(); } } }, 20); } function checkDropAnswer() { const inp = document.getElementById('drop-input').value.trim().toLowerCase(); laatsteActiviteit = Date.now(); if(inp === actieveDropItem.romaji) { dropScore++; document.getElementById('drop-score').innerText = dropScore; dropSpeed += 0.1; spreekJapansUit(actieveDropItem.kana); verhoogScore(actieveDropItem); startNieuweDrop(); } else { document.getElementById('drop-input').value = ''; } } function stopKanaDrop() { clearInterval(dropInterval); switchScreen('screen-menu'); } function koopDropFreeze() { if(ecoStatus.ants >= 5 && !dropFrozen) { ecoStatus.ants -= 5; slaEcoSysteemOp(); document.getElementById('btn-drop-freeze').disabled = true; dropFrozen = true; document.getElementById('drop-item').style.color = "var(--primary)"; setTimeout(()=>{ dropFrozen = false; document.getElementById('drop-item').style.color = "var(--dark)"; document.getElementById('btn-drop-freeze').disabled = (ecoStatus.ants < 5); }, 5000); } }
-    let galgjeItem=null, galgjeLetters=[], galgjeMistakes=0; function startGalgjeInit() { switchScreen('screen-galgje'); document.getElementById('galgje-input').style.display = 'inline-block'; document.getElementById('galgje-next-btn').style.display = 'none'; document.getElementById('btn-galgje-hint').style.display = 'inline-block'; document.getElementById('btn-galgje-hint').disabled = ((ecoStatus.ants||0) < 5); galgjeMistakes = 0; document.getElementById('galgje-feedback').innerText = `Fouten: 0 / 6`; document.getElementById('galgje-feedback').style.color = "var(--text)"; document.getElementById('galgje-input').value = ''; galgjeItem = woordenData[Math.floor(Math.random() * woordenData.length)]; galgjeLetters = []; document.getElementById('galgje-kana-display').innerText = `${galgjeItem.kana} (${galgjeItem.betekenis})`; updateGalgjeDisplay(); } function updateGalgjeDisplay() { let displayStr = ''; let allFound = true; for(let char of galgjeItem.romaji) { if(galgjeLetters.includes(char)) { displayStr += char + ' '; } else { displayStr += '_ '; allFound = false; } } document.getElementById('galgje-word-display').innerText = displayStr.trim(); if(allFound) { document.getElementById('galgje-feedback').innerText = "Gewonnen! 🎉"; document.getElementById('galgje-feedback').style.color = "var(--success)"; document.getElementById('galgje-input').style.display = 'none'; document.getElementById('galgje-next-btn').style.display = 'inline-block'; document.getElementById('btn-galgje-hint').style.display = 'none'; verhoogScore(galgjeItem); spreekJapansUit(galgjeItem.kana); } } function checkGalgjeAnswer() { const inp = document.getElementById('galgje-input').value.trim().toLowerCase(); document.getElementById('galgje-input').value = ''; laatsteActiviteit = Date.now(); if(!inp) return; if(galgjeItem.romaji.includes(inp)) { if(!galgjeLetters.includes(inp)) galgjeLetters.push(inp); } else { galgjeMistakes++; document.getElementById('galgje-feedback').innerText = `Fouten: ${galgjeMistakes} / 6`; if(galgjeMistakes >= 6) { document.getElementById('galgje-feedback').innerText = `Verloren! Het was: ${galgjeItem.romaji}`; document.getElementById('galgje-feedback').style.color = "var(--danger)"; document.getElementById('galgje-word-display').innerText = galgjeItem.romaji.split('').join(' '); document.getElementById('galgje-input').style.display = 'none'; document.getElementById('galgje-next-btn').style.display = 'inline-block'; document.getElementById('btn-galgje-hint').style.display = 'none'; } } updateGalgjeDisplay(); } function koopGalgjeHint() { if(ecoStatus.ants >= 5) { ecoStatus.ants -= 5; slaEcoSysteemOp(); document.getElementById('btn-galgje-hint').disabled = (ecoStatus.ants < 5); let onbekend = galgjeItem.romaji.split('').filter(c => !galgjeLetters.includes(c)); if(onbekend.length > 0) { galgjeLetters.push(onbekend[Math.floor(Math.random() * onbekend.length)]); updateGalgjeDisplay(); } } }
+    let dropInterval, dropY=-50, dropSpeed=1.5, dropLives=3, dropScore=0, actieveDropItem=null, dropFrozen=false; function startKanaDropInit() { switchScreen('screen-drop'); dropLives = 3; dropScore = 0; dropSpeed = 1.5; document.getElementById('drop-score').innerText = dropScore; document.getElementById('drop-lives').innerText = '❤️'.repeat(dropLives); document.getElementById('btn-drop-freeze').disabled = ((ecoStatus.ants||0) < 5); startNieuweDrop(); } function startNieuweDrop() { clearInterval(dropInterval); document.getElementById('drop-input').value = ''; const allItems = [...kanaData, ...woordenData]; actieveDropItem = allItems[Math.floor(Math.random() * allItems.length)]; dropY = -50; document.getElementById('drop-item').innerText = actieveDropItem.kana; document.getElementById('drop-item').style.top = dropY + 'px'; dropInterval = setInterval(() => { if(!dropFrozen) { dropY += dropSpeed; document.getElementById('drop-item').style.top = dropY + 'px'; } if(dropY > 230) { clearInterval(dropInterval); speelGeluid('fout'); dropLives--; document.getElementById('drop-lives').innerText = '❤️'.repeat(dropLives); if(dropLives <= 0) { alert(`Game Over! Score: ${dropScore}`); stopKanaDrop(); } else { startNieuweDrop(); } } }, 20); } function checkDropAnswer() { const inp = document.getElementById('drop-input').value.trim().toLowerCase(); laatsteActiviteit = Date.now(); if(inp === actieveDropItem.romaji) { speelGeluid('goed'); dropScore++; document.getElementById('drop-score').innerText = dropScore; dropSpeed += 0.1; spreekJapansUit(actieveDropItem.kana); verhoogScore(actieveDropItem); startNieuweDrop(); } else { document.getElementById('drop-input').value = ''; } } function stopKanaDrop() { clearInterval(dropInterval); switchScreen('screen-menu'); } function koopDropFreeze() { if(ecoStatus.ants >= 5 && !dropFrozen) { ecoStatus.ants -= 5; slaEcoSysteemOp(); document.getElementById('btn-drop-freeze').disabled = true; dropFrozen = true; document.getElementById('drop-item').style.color = "var(--primary)"; setTimeout(()=>{ dropFrozen = false; document.getElementById('drop-item').style.color = "var(--dark)"; document.getElementById('btn-drop-freeze').disabled = (ecoStatus.ants < 5); }, 5000); } }
+    let galgjeItem=null, galgjeLetters=[], galgjeMistakes=0; function startGalgjeInit() { switchScreen('screen-galgje'); document.getElementById('galgje-input').style.display = 'inline-block'; document.getElementById('galgje-next-btn').style.display = 'none'; document.getElementById('btn-galgje-hint').style.display = 'inline-block'; document.getElementById('btn-galgje-hint').disabled = ((ecoStatus.ants||0) < 5); galgjeMistakes = 0; document.getElementById('galgje-feedback').innerText = `Fouten: 0 / 6`; document.getElementById('galgje-feedback').style.color = "var(--text)"; document.getElementById('galgje-input').value = ''; galgjeItem = woordenData[Math.floor(Math.random() * woordenData.length)]; galgjeLetters = []; document.getElementById('galgje-kana-display').innerText = `${galgjeItem.kana} (${galgjeItem.betekenis})`; updateGalgjeDisplay(); } function updateGalgjeDisplay() { let displayStr = ''; let allFound = true; for(let char of galgjeItem.romaji) { if(galgjeLetters.includes(char)) { displayStr += char + ' '; } else { displayStr += '_ '; allFound = false; } } document.getElementById('galgje-word-display').innerText = displayStr.trim(); if(allFound) { speelGeluid('goed'); document.getElementById('galgje-feedback').innerText = "Gewonnen! 🎉"; document.getElementById('galgje-feedback').style.color = "var(--success)"; document.getElementById('galgje-input').style.display = 'none'; document.getElementById('galgje-next-btn').style.display = 'inline-block'; document.getElementById('btn-galgje-hint').style.display = 'none'; verhoogScore(galgjeItem); spreekJapansUit(galgjeItem.kana); } } function checkGalgjeAnswer() { const inp = document.getElementById('galgje-input').value.trim().toLowerCase(); document.getElementById('galgje-input').value = ''; laatsteActiviteit = Date.now(); if(!inp) return; if(galgjeItem.romaji.includes(inp)) { if(!galgjeLetters.includes(inp)) galgjeLetters.push(inp); } else { speelGeluid('fout'); galgjeMistakes++; document.getElementById('galgje-feedback').innerText = `Fouten: ${galgjeMistakes} / 6`; if(galgjeMistakes >= 6) { document.getElementById('galgje-feedback').innerText = `Verloren! Het was: ${galgjeItem.romaji}`; document.getElementById('galgje-feedback').style.color = "var(--danger)"; document.getElementById('galgje-word-display').innerText = galgjeItem.romaji.split('').join(' '); document.getElementById('galgje-input').style.display = 'none'; document.getElementById('galgje-next-btn').style.display = 'inline-block'; document.getElementById('btn-galgje-hint').style.display = 'none'; } } updateGalgjeDisplay(); } function koopGalgjeHint() { if(ecoStatus.ants >= 5) { ecoStatus.ants -= 5; slaEcoSysteemOp(); document.getElementById('btn-galgje-hint').disabled = (ecoStatus.ants < 5); let onbekend = galgjeItem.romaji.split('').filter(c => !galgjeLetters.includes(c)); if(onbekend.length > 0) { galgjeLetters.push(onbekend[Math.floor(Math.random() * onbekend.length)]); updateGalgjeDisplay(); } } }
 
     let bossTime=60, bossStreak=0, bossInterval, bossItem=null;
     function startBossBattle() { if(ecoStatus.majors < 100) return; ecoStatus.majors -= 100; slaEcoSysteemOp(); switchScreen('screen-boss'); bossTime=60; bossStreak=0; document.getElementById('boss-streak').innerText = '0/20'; document.getElementById('boss-timer').innerText = bossTime; bossInterval = setInterval(()=>{ bossTime--; document.getElementById('boss-timer').innerText=bossTime; if(bossTime<=0) failBoss(); },1000); nextBossWord(); }
+
+    /* ===== Teken Training (optionele vrije-hand oefening) ===== */
+    let tekenCtx = null, tekenItem = null, tekenGhostAan = false, tekenActief = false;
+    function startTekenenInit() { switchScreen('screen-draw'); instellenTekenCanvas(); volgendTekenenItem(); }
+    function instellenTekenCanvas() {
+        const canvas = document.getElementById('draw-canvas'); if(canvas.dataset.klaar) { wisTekenCanvas(); return; }
+        canvas.dataset.klaar = '1'; tekenCtx = canvas.getContext('2d');
+        tekenCtx.lineWidth = 9; tekenCtx.lineCap = 'round'; tekenCtx.lineJoin = 'round';
+        const positie = (e) => { const rect = canvas.getBoundingClientRect(); const cx = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left; const cy = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top; return { x: cx * (canvas.width / rect.width), y: cy * (canvas.height / rect.height) }; };
+        canvas.addEventListener('pointerdown', (e) => { tekenActief = true; tekenCtx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--dark').trim() || '#2b2420'; const p = positie(e); tekenCtx.beginPath(); tekenCtx.moveTo(p.x, p.y); });
+        canvas.addEventListener('pointermove', (e) => { if(!tekenActief) return; const p = positie(e); tekenCtx.lineTo(p.x, p.y); tekenCtx.stroke(); });
+        window.addEventListener('pointerup', () => tekenActief = false);
+    }
+    function wisTekenCanvas() { const canvas = document.getElementById('draw-canvas'); if(tekenCtx) tekenCtx.clearRect(0, 0, canvas.width, canvas.height); }
+    function volgendTekenenItem() {
+        wisTekenCanvas(); const pool = [...kanaData, ...woordenData]; tekenItem = pool[Math.floor(Math.random() * pool.length)];
+        document.getElementById('draw-romaji').innerText = tekenItem.romaji + (tekenItem.betekenis ? ` (${tekenItem.betekenis})` : '');
+        document.getElementById('draw-ghost').innerText = tekenGhostAan ? tekenItem.kana : '';
+    }
+    function toggleTekenGhost() { tekenGhostAan = !tekenGhostAan; document.getElementById('draw-ghost').innerText = tekenGhostAan && tekenItem ? tekenItem.kana : ''; document.getElementById('btn-draw-ghost').innerText = tekenGhostAan ? '🙈 Verberg teken' : '👻 Toon teken'; }
+
+    /* ===== Vergelijk met een vriend ===== */
+    async function vergelijkVriend() {
+        const naam = document.getElementById('compare-input').value.trim().toLowerCase(); const resultEl = document.getElementById('compare-result'); if(!naam) return;
+        resultEl.innerHTML = '<p>Laden...</p>';
+        try {
+            const { data, error } = await supabaseClient.from('kana_users').select('*').eq('username', naam).maybeSingle(); if(error) throw error;
+            if(!data) { resultEl.innerHTML = '<p>⚠️ Geen speler gevonden met die gebruikersnaam.</p>'; return; }
+            const vEco = data.eco_status || {}; const vWoorden = Object.values(data.woorden_progress || {}).filter(s => s > 0).length; const vKana = Object.values(data.kana_progress || {}).filter(s => s > 0).length; const vXp = data.total_score || 0;
+            const jijWoorden = Object.values(progressieWoorden).filter(s => s > 0).length; const jijKana = Object.values(progressieKana).filter(s => s > 0).length; const jijXp = berekenTotaalScore();
+            resultEl.innerHTML = `<div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px;">
+                <div class="card"><h3>${huidigeGebruiker}</h3><div>🔥 ${ecoStatus.streak || 0}</div></div>
+                <div class="card"><h3>${naam}</h3><div>🔥 ${vEco.streak || 0}</div></div>
+                <div class="card"><h3>⭐ XP</h3><div>${jijXp}</div></div>
+                <div class="card"><h3>⭐ XP</h3><div>${vXp}</div></div>
+                <div class="card"><h3>📚 Woorden</h3><div>${jijWoorden}/${woordenData.length}</div></div>
+                <div class="card"><h3>📚 Woorden</h3><div>${vWoorden}/${woordenData.length}</div></div>
+                <div class="card"><h3>🔤 Kana</h3><div>${jijKana}/${kanaData.length}</div></div>
+                <div class="card"><h3>🔤 Kana</h3><div>${vKana}/${kanaData.length}</div></div>
+            </div>`;
+        } catch(e) { console.warn('Vergelijken mislukt:', e); resultEl.innerHTML = '<p>⚠️ Kan niet vergelijken. Controleer je verbinding.</p>'; }
+    }
     function nextBossWord() { bossItem = woordenData[Math.floor(Math.random()*woordenData.length)]; document.getElementById('boss-word').innerText = bossItem.kana; document.getElementById('boss-input').value = ''; document.getElementById('boss-input').focus(); }
-    function checkBossAnswer() { const inp = document.getElementById('boss-input').value.trim().toLowerCase(); laatsteActiviteit = Date.now(); if(inp === bossItem.romaji) { bossStreak++; document.getElementById('boss-streak').innerText = bossStreak+'/20'; if(bossStreak >= 20) { winBoss(); } else { nextBossWord(); } } else { failBoss(); } }
+    function checkBossAnswer() { const inp = document.getElementById('boss-input').value.trim().toLowerCase(); laatsteActiviteit = Date.now(); if(inp === bossItem.romaji) { speelGeluid('goed'); bossStreak++; document.getElementById('boss-streak').innerText = bossStreak+'/20'; if(bossStreak >= 20) { winBoss(); } else { nextBossWord(); } } else { speelGeluid('fout'); failBoss(); } }
     function failBoss() { clearInterval(bossInterval); alert("Mislukt! De bruidsvlucht is gecrasht. Je verliest 50 Majors."); ecoStatus.majors = Math.max(0, ecoStatus.majors - 50); slaEcoSysteemOp(); switchScreen('screen-menu'); }
     function winBoss() { clearInterval(bossInterval); alert("BRUIDSVLUCHT VOLTOOID! 👑 Je hebt een permanente 2x water multiplier!"); ecoStatus.bossBeaten = true; slaEcoSysteemOp(); switchScreen('screen-menu'); }
 
@@ -636,8 +771,13 @@
     document.addEventListener('click', function() { laatsteActiviteit = Date.now(); });
     document.addEventListener('keydown', function(e) { laatsteActiviteit = Date.now(); const q = document.getElementById('screen-quiz').classList.contains('active'); const m = document.getElementById('quiz-choices-container').style.display === 'grid'; if (q && m && !isChecking) { if (e.key === '1') checkChoiceAnswer(0); if (e.key === '2') checkChoiceAnswer(1); if (e.key === '3') checkChoiceAnswer(2); if (e.key === '4') checkChoiceAnswer(3); } });
     
-    document.getElementById('quiz-input').addEventListener('keypress', function (e) { if (e.key === 'Enter') checkTextAnswer(); }); document.getElementById('drop-input').addEventListener('keypress', function (e) { if (e.key === 'Enter') checkDropAnswer(); }); document.getElementById('galgje-input').addEventListener('keypress', function (e) { if (e.key === 'Enter') checkGalgjeAnswer(); }); document.getElementById('boss-input').addEventListener('keypress', function (e) { if (e.key === 'Enter') checkBossAnswer(); }); document.getElementById('username-input').addEventListener('keypress', function (e) { if (e.key === 'Enter') login(); });
+    document.getElementById('quiz-input').addEventListener('keypress', function (e) { if (e.key === 'Enter') checkTextAnswer(); }); document.getElementById('drop-input').addEventListener('keypress', function (e) { if (e.key === 'Enter') checkDropAnswer(); }); document.getElementById('galgje-input').addEventListener('keypress', function (e) { if (e.key === 'Enter') checkGalgjeAnswer(); }); document.getElementById('boss-input').addEventListener('keypress', function (e) { if (e.key === 'Enter') checkBossAnswer(); }); document.getElementById('username-input').addEventListener('keypress', function (e) { if (e.key === 'Enter') login(); }); document.getElementById('compare-input').addEventListener('keypress', function (e) { if (e.key === 'Enter') vergelijkVriend(); });
     window.onload = function() { initVoorkeuren(); bouwGroepenSelectie(); };
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('sw.js').catch((e) => console.warn('Service worker registratie mislukt (werkt alleen via https of localhost):', e));
+        });
+    }
 </script>
 </body>
 </html>
