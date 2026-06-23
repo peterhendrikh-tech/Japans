@@ -546,10 +546,23 @@
        zelfs bliksemsnel achter elkaar goed antwoorden geeft kan nooit een
        muntje "verliezen" door een race-condition. */
     let gachaMuntenInVlucht = [];
+    let gachaCoinFoutGetoond = false;
     function wijsGachaMuntToe(aantal) {
         if(!huidigeGebruiker) return;
         huidigeCoins += aantal; updateCoinBadge();
-        const verzoek = supabaseClient.rpc('increment_coins', { p_username: huidigeGebruiker, p_amount: aantal }).catch(e => console.warn('Munt-toekenning mislukt (cloud):', e));
+        // BELANGRIJK: supabase-js laat .rpc() vaak gewoon NORMAAL RESOLVEN (geen reject) ook als
+        // de server een fout teruggeeft — die fout staat dan in het 'error'-veld van het resultaat,
+        // niet als een geworpen exception. Een kale .catch() mist dat dus volledig; we moeten het
+        // resultaat zelf controleren om een mislukte toekenning ook echt te kunnen signaleren.
+        const verzoek = supabaseClient.rpc('increment_coins', { p_username: huidigeGebruiker, p_amount: aantal })
+            .then(({ error }) => { if (error) throw error; gachaCoinFoutGetoond = false; })
+            .catch(e => {
+                console.warn('Munt-toekenning mislukt (cloud):', e);
+                if (!gachaCoinFoutGetoond) {
+                    gachaCoinFoutGetoond = true;
+                    toonMelding('⚠️ Munten worden niet opgeslagen in de cloud (lokaal aantal kan afwijken van de server). Controleer of het laatste SQL-script volledig is uitgevoerd.', 'error');
+                }
+            });
         gachaMuntenInVlucht.push(verzoek);
         verzoek.finally(() => { gachaMuntenInVlucht = gachaMuntenInVlucht.filter(v => v !== verzoek); });
     }
@@ -811,7 +824,17 @@
             // gestuurd (zie wijsGachaMuntToe) — die achtergrond-update kan trager zijn dan het
             // navigeren naar dit scherm. Neem daarom altijd het HOOGSTE van lokaal/server-saldo,
             // anders kan een trage netwerkronde je net-verdiende munten laten "verdwijnen".
-            if (userData) { huidigeCoins = Math.max(huidigeCoins, userData.coins_100yen || 0); huidigePetals = userData.sakura_petals || 0; huidigPityCount = userData.pulls_since_last_legendary || 0; updateCoinBadge(); }
+            if (userData) {
+                const serverSaldo = userData.coins_100yen || 0;
+                // Als het server-saldo duidelijk achterblijft EN er niets meer "in de lucht" hangt
+                // (dus geen lopende verzoeken meer die het nog konden goedmaken), is dit geen
+                // race-condition meer maar een ECHTE mislukte opslag — dat moet je weten, want
+                // wachten lost het dan niet op (zie ook wijsGachaMuntToe).
+                if (huidigeCoins - serverSaldo >= 5 && gachaMuntenInVlucht.length === 0) {
+                    toonMelding(`⚠️ Lokaal toont ${huidigeCoins} munten, maar de server heeft maar ${serverSaldo} opgeslagen. Controleer of het volledige SQL-script (incl. "increment_coins") in Supabase is uitgevoerd.`, 'error');
+                }
+                huidigeCoins = Math.max(huidigeCoins, serverSaldo); huidigePetals = userData.sakura_petals || 0; huidigPityCount = userData.pulls_since_last_legendary || 0; updateCoinBadge();
+            }
             await laadGachaItems();
             await laadGachaInventory();
             updateGachaBalansWeergave();
