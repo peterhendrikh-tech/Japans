@@ -70,8 +70,11 @@
         }
         .radio-label input, .checkbox-label input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
         .radio-label.checked, .checkbox-label.checked { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 12%, var(--card-bg)); color: var(--primary); }
-        .selection-grid { max-height: 150px; overflow-y: auto; justify-content: flex-start; }
+        .selection-grid { max-height: 220px; overflow-y: auto; justify-content: flex-start; }
         .checkbox-label { flex: none; width: calc(50% - 10px); text-align: left; display: flex; align-items: center; }
+        .groep-sectie-kop { width: 100%; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 10px 0 4px; padding-top: 8px; border-top: 1px dashed var(--border); font-family: var(--font-display); }
+        .groep-sectie-kop:first-child { border-top: none; margin-top: 0; padding-top: 0; }
+        .dakuten-badge { display: inline-block; margin-left: 5px; font-weight: 800; color: var(--shu); font-size: 15px; }
         .character-display {
             font-size: 65px; font-weight: 700; margin: 14px 0; height: 90px; display: flex; justify-content: center; align-items: center;
             color: var(--dark); text-align: center; font-family: var(--font-display); background: var(--input-bg); border-radius: 16px;
@@ -272,9 +275,13 @@
         </div>
         <div class="settings-section">
             <h4 id="groepen-titel">3. Categorieën:</h4>
-            <div style="margin-bottom: 10px; text-align: left;">
-                <button type="button" onclick="toggleCheckboxes(true)" class="control-btn" style="font-size:12px;">Alles aan</button>
-                <button type="button" onclick="toggleCheckboxes(false)" class="control-btn" style="font-size:12px;">Alles uit</button>
+            <div style="margin-bottom: 10px; text-align: left; display:flex; flex-wrap:wrap; gap:6px;">
+                <button type="button" onclick="toggleCheckboxes(true)" class="control-btn" style="font-size:12px;">Alles</button>
+                <button type="button" onclick="toggleCheckboxes(false)" class="control-btn" style="font-size:12px;">Niets</button>
+                <button type="button" onclick="selecteerSpecifiek('Hira:')" class="control-btn hira-kata-btn" style="display:none; font-size:12px;">あ Hiragana</button>
+                <button type="button" onclick="selecteerSpecifiek('Kata:')" class="control-btn hira-kata-btn" style="display:none; font-size:12px;">ア Katakana</button>
+                <button type="button" onclick="selecteerSpecifiek('akuten')" class="control-btn hira-kata-btn" style="display:none; font-size:12px;">゛ Met dakuten</button>
+                <button type="button" onclick="selecteerBasisKana()" class="control-btn hira-kata-btn" style="display:none; font-size:12px;">Basis (zonder dakuten)</button>
             </div>
             <div class="selection-grid" id="groups-container"></div>
         </div>
@@ -538,10 +545,13 @@
        toekenning gebeurt via een atomaire SQL-UPDATE (increment_coins), dus
        zelfs bliksemsnel achter elkaar goed antwoorden geeft kan nooit een
        muntje "verliezen" door een race-condition. */
+    let gachaMuntenInVlucht = [];
     function wijsGachaMuntToe(aantal) {
         if(!huidigeGebruiker) return;
         huidigeCoins += aantal; updateCoinBadge();
-        supabaseClient.rpc('increment_coins', { p_username: huidigeGebruiker, p_amount: aantal }).catch(e => console.warn('Munt-toekenning mislukt (cloud):', e));
+        const verzoek = supabaseClient.rpc('increment_coins', { p_username: huidigeGebruiker, p_amount: aantal }).catch(e => console.warn('Munt-toekenning mislukt (cloud):', e));
+        gachaMuntenInVlucht.push(verzoek);
+        verzoek.finally(() => { gachaMuntenInVlucht = gachaMuntenInVlucht.filter(v => v !== verzoek); });
     }
     function updateCoinBadge() { const el = document.getElementById('coin-badge'); if(el) el.innerText = `🪙 ${huidigeCoins}`; }
     /* ===== Spaced repetition (lichte SM-2-achtige aanpak) =====
@@ -598,13 +608,28 @@
     
     function toggleCheckboxes(status) { document.querySelectorAll('#groups-container input').forEach(cb => { cb.checked = status; cb.parentElement.classList.toggle('checked', status); }); }
     function selecteerSpecifiek(type) { document.querySelectorAll('#groups-container input').forEach(cb => { const isMatch = cb.value.includes(type); cb.checked = isMatch; cb.parentElement.classList.toggle('checked', isMatch); }); }
-    
+    function selecteerBasisKana() { document.querySelectorAll('#groups-container input').forEach(cb => { const isBasis = !cb.value.includes('akuten'); cb.checked = isBasis; cb.parentElement.classList.toggle('checked', isBasis); }); }
+
     function bouwGroepenSelectie() { 
         const niveau = document.querySelector('input[name="quiz-niveau"]:checked').value; const container = document.getElementById('groups-container'); container.innerHTML = ''; const typeKnoppen = document.querySelectorAll('.hira-kata-btn'); let uniekeItems = []; 
         if (niveau === 'tekens') { uniekeItems = [...new Set(kanaData.map(item => item.groep))]; typeKnoppen.forEach(btn => btn.style.display = 'inline-block'); } 
         else if (niveau === 'woorden') { uniekeItems = [...new Set(woordenData.map(item => item.thema))]; typeKnoppen.forEach(btn => btn.style.display = 'none'); } 
         else if (niveau === 'zinnen') { uniekeItems = [...new Set(zinnenData.map(item => item.thema))]; typeKnoppen.forEach(btn => btn.style.display = 'none'); } 
-        uniekeItems.forEach(itemNaam => { const label = document.createElement('label'); label.className = 'checkbox-label checked'; const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.value = itemNaam; checkbox.checked = true; checkbox.onchange = () => label.classList.toggle('checked', checkbox.checked); label.appendChild(checkbox); label.appendChild(document.createTextNode(itemNaam)); container.appendChild(label); }); 
+        let laatsteSectie = null;
+        uniekeItems.forEach(itemNaam => { 
+            // Bij Tekens: zet een sectiekopje boven elke nieuwe Hiragana/Katakana-groep, zodat
+            // de 30 blokken niet als één ongesorteerde muur overkomen.
+            if (niveau === 'tekens') {
+                const sectie = itemNaam.startsWith('Hira:') ? 'あ Hiragana' : 'ア Katakana';
+                if (sectie !== laatsteSectie) { laatsteSectie = sectie; const kop = document.createElement('div'); kop.className = 'groep-sectie-kop'; kop.innerText = sectie; container.appendChild(kop); }
+            }
+            const label = document.createElement('label'); label.className = 'checkbox-label checked'; const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.value = itemNaam; checkbox.checked = true; checkbox.onchange = () => label.classList.toggle('checked', checkbox.checked); label.appendChild(checkbox); 
+            let weergaveNaam = itemNaam.replace('Hira: ', '').replace('Kata: ', '');
+            const dakutenMatch = weergaveNaam.match(/\((Han)?dakuten\)/i);
+            if (dakutenMatch) { weergaveNaam = weergaveNaam.replace(dakutenMatch[0], '').trim(); label.appendChild(document.createTextNode(weergaveNaam + ' ')); const badge = document.createElement('span'); badge.className = 'dakuten-badge'; badge.title = dakutenMatch[1] ? 'Handakuten' : 'Dakuten'; badge.innerText = dakutenMatch[1] ? '゜' : '゛'; label.appendChild(badge); }
+            else { label.appendChild(document.createTextNode(weergaveNaam)); }
+            container.appendChild(label); 
+        }); 
     }
 
     function startQuiz() { 
@@ -782,7 +807,11 @@
         try {
             const { data: userData, error } = await supabaseClient.from('kana_users').select('coins_100yen, sakura_petals, pulls_since_last_legendary').eq('username', huidigeGebruiker).maybeSingle();
             if (error) throw error;
-            if (userData) { huidigeCoins = userData.coins_100yen || 0; huidigePetals = userData.sakura_petals || 0; huidigPityCount = userData.pulls_since_last_legendary || 0; updateCoinBadge(); }
+            // BELANGRIJK: munten worden na elk goed antwoord "fire-and-forget" naar de cloud
+            // gestuurd (zie wijsGachaMuntToe) — die achtergrond-update kan trager zijn dan het
+            // navigeren naar dit scherm. Neem daarom altijd het HOOGSTE van lokaal/server-saldo,
+            // anders kan een trage netwerkronde je net-verdiende munten laten "verdwijnen".
+            if (userData) { huidigeCoins = Math.max(huidigeCoins, userData.coins_100yen || 0); huidigePetals = userData.sakura_petals || 0; huidigPityCount = userData.pulls_since_last_legendary || 0; updateCoinBadge(); }
             await laadGachaItems();
             await laadGachaInventory();
             updateGachaBalansWeergave();
@@ -803,6 +832,10 @@
         const btn = document.getElementById('gacha-open-btn'); btn.disabled = true; btn.innerText = 'Trekken...';
         document.getElementById('gacha-result-area').innerHTML = '';
         try {
+            // Wacht eventuele nog lopende munten-toekenningen af (zie wijsGachaMuntToe) vóór we
+            // daadwerkelijk trekken, anders kan de server nog een ouder (lager) saldo zien dan
+            // wat je net hebt verdiend, en de trekking ten onrechte afwijzen.
+            if (gachaMuntenInVlucht.length > 0) { btn.innerText = 'Even bijwerken...'; await Promise.all(gachaMuntenInVlucht); btn.innerText = 'Trekken...'; }
             const { data: result, error } = await supabaseClient.rpc('open_gachapon', { p_username: huidigeGebruiker });
             if (error) throw error;
             huidigeCoins = result.new_coin_balance; huidigePetals = result.new_petal_balance; huidigPityCount = result.new_pity_count;
