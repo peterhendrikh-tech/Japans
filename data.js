@@ -217,6 +217,9 @@ const woordenData = [
     { kana: 'す', romaji: 'su', betekenis: 'Nest / Web', type: 'Woord', thema: 'Insecten', niveau: 'N5' },
     { kana: 'くも', romaji: 'kumo', betekenis: 'Spin', type: 'Woord', thema: 'Insecten', niveau: 'N5' },
     { kana: 'はち', romaji: 'hachi', betekenis: 'Bij', type: 'Woord', thema: 'Insecten', niveau: 'N5' },
+    { kana: 'かまきり', romaji: 'kamakiri', betekenis: 'Bidsprinkhaan', type: 'Woord', thema: 'Insecten', niveau: 'N4' },
+    { kana: 'せみ', romaji: 'semi', betekenis: 'Krekel / Cicade', type: 'Woord', thema: 'Insecten', niveau: 'N4' },
+    { kana: 'てんとうむし', romaji: 'tentoumushi', betekenis: 'Lieveheersbeestje', type: 'Woord', thema: 'Insecten', niveau: 'N4' },
 
     // ==========================================
     // THEMA: NATUUR
@@ -236,6 +239,11 @@ const woordenData = [
     { kana: 'かぜ', romaji: 'kaze', betekenis: 'Wind', type: 'Woord', thema: 'Natuur', niveau: 'N5' }, 
     { kana: 'ほし', romaji: 'hoshi', betekenis: 'Ster', type: 'Woord', thema: 'Natuur', niveau: 'N5' },
     { kana: 'いし', romaji: 'ishi', betekenis: 'Steen', type: 'Woord', thema: 'Natuur', niveau: 'N5' },
+    { kana: 'はれ', romaji: 'hare', betekenis: 'Zonnig weer', type: 'Woord', thema: 'Natuur', niveau: 'N5' },
+    { kana: 'くもり', romaji: 'kumori', betekenis: 'Bewolkt weer', type: 'Woord', thema: 'Natuur', niveau: 'N5' },
+    { kana: 'たいふう', romaji: 'taifuu', betekenis: 'Tyfoon', type: 'Woord', thema: 'Natuur', niveau: 'N4' },
+    { kana: 'きおん', romaji: 'kion', betekenis: 'Temperatuur', type: 'Woord', thema: 'Natuur', niveau: 'N4' },
+    { kana: 'つゆ', romaji: 'tsuyu', betekenis: 'Regenseizoen', type: 'Woord', thema: 'Natuur', niveau: 'N4' },
 
     // ==========================================
     // THEMA: GROENTEN & TUIN (NIEUW)
@@ -272,6 +280,8 @@ const woordenData = [
     { kana: 'くろ', romaji: 'kuro', betekenis: 'Zwart', type: 'Woord', thema: 'Kleuren', niveau: 'N5' },
     { kana: 'しろ', romaji: 'shiro', betekenis: 'Wit', type: 'Woord', thema: 'Kleuren', niveau: 'N5' },
     { kana: 'きいろ', romaji: 'kiiro', betekenis: 'Geel', type: 'Woord', thema: 'Kleuren', niveau: 'N5' },
+    { kana: 'ちゃいろ', romaji: 'chairo', betekenis: 'Bruin', type: 'Woord', thema: 'Kleuren', niveau: 'N5' },
+    { kana: 'むらさき', romaji: 'murasaki', betekenis: 'Paars', type: 'Woord', thema: 'Kleuren', niveau: 'N5' },
 
     // ==========================================
     // THEMA: BOUW & CONSTRUCTIE (NIEUW)
@@ -403,7 +413,55 @@ const woordenData = [
     { kana: 'メール', romaji: 'meeru', betekenis: 'E-mail', type: 'Woord', thema: 'Technologie & Media', niveau: 'N5' },
     { kana: 'テレビ', romaji: 'terebi', betekenis: 'Televisie', type: 'Woord', thema: 'Technologie & Media', niveau: 'N5' },
     { kana: 'でんち', romaji: 'denchi', betekenis: 'Batterij', type: 'Woord', thema: 'Technologie & Media', niveau: 'N4' },
-    { kana: 'じゅうでん', romaji: 'juuden', betekenis: 'Opladen', type: 'Woord', thema: 'Technologie & Media', niveau: 'N4' }
+    { kana: 'じゅうでん', romaji: 'juuden', betekenis: 'Opladen', type: 'Woord', thema: 'Technologie & Media', niveau: 'N4' },
+
+    // ==========================================
+    // THEMA: KLEDING (NIEUW)
+    // ==========================================
+    { kana: 'ふく', romaji: 'fuku', betekenis: 'Kleding', type: 'Woord', thema: 'Kleding', niveau: 'N5' },
+    { kana: 'シャツ', romaji: 'shatsu', betekenis: 'Shirt', type: 'Woord', thema: 'Kleding', niveau: 'N5' },
+    { kana: 'ズボン', romaji: 'zubon', betekenis: 'Broek', type: 'Woord', thema: 'Kleding', niveau: 'N5' },
+    { kana: 'スカート', romaji: 'sukaato', betekenis: 'Rok', type: 'Woord', thema: 'Kleding', niveau: 'N5' },
+    { kana: 'ぼうし', romaji: 'boushi', betekenis: 'Hoed / Pet', type: 'Woord', thema: 'Kleding', niveau: 'N5' },
+    { kana: 'めがね', romaji: 'megane', betekenis: 'Bril', type: 'Woord', thema: 'Kleding', niveau: 'N5' },
+    { kana: 'てぶくろ', romaji: 'tebukuro', betekenis: 'Handschoenen', type: 'Woord', thema: 'Kleding', niveau: 'N4' },
+    { kana: 'くつした', romaji: 'kutsushita', betekenis: 'Sokken', type: 'Woord', thema: 'Kleding', niveau: 'N5' },
+
+    // ==========================================
+    // THEMA: HOBBY'S & SPORT (NIEUW)
+    // ==========================================
+    { kana: 'サッカー', romaji: 'sakkaa', betekenis: 'Voetbal', type: 'Woord', thema: "Hobby's & Sport", niveau: 'N5' },
+    { kana: 'やきゅう', romaji: 'yakyuu', betekenis: 'Honkbal', type: 'Woord', thema: "Hobby's & Sport", niveau: 'N5' },
+    { kana: 'おんがく', romaji: 'ongaku', betekenis: 'Muziek', type: 'Woord', thema: "Hobby's & Sport", niveau: 'N5' },
+    { kana: 'えいが', romaji: 'eiga', betekenis: 'Film', type: 'Woord', thema: "Hobby's & Sport", niveau: 'N5' },
+    { kana: 'どくしょ', romaji: 'dokusho', betekenis: 'Lezen (als hobby)', type: 'Woord', thema: "Hobby's & Sport", niveau: 'N4' },
+    { kana: 'りょこう', romaji: 'ryokou', betekenis: 'Reizen', type: 'Woord', thema: "Hobby's & Sport", niveau: 'N4' },
+    { kana: 'すいえい', romaji: 'suiei', betekenis: 'Zwemmen', type: 'Woord', thema: "Hobby's & Sport", niveau: 'N5' },
+    { kana: 'ダンス', romaji: 'dansu', betekenis: 'Dans', type: 'Woord', thema: "Hobby's & Sport", niveau: 'N5' },
+
+    // ==========================================
+    // THEMA: GEZONDHEID (NIEUW)
+    // ==========================================
+    { kana: 'びょうき', romaji: 'byouki', betekenis: 'Ziekte', type: 'Woord', thema: 'Gezondheid', niveau: 'N5' },
+    { kana: 'くすり', romaji: 'kusuri', betekenis: 'Medicijn', type: 'Woord', thema: 'Gezondheid', niveau: 'N5' },
+    { kana: 'びょういん', romaji: 'byouin', betekenis: 'Ziekenhuis', type: 'Woord', thema: 'Gezondheid', niveau: 'N5' },
+    { kana: 'ねつ', romaji: 'netsu', betekenis: 'Koorts', type: 'Woord', thema: 'Gezondheid', niveau: 'N4' },
+    { kana: 'いたい', romaji: 'itai', betekenis: 'Pijnlijk', type: 'Woord', thema: 'Gezondheid', niveau: 'N4' },
+    { kana: 'げんき', romaji: 'genki', betekenis: 'Gezond / Energiek', type: 'Woord', thema: 'Gezondheid', niveau: 'N5' },
+    { kana: '風邪', romaji: 'kaze', betekenis: 'Verkoudheid', type: 'Woord', thema: 'Gezondheid', niveau: 'N4' },
+    { kana: 'たいおん', romaji: 'taion', betekenis: 'Lichaamstemperatuur', type: 'Woord', thema: 'Gezondheid', niveau: 'N4' },
+
+    // ==========================================
+    // THEMA: KEUKEN & KOKEN (NIEUW)
+    // ==========================================
+    { kana: 'なべ', romaji: 'nabe', betekenis: 'Pan', type: 'Woord', thema: 'Keuken & Koken', niveau: 'N5' },
+    { kana: '箸', romaji: 'hashi', betekenis: 'Eetstokjes', type: 'Woord', thema: 'Keuken & Koken', niveau: 'N5' },
+    { kana: 'フォーク', romaji: 'fooku', betekenis: 'Vork', type: 'Woord', thema: 'Keuken & Koken', niveau: 'N5' },
+    { kana: 'スプーン', romaji: 'supuun', betekenis: 'Lepel', type: 'Woord', thema: 'Keuken & Koken', niveau: 'N5' },
+    { kana: 'さら', romaji: 'sara', betekenis: 'Bord', type: 'Woord', thema: 'Keuken & Koken', niveau: 'N5' },
+    { kana: 'コップ', romaji: 'koppu', betekenis: 'Glas / Kopje', type: 'Woord', thema: 'Keuken & Koken', niveau: 'N5' },
+    { kana: 'りょうり', romaji: 'ryouri', betekenis: 'Gerecht / Koken', type: 'Woord', thema: 'Keuken & Koken', niveau: 'N5' },
+    { kana: 'フライパン', romaji: 'furaipan', betekenis: 'Koekenpan', type: 'Woord', thema: 'Keuken & Koken', niveau: 'N5' }
 ];
 
 const zinnenData = [
@@ -472,5 +530,164 @@ const zinnenData = [
     { kana: "すみません", romaji: "sumimasen", betekenis: "Sorry / Pardon", thema: "Excuses & Verontschuldigen", niveau: "N5" },
     { kana: "ごめんなさい", romaji: "gomennasai", betekenis: "Het spijt me", thema: "Excuses & Verontschuldigen", niveau: "N5" },
     { kana: "もうしわけありません", romaji: "moushiwake arimasen", betekenis: "Mijn excuses (formeel)", thema: "Excuses & Verontschuldigen", niveau: "N4" },
-    { kana: "たいへんしつれいしました", romaji: "taihen shitsurei shimashita", betekenis: "Mijn oprechte excuses", thema: "Excuses & Verontschuldigen", niveau: "N4" }
+    { kana: "たいへんしつれいしました", romaji: "taihen shitsurei shimashita", betekenis: "Mijn oprechte excuses", thema: "Excuses & Verontschuldigen", niveau: "N4" },
+
+    // Bij de dokter
+    { kana: "びょういんはどこですか", romaji: "byouin wa doko desu ka", betekenis: "Waar is het ziekenhuis?", thema: "Bij de dokter", niveau: "N5" },
+    { kana: "おなかがいたいです", romaji: "onaka ga itai desu", betekenis: "Mijn buik doet pijn", thema: "Bij de dokter", niveau: "N4" },
+    { kana: "ねつがあります", romaji: "netsu ga arimasu", betekenis: "Ik heb koorts", thema: "Bij de dokter", niveau: "N4" },
+    { kana: "くすりをください", romaji: "kusuri o kudasai", betekenis: "Medicijn graag", thema: "Bij de dokter", niveau: "N5" },
+    { kana: "アレルギーがあります", romaji: "arerugii ga arimasu", betekenis: "Ik heb een allergie", thema: "Bij de dokter", niveau: "N4" },
+
+    // Complimenten geven
+    { kana: "すごいですね", romaji: "sugoi desu ne", betekenis: "Dat is geweldig!", thema: "Complimenten geven", niveau: "N5" },
+    { kana: "じょうずですね", romaji: "jouzu desu ne", betekenis: "Dat kun je goed!", thema: "Complimenten geven", niveau: "N5" },
+    { kana: "かわいいですね", romaji: "kawaii desu ne", betekenis: "Dat is leuk/schattig!", thema: "Complimenten geven", niveau: "N5" },
+    { kana: "おいしそうですね", romaji: "oishisou desu ne", betekenis: "Dat ziet er lekker uit!", thema: "Complimenten geven", niveau: "N4" },
+    { kana: "がんばってください", romaji: "ganbatte kudasai", betekenis: "Doe je best! / Succes!", thema: "Complimenten geven", niveau: "N5" },
+
+    // Hobby's bespreken
+    { kana: "しゅみは何ですか", romaji: "shumi wa nan desu ka", betekenis: "Wat is je hobby?", thema: "Hobby's bespreken", niveau: "N5" },
+    { kana: "サッカーがすきです", romaji: "sakkaa ga suki desu", betekenis: "Ik houd van voetbal", thema: "Hobby's bespreken", niveau: "N5" },
+    { kana: "えいがをよく見ます", romaji: "eiga o yoku mimasu", betekenis: "Ik kijk vaak films", thema: "Hobby's bespreken", niveau: "N4" },
+    { kana: "どくしょがすきです", romaji: "dokusho ga suki desu", betekenis: "Ik houd van lezen", thema: "Hobby's bespreken", niveau: "N5" },
+    { kana: "いっしょにあそびませんか", romaji: "issho ni asobimasen ka", betekenis: "Zullen we samen iets doen?", thema: "Hobby's bespreken", niveau: "N4" },
+
+    // Weer bespreken
+    { kana: "きょうはいい天気ですね", romaji: "kyou wa ii tenki desu ne", betekenis: "Mooi weer vandaag, niet?", thema: "Weer bespreken", niveau: "N5" },
+    { kana: "あめがふっています", romaji: "ame ga futteimasu", betekenis: "Het regent", thema: "Weer bespreken", niveau: "N4" },
+    { kana: "さむいですね", romaji: "samui desu ne", betekenis: "Het is koud, niet?", thema: "Weer bespreken", niveau: "N5" },
+    { kana: "あついですね", romaji: "atsui desu ne", betekenis: "Het is warm, niet?", thema: "Weer bespreken", niveau: "N5" },
+    { kana: "かさをもってきましたか", romaji: "kasa o motte kimashita ka", betekenis: "Heb je een paraplu meegenomen?", thema: "Weer bespreken", niveau: "N4" },
+
+    // Bij het station
+    { kana: "つぎのでんしゃはなんじですか", romaji: "tsugi no densha wa nanji desu ka", betekenis: "Hoe laat is de volgende trein?", thema: "Bij het station", niveau: "N4" },
+    { kana: "このでんしゃはとうきょうにいきますか", romaji: "kono densha wa Tokyo ni ikimasu ka", betekenis: "Gaat deze trein naar Tokio?", thema: "Bij het station", niveau: "N4" },
+    { kana: "きっぷはどこでかえますか", romaji: "kippu wa doko de kaemasu ka", betekenis: "Waar kan ik een ticket kopen?", thema: "Bij het station", niveau: "N4" },
+    { kana: "のりばはどこですか", romaji: "noriba wa doko desu ka", betekenis: "Waar is het perron?", thema: "Bij het station", niveau: "N5" },
+    { kana: "でんしゃがとまりました", romaji: "densha ga tomarimashita", betekenis: "De trein is gestopt", thema: "Bij het station", niveau: "N4" }
+];
+// =====================================================================================
+// KANJI
+// =====================================================================================
+// Zelfde structuur als woorden/zinnen (kana/romaji/betekenis/thema/niveau), zodat het
+// bestaande quiz-systeem (typen, meerkeuze, SRS, statistieken) hier zonder aanpassingen
+// op werkt. romaji = de meest gangbare lezing voor herkenning op dit niveau (meestal de
+// kun-lezing); bij de "Basis Werkwoorden" is dat de volledige woordvorm met okurigana
+// (bv. 行く i.p.v. los 行), zodat wat je ziet exact overeenkomt met wat je intypt.
+const kanjiData = [
+    // ==========================================
+    // THEMA: CIJFERS
+    // ==========================================
+    { kana: '一', romaji: 'ichi', betekenis: 'Een (1)', type: 'Kanji', thema: 'Cijfers', niveau: 'N5' },
+    { kana: '二', romaji: 'ni', betekenis: 'Twee (2)', type: 'Kanji', thema: 'Cijfers', niveau: 'N5' },
+    { kana: '三', romaji: 'san', betekenis: 'Drie (3)', type: 'Kanji', thema: 'Cijfers', niveau: 'N5' },
+    { kana: '四', romaji: 'yon', betekenis: 'Vier (4)', type: 'Kanji', thema: 'Cijfers', niveau: 'N5' },
+    { kana: '五', romaji: 'go', betekenis: 'Vijf (5)', type: 'Kanji', thema: 'Cijfers', niveau: 'N5' },
+    { kana: '六', romaji: 'roku', betekenis: 'Zes (6)', type: 'Kanji', thema: 'Cijfers', niveau: 'N5' },
+    { kana: '七', romaji: 'nana', betekenis: 'Zeven (7)', type: 'Kanji', thema: 'Cijfers', niveau: 'N5' },
+    { kana: '八', romaji: 'hachi', betekenis: 'Acht (8)', type: 'Kanji', thema: 'Cijfers', niveau: 'N5' },
+    { kana: '九', romaji: 'kyuu', betekenis: 'Negen (9)', type: 'Kanji', thema: 'Cijfers', niveau: 'N5' },
+    { kana: '十', romaji: 'juu', betekenis: 'Tien (10)', type: 'Kanji', thema: 'Cijfers', niveau: 'N5' },
+    { kana: '百', romaji: 'hyaku', betekenis: 'Honderd', type: 'Kanji', thema: 'Cijfers', niveau: 'N5' },
+    { kana: '千', romaji: 'sen', betekenis: 'Duizend', type: 'Kanji', thema: 'Cijfers', niveau: 'N5' },
+    { kana: '万', romaji: 'man', betekenis: 'Tienduizend', type: 'Kanji', thema: 'Cijfers', niveau: 'N4' },
+
+    // ==========================================
+    // THEMA: TIJD (KANJI)
+    // ==========================================
+    { kana: '日', romaji: 'hi', betekenis: 'Dag / Zon', type: 'Kanji', thema: 'Tijd (kanji)', niveau: 'N5' },
+    { kana: '月', romaji: 'tsuki', betekenis: 'Maand / Maan', type: 'Kanji', thema: 'Tijd (kanji)', niveau: 'N5' },
+    { kana: '年', romaji: 'nen', betekenis: 'Jaar', type: 'Kanji', thema: 'Tijd (kanji)', niveau: 'N5' },
+    { kana: '時', romaji: 'toki', betekenis: 'Tijd / Uur', type: 'Kanji', thema: 'Tijd (kanji)', niveau: 'N5' },
+    { kana: '今', romaji: 'ima', betekenis: 'Nu', type: 'Kanji', thema: 'Tijd (kanji)', niveau: 'N5' },
+    { kana: '朝', romaji: 'asa', betekenis: 'Ochtend', type: 'Kanji', thema: 'Tijd (kanji)', niveau: 'N5' },
+    { kana: '昼', romaji: 'hiru', betekenis: 'Middag', type: 'Kanji', thema: 'Tijd (kanji)', niveau: 'N5' },
+    { kana: '夜', romaji: 'yoru', betekenis: 'Avond / Nacht', type: 'Kanji', thema: 'Tijd (kanji)', niveau: 'N5' },
+    { kana: '分', romaji: 'fun', betekenis: 'Minuut', type: 'Kanji', thema: 'Tijd (kanji)', niveau: 'N5' },
+    { kana: '週', romaji: 'shuu', betekenis: 'Week', type: 'Kanji', thema: 'Tijd (kanji)', niveau: 'N4' },
+
+    // ==========================================
+    // THEMA: MENSEN & FAMILIE (KANJI)
+    // ==========================================
+    { kana: '人', romaji: 'hito', betekenis: 'Mens / Persoon', type: 'Kanji', thema: 'Mensen & Familie (kanji)', niveau: 'N5' },
+    { kana: '女', romaji: 'onna', betekenis: 'Vrouw', type: 'Kanji', thema: 'Mensen & Familie (kanji)', niveau: 'N5' },
+    { kana: '男', romaji: 'otoko', betekenis: 'Man', type: 'Kanji', thema: 'Mensen & Familie (kanji)', niveau: 'N5' },
+    { kana: '子', romaji: 'ko', betekenis: 'Kind', type: 'Kanji', thema: 'Mensen & Familie (kanji)', niveau: 'N5' },
+    { kana: '父', romaji: 'chichi', betekenis: 'Vader', type: 'Kanji', thema: 'Mensen & Familie (kanji)', niveau: 'N5' },
+    { kana: '母', romaji: 'haha', betekenis: 'Moeder', type: 'Kanji', thema: 'Mensen & Familie (kanji)', niveau: 'N5' },
+    { kana: '友', romaji: 'tomo', betekenis: 'Vriend', type: 'Kanji', thema: 'Mensen & Familie (kanji)', niveau: 'N5' },
+
+    // ==========================================
+    // THEMA: NATUUR (KANJI)
+    // ==========================================
+    { kana: '山', romaji: 'yama', betekenis: 'Berg', type: 'Kanji', thema: 'Natuur (kanji)', niveau: 'N5' },
+    { kana: '川', romaji: 'kawa', betekenis: 'Rivier', type: 'Kanji', thema: 'Natuur (kanji)', niveau: 'N5' },
+    { kana: '木', romaji: 'ki', betekenis: 'Boom', type: 'Kanji', thema: 'Natuur (kanji)', niveau: 'N5' },
+    { kana: '花', romaji: 'hana', betekenis: 'Bloem', type: 'Kanji', thema: 'Natuur (kanji)', niveau: 'N5' },
+    { kana: '空', romaji: 'sora', betekenis: 'Lucht', type: 'Kanji', thema: 'Natuur (kanji)', niveau: 'N5' },
+    { kana: '雨', romaji: 'ame', betekenis: 'Regen', type: 'Kanji', thema: 'Natuur (kanji)', niveau: 'N5' },
+    { kana: '雪', romaji: 'yuki', betekenis: 'Sneeuw', type: 'Kanji', thema: 'Natuur (kanji)', niveau: 'N4' },
+    { kana: '海', romaji: 'umi', betekenis: 'Zee', type: 'Kanji', thema: 'Natuur (kanji)', niveau: 'N5' },
+    { kana: '天', romaji: 'ten', betekenis: 'Hemel', type: 'Kanji', thema: 'Natuur (kanji)', niveau: 'N4' },
+
+    // ==========================================
+    // THEMA: LICHAAM (KANJI)
+    // ==========================================
+    { kana: '目', romaji: 'me', betekenis: 'Oog', type: 'Kanji', thema: 'Lichaam (kanji)', niveau: 'N5' },
+    { kana: '口', romaji: 'kuchi', betekenis: 'Mond', type: 'Kanji', thema: 'Lichaam (kanji)', niveau: 'N5' },
+    { kana: '手', romaji: 'te', betekenis: 'Hand', type: 'Kanji', thema: 'Lichaam (kanji)', niveau: 'N5' },
+    { kana: '足', romaji: 'ashi', betekenis: 'Voet / Been', type: 'Kanji', thema: 'Lichaam (kanji)', niveau: 'N5' },
+    { kana: '耳', romaji: 'mimi', betekenis: 'Oor', type: 'Kanji', thema: 'Lichaam (kanji)', niveau: 'N4' },
+    { kana: '心', romaji: 'kokoro', betekenis: 'Hart / Gevoel', type: 'Kanji', thema: 'Lichaam (kanji)', niveau: 'N4' },
+
+    // ==========================================
+    // THEMA: RICHTING & PLAATS (KANJI)
+    // ==========================================
+    { kana: '上', romaji: 'ue', betekenis: 'Boven', type: 'Kanji', thema: 'Richting & Plaats (kanji)', niveau: 'N5' },
+    { kana: '下', romaji: 'shita', betekenis: 'Onder', type: 'Kanji', thema: 'Richting & Plaats (kanji)', niveau: 'N5' },
+    { kana: '中', romaji: 'naka', betekenis: 'Midden / In', type: 'Kanji', thema: 'Richting & Plaats (kanji)', niveau: 'N5' },
+    { kana: '外', romaji: 'soto', betekenis: 'Buiten', type: 'Kanji', thema: 'Richting & Plaats (kanji)', niveau: 'N4' },
+    { kana: '左', romaji: 'hidari', betekenis: 'Links', type: 'Kanji', thema: 'Richting & Plaats (kanji)', niveau: 'N5' },
+    { kana: '右', romaji: 'migi', betekenis: 'Rechts', type: 'Kanji', thema: 'Richting & Plaats (kanji)', niveau: 'N5' },
+    { kana: '前', romaji: 'mae', betekenis: 'Voor', type: 'Kanji', thema: 'Richting & Plaats (kanji)', niveau: 'N5' },
+    { kana: '後', romaji: 'ushiro', betekenis: 'Achter', type: 'Kanji', thema: 'Richting & Plaats (kanji)', niveau: 'N4' },
+    { kana: '東', romaji: 'higashi', betekenis: 'Oost', type: 'Kanji', thema: 'Richting & Plaats (kanji)', niveau: 'N4' },
+    { kana: '西', romaji: 'nishi', betekenis: 'West', type: 'Kanji', thema: 'Richting & Plaats (kanji)', niveau: 'N4' },
+    { kana: '南', romaji: 'minami', betekenis: 'Zuid', type: 'Kanji', thema: 'Richting & Plaats (kanji)', niveau: 'N4' },
+    { kana: '北', romaji: 'kita', betekenis: 'Noord', type: 'Kanji', thema: 'Richting & Plaats (kanji)', niveau: 'N4' },
+
+    // ==========================================
+    // THEMA: KLEUREN (KANJI)
+    // ==========================================
+    { kana: '赤', romaji: 'aka', betekenis: 'Rood', type: 'Kanji', thema: 'Kleuren (kanji)', niveau: 'N5' },
+    { kana: '青', romaji: 'ao', betekenis: 'Blauw', type: 'Kanji', thema: 'Kleuren (kanji)', niveau: 'N5' },
+    { kana: '白', romaji: 'shiro', betekenis: 'Wit', type: 'Kanji', thema: 'Kleuren (kanji)', niveau: 'N5' },
+    { kana: '黒', romaji: 'kuro', betekenis: 'Zwart', type: 'Kanji', thema: 'Kleuren (kanji)', niveau: 'N5' },
+
+    // ==========================================
+    // THEMA: SCHOOL & TAAL (KANJI)
+    // ==========================================
+    { kana: '学', romaji: 'gaku', betekenis: 'Studie / Leren', type: 'Kanji', thema: 'School & Taal (kanji)', niveau: 'N5' },
+    { kana: '校', romaji: 'kou', betekenis: 'School', type: 'Kanji', thema: 'School & Taal (kanji)', niveau: 'N5' },
+    { kana: '先', romaji: 'sen', betekenis: 'Eerder / Voorgaand', type: 'Kanji', thema: 'School & Taal (kanji)', niveau: 'N5' },
+    { kana: '生', romaji: 'sei', betekenis: 'Leven / Geboorte', type: 'Kanji', thema: 'School & Taal (kanji)', niveau: 'N5' },
+    { kana: '本', romaji: 'hon', betekenis: 'Boek / Oorsprong', type: 'Kanji', thema: 'School & Taal (kanji)', niveau: 'N5' },
+    { kana: '語', romaji: 'go', betekenis: 'Taal', type: 'Kanji', thema: 'School & Taal (kanji)', niveau: 'N5' },
+    { kana: '名', romaji: 'na', betekenis: 'Naam', type: 'Kanji', thema: 'School & Taal (kanji)', niveau: 'N5' },
+    { kana: '国', romaji: 'kuni', betekenis: 'Land', type: 'Kanji', thema: 'School & Taal (kanji)', niveau: 'N5' },
+
+    // ==========================================
+    // THEMA: BASIS WERKWOORDEN (KANJI)
+    // ==========================================
+    { kana: '行く', romaji: 'iku', betekenis: 'Gaan', type: 'Kanji', thema: 'Basis Werkwoorden', niveau: 'N5' },
+    { kana: '来る', romaji: 'kuru', betekenis: 'Komen', type: 'Kanji', thema: 'Basis Werkwoorden', niveau: 'N5' },
+    { kana: '見る', romaji: 'miru', betekenis: 'Zien', type: 'Kanji', thema: 'Basis Werkwoorden', niveau: 'N5' },
+    { kana: '食べる', romaji: 'taberu', betekenis: 'Eten', type: 'Kanji', thema: 'Basis Werkwoorden', niveau: 'N5' },
+    { kana: '飲む', romaji: 'nomu', betekenis: 'Drinken', type: 'Kanji', thema: 'Basis Werkwoorden', niveau: 'N5' },
+    { kana: '話す', romaji: 'hanasu', betekenis: 'Spreken', type: 'Kanji', thema: 'Basis Werkwoorden', niveau: 'N5' },
+    { kana: '書く', romaji: 'kaku', betekenis: 'Schrijven', type: 'Kanji', thema: 'Basis Werkwoorden', niveau: 'N5' },
+    { kana: '読む', romaji: 'yomu', betekenis: 'Lezen', type: 'Kanji', thema: 'Basis Werkwoorden', niveau: 'N5' },
+    { kana: '買う', romaji: 'kau', betekenis: 'Kopen', type: 'Kanji', thema: 'Basis Werkwoorden', niveau: 'N5' },
+    { kana: '立つ', romaji: 'tatsu', betekenis: 'Staan', type: 'Kanji', thema: 'Basis Werkwoorden', niveau: 'N4' }
 ];
