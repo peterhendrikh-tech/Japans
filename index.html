@@ -426,7 +426,7 @@
     function getSeason() { let m = new Date().getMonth(); if(m>=2 && m<=4) return {n:'Lente 🌸', m:1}; if(m>=5 && m<=7) return {n:'Zomer ☀️', m:2}; if(m>=8 && m<=10) return {n:'Herfst 🍂', m:1}; return {n:'Winter ❄️', m:0.5}; }
 
     function getIntegrity() { let rooms = ecoStatus.nest.filter(x=>x===1).length; let reservoirs = ecoStatus.nest.filter(x=>x===3).length; let pillars = ecoStatus.nest.filter(x=>x===2).length; return Math.max(0, Math.min(100, 100 - (rooms * 2) - (reservoirs * 2) + (pillars * 5))); }
-    function getMaxWater() { return 100 + (ecoStatus.nest.filter(x=>x===3).length * 50) + ((ecoStatus.alates||0) * 50); }
+    function getMaxWater() { const nest = Array.isArray(ecoStatus.nest) ? ecoStatus.nest : []; return 100 + (nest.filter(x=>x===3).length * 50) + ((ecoStatus.alates||0) * 50); }
     function capWater() { let max = getMaxWater(); let tot = berekenTotaalScore(); if(tot - ecoStatus.spentWater > max) { ecoStatus.spentWater = tot - max; } }
 
     async function login() {
@@ -516,13 +516,22 @@
     function saveProgressie() { syncToSupabase(huidigeGebruiker); }
     
     function verhoogScore(item) {
+        // De kern (score + spaced-repetition) staat BUITEN de try, en gebeurt dus altijd.
         laatsteActiviteit = Date.now(); let progDB = progressieKana; if (woordenData.includes(item)) progDB = progressieWoorden; if (typeof zinnenData !== 'undefined' && zinnenData.includes(item)) progDB = progressieZinnen;
         if(progDB[item.kana] < 5) progDB[item.kana] += 1;
         bijwerkenRepetitie(item.kana, true);
-        wijsGachaMuntToe(1);
-        let p = ecoStatus.bossBeaten ? 2 : 1; if(ecoStatus.rushVragen > 0) { ecoStatus.rushVragen--; if(ecoStatus.spentWater > -9999) ecoStatus.spentWater -= p; }
-        if(Math.random() < 0.05 && Date.now() > ecoStatus.eventCooldown) { ecoStatus.eventCooldown = Date.now() + 300000; if(confirm("🚨 RANDOM EVENT!\n\nDe buren klagen over de mestlucht! Bakken schoongespoelen (-10 Water) of negeren (5 min geen groei)?")) { if(berekenTotaalScore() - ecoStatus.spentWater >= 10) { ecoStatus.spentWater += 10; alert("Gelukt!"); } else { alert("Te weinig water! Stank blokkeert de boel."); ecoStatus.stankTimer = Date.now() + 300000; } } else { ecoStatus.stankTimer = Date.now() + 300000; } }
-        capWater(); saveProgressie();
+        // Alles hieronder is een bijeffect (munten, eco-game-economie, random events). Een fout
+        // hierin mag NOOIT de hoofdflow (doorgaan naar de volgende vraag) blokkeren — vandaar de
+        // try/catch: in het slechtste geval mis je een bijeffect, maar de quiz loopt altijd door.
+        try {
+            wijsGachaMuntToe(1);
+            let p = ecoStatus.bossBeaten ? 2 : 1; if(ecoStatus.rushVragen > 0) { ecoStatus.rushVragen--; if(ecoStatus.spentWater > -9999) ecoStatus.spentWater -= p; }
+            if(Math.random() < 0.05 && Date.now() > ecoStatus.eventCooldown) { ecoStatus.eventCooldown = Date.now() + 300000; if(confirm("🚨 RANDOM EVENT!\n\nDe buren klagen over de mestlucht! Bakken schoongespoelen (-10 Water) of negeren (5 min geen groei)?")) { if(berekenTotaalScore() - ecoStatus.spentWater >= 10) { ecoStatus.spentWater += 10; alert("Gelukt!"); } else { alert("Te weinig water! Stank blokkeert de boel."); ecoStatus.stankTimer = Date.now() + 300000; } } else { ecoStatus.stankTimer = Date.now() + 300000; } }
+            capWater();
+        } catch (e) {
+            console.warn('Bijeffect in verhoogScore mislukt (quiz gaat gewoon door):', e);
+        }
+        saveProgressie();
     }
     /* ===== Gachapon: munten toekennen =====
        Optimistisch lokaal bijgewerkt voor een directe UI-reactie; de echte
@@ -677,7 +686,7 @@
         }); 
     }
     
-    function checkTextAnswer() { if(isChecking || !huidigTeken) return; isChecking = true; laatsteActiviteit = Date.now(); const invoer = document.getElementById('quiz-input').value.trim().toLowerCase(); const feedback = document.getElementById('quiz-feedback'); if (invoer === huidigTeken.romaji) { speelGeluid('goed'); feedback.innerHTML = `Goed zo! 🎉`; feedback.style.color = "var(--success)"; verhoogScore(huidigTeken); setTimeout(volgendTeken, 1000); } else { speelGeluid('fout'); bijwerkenRepetitie(huidigTeken.kana, false); feedback.innerHTML = `Fout! Het was '${huidigTeken.romaji.toUpperCase()}'`; feedback.style.color = "var(--danger)"; setTimeout(volgendTeken, 2200); } }
+    function checkTextAnswer() { if(isChecking || !huidigTeken) return; isChecking = true; laatsteActiviteit = Date.now(); const invoer = document.getElementById('quiz-input').value.trim().toLowerCase(); const feedback = document.getElementById('quiz-feedback'); if (invoer === huidigTeken.romaji) { speelGeluid('goed'); feedback.innerHTML = `Goed zo! 🎉`; feedback.style.color = "var(--success)"; try { verhoogScore(huidigTeken); } catch(e) { console.warn('verhoogScore mislukt (quiz gaat door):', e); } setTimeout(volgendTeken, 1000); } else { speelGeluid('fout'); bijwerkenRepetitie(huidigTeken.kana, false); feedback.innerHTML = `Fout! Het was '${huidigTeken.romaji.toUpperCase()}'`; feedback.style.color = "var(--danger)"; setTimeout(volgendTeken, 2200); } }
     
     function checkChoiceAnswer(index) { 
         if(isChecking || !huidigTeken) return; isChecking = true; laatsteActiviteit = Date.now(); const feedback = document.getElementById('quiz-feedback'); 
@@ -688,7 +697,7 @@
         const knoppen = document.querySelectorAll('#quiz-choices-container .choice-btn'); 
         knoppen.forEach(knop => { if (knop.querySelector('.choice-text').innerText === correcteWaarde) { knop.style.background = 'rgba(76, 107, 79, 0.18)'; knop.style.borderColor = 'var(--success)'; } }); 
         spreekJapansUit(huidigTeken.kana); 
-        if (gekozenWaarde === correcteWaarde) { speelGeluid('goed'); feedback.innerHTML = `Goed zo! 🎉`; feedback.style.color = "var(--success)"; verhoogScore(huidigTeken); setTimeout(volgendTeken, 1000); } 
+        if (gekozenWaarde === correcteWaarde) { speelGeluid('goed'); feedback.innerHTML = `Goed zo! 🎉`; feedback.style.color = "var(--success)"; try { verhoogScore(huidigTeken); } catch(e) { console.warn('verhoogScore mislukt (quiz gaat door):', e); } setTimeout(volgendTeken, 1000); } 
         else { speelGeluid('fout'); bijwerkenRepetitie(huidigTeken.kana, false); knoppen[index].style.background = 'rgba(171, 58, 53, 0.18)'; knoppen[index].style.borderColor = 'var(--danger)'; feedback.innerHTML = `Helaas! Dit is ${correcteWaarde}`; feedback.style.color = "var(--danger)"; setTimeout(volgendTeken, 2200); } 
     }
 
@@ -799,7 +808,7 @@
             huidigeCoins = result.new_coin_balance; huidigePetals = result.new_petal_balance; huidigPityCount = result.new_pity_count;
             updateCoinBadge(); updateGachaBalansWeergave();
             if (!result.is_dupe) gachaInventory.add(result.item.id);
-            speelGachaReveal(result);
+            try { speelGachaReveal(result); } catch(e) { console.warn('Reveal-animatie kon niet starten (knop wordt vrijgegeven):', e); gachaBusy = false; btn.disabled = false; btn.innerText = 'Open Gachapon (🪙 5)'; }
         } catch (e) {
             console.warn('Gachapon trekken mislukt:', e);
             gachaBusy = false; btn.disabled = false; btn.innerText = 'Open Gachapon (🪙 5)';
@@ -815,16 +824,25 @@
         capsule.innerText = '🎁'; capsule.className = 'gacha-capsule is-shaking glow-' + rarity; flash.className = 'gacha-flash-overlay';
 
         setTimeout(() => { // Stage 1+2 (1500ms) voorbij -> Stage 3: flash
-            capsule.classList.remove('is-shaking');
-            flash.classList.add('active');
+            try {
+                capsule.classList.remove('is-shaking');
+                flash.classList.add('active');
+            } catch(e) { console.warn('Gacha-animatie (flash) mislukt:', e); }
             setTimeout(() => { // Stage 3 (200ms) voorbij -> Stage 4: reveal
-                flash.className = 'gacha-flash-overlay';
-                capsule.className = 'gacha-capsule';
-                capsule.innerText = GACHA_ICOON_PER_TYPE[result.item.item_type] || '🎁';
-                scherm.classList.add('is-screenshaking');
-                setTimeout(() => scherm.classList.remove('is-screenshaking'), 420);
-                renderGachaResultKaart(result);
-                gachaBusy = false; btn.disabled = false; btn.innerText = 'Open Gachapon (🪙 5)';
+                try {
+                    flash.className = 'gacha-flash-overlay';
+                    capsule.className = 'gacha-capsule';
+                    capsule.innerText = GACHA_ICOON_PER_TYPE[result.item.item_type] || '🎁';
+                    scherm.classList.add('is-screenshaking');
+                    setTimeout(() => scherm.classList.remove('is-screenshaking'), 420);
+                    renderGachaResultKaart(result);
+                } catch(e) {
+                    console.warn('Gacha-reveal mislukt (knop wordt alvast weer vrijgegeven):', e);
+                } finally {
+                    // Wat er ook misgaat in de animatie/weergave: de knop en de busy-vlag
+                    // moeten ALTIJD weer vrijkomen, anders zit de speler vast.
+                    gachaBusy = false; btn.disabled = false; btn.innerText = 'Open Gachapon (🪙 5)';
+                }
             }, 200);
         }, 1500);
     }
