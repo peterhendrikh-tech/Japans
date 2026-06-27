@@ -538,7 +538,10 @@
         try {
             wijsGachaMuntToe(1);
             let p = ecoStatus.bossBeaten ? 2 : 1; if(ecoStatus.rushVragen > 0) { ecoStatus.rushVragen--; if(ecoStatus.spentWater > -9999) ecoStatus.spentWater -= p; }
-            if(Math.random() < 0.05 && Date.now() > ecoStatus.eventCooldown) { ecoStatus.eventCooldown = Date.now() + 300000; if(confirm("🚨 RANDOM EVENT!\n\nDe buren klagen over de mestlucht! Bakken schoongespoelen (-10 Water) of negeren (5 min geen groei)?")) { if(berekenTotaalScore() - ecoStatus.spentWater >= 10) { ecoStatus.spentWater += 10; alert("Gelukt!"); } else { alert("Te weinig water! Stank blokkeert de boel."); ecoStatus.stankTimer = Date.now() + 300000; } } else { ecoStatus.stankTimer = Date.now() + 300000; } }
+            // Let op: GEEN confirm()/alert() hier — die zijn blokkerend in een echte browser en
+            // kunnen de indruk geven dat de quiz "vastloopt" na een goed antwoord. Een los, niet-
+            // blokkerend modal-venster doet exact hetzelfde zonder de rest van de pagina te pauzeren.
+            if(Math.random() < 0.05 && Date.now() > ecoStatus.eventCooldown) { ecoStatus.eventCooldown = Date.now() + 300000; toonRandomEventModal(); }
             capWater();
         } catch (e) {
             console.warn('Bijeffect in verhoogScore mislukt (quiz gaat gewoon door):', e);
@@ -953,6 +956,31 @@
         } catch (e) { console.warn('Uitrusten mislukt:', e); toonMelding('⚠️ Kon dit niet instellen. Controleer je verbinding.', 'error'); }
     }
 
+    /* ===== Random event (eco-game) — niet-blokkerend modal i.p.v. confirm()/alert() ===== */
+    function toonRandomEventModal() {
+        const bestaand = document.getElementById('random-event-modal'); if (bestaand) bestaand.remove();
+        const overlay = document.createElement('div'); overlay.id = 'random-event-modal';
+        overlay.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.55); display:flex; align-items:center; justify-content:center; z-index:1003; padding:20px;';
+        overlay.innerHTML = `<div style="background:var(--card-bg); border-radius:16px; padding:20px; max-width:340px; text-align:center; border:2px solid var(--shu);">
+            <h3 style="margin-top:0;">🚨 Random Event!</h3>
+            <p style="font-size:14px;">De buren klagen over de mestlucht! Bakken schoonspoelen (-10 Water) of negeren (5 min geen groei)?</p>
+            <div style="display:flex; gap:8px; margin-top:14px;">
+                <button class="btn" style="margin:0; font-size:13px;" onclick="verwerkRandomEvent(true)">Schoonspoelen</button>
+                <button class="btn btn-secondary" style="margin:0; font-size:13px;" onclick="verwerkRandomEvent(false)">Negeren</button>
+            </div>
+        </div>`;
+        document.body.appendChild(overlay);
+    }
+    function verwerkRandomEvent(schoonspoelen) {
+        const modal = document.getElementById('random-event-modal'); if (modal) modal.remove();
+        if (schoonspoelen) {
+            if (berekenTotaalScore() - ecoStatus.spentWater >= 10) { ecoStatus.spentWater += 10; toonMelding('✅ Gelukt! De bakken zijn weer schoon.', 'success'); }
+            else { toonMelding('⚠️ Te weinig water! Stank blokkeert de groei voor 5 minuten.', 'error'); ecoStatus.stankTimer = Date.now() + 300000; }
+        } else {
+            ecoStatus.stankTimer = Date.now() + 300000;
+        }
+        slaEcoSysteemOp();
+    }
     function toonGachaStickerModal(item) {
         const p = item.payload || {}; const bestaand = document.getElementById('gacha-sticker-modal'); if (bestaand) bestaand.remove();
         const overlay = document.createElement('div'); overlay.id = 'gacha-sticker-modal';
