@@ -4,244 +4,238 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kana Master - Cloud Editie</title>
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='80' font-size='80'%3E%E2%9B%A9%EF%B8%8F%3C/text%3E%3C/svg%3E">
-    <link rel="manifest" href="manifest.json">
-    <link rel="apple-touch-icon" href="icon-192.png">
-    <meta name="theme-color" content="#2c4a5e">
-    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <link rel="icon" href="data:,">
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;700;800&family=Zen+Maru+Gothic:wght@400;500;700;900&family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;600;700;800&family=Zen+Maru+Gothic:wght@400;500;700;900&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <style>
-        /* ===== Japans thema — tokens =====
-           Sumi (墨, inkt) / Washi (和紙, papier) / Ai (藍, indigo) / Shu (朱, vermiljoen) / Matsuba (松葉, pijnboomgroen) / Kincha (金茶, oudgoud) */
+        /* ============================================================
+           DESIGN SYSTEM — "Washi & Inkt"
+           Display: Shippori Mincho (Japans-geïnspireerde schreef)
+           Body/UI: Zen Maru Gothic (zachte, vriendelijke grotesk)
+           Data/mono: JetBrains Mono (romaji-invoer, cijfers)
+           Signature element: het hanko-zegel (cirkelstempel) —
+           gebruikt in de header en als "correct"-bevestiging.
+           ============================================================ */
         :root {
-            --sumi: #2b2420; --washi: #f6f0e3; --paper-card: #fffdf8; --ai: #2c4a5e; --shu: #ab3a35; --matsuba: #4c6b4f; --kincha: #b8893f; --budou: #6c5470;
-            --primary: var(--ai); --success: var(--matsuba); --danger: var(--shu); --background: var(--washi); --card-bg: var(--paper-card);
-            --dark: var(--sumi); --text: var(--sumi); --accent: var(--kincha); --border: #ddd0b8; --input-bg: #fffaf0; --powerup: var(--budou); --special: #b5602e;
-            --muted: #8a7a64; --font-display: 'Shippori Mincho', serif; --font-body: 'Zen Maru Gothic', 'Segoe UI', sans-serif;
+            --washi: #f3ecdf;
+            --washi-deep: #e8dec8;
+            --sumi: #2a2622;
+            --sumi-soft: #57514a;
+            --indigo: #2c4a6e;
+            --indigo-deep: #1d3450;
+            --vermillion: #c0392b;
+            --vermillion-deep: #9c2c20;
+            --gold: #b8893f;
+            --success: #3f7d58;
+            --danger: #c0392b;
+
+            --primary: var(--indigo);
+            --background: var(--washi);
+            --card-bg: #fffdf8;
+            --dark: var(--sumi);
+            --text: var(--sumi);
+            --accent: var(--gold);
+            --border: #d8cdb4;
+            --input-bg: #fffdf8;
+            --powerup: #6b4c8a;
+            --special: var(--vermillion);
+
+            --font-display: 'Shippori Mincho', serif;
+            --font-body: 'Zen Maru Gothic', sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
         }
         [data-theme="dark"] {
-            --background: #1b1815; --card-bg: #25201b; --dark: #f1e7d6; --text: #e9ddc8; --border: #463d33; --input-bg: #2c2620;
-            --ai: #6f9bb5; --primary: var(--ai); --shu: #d9776f; --danger: var(--shu); --matsuba: #84a988; --success: var(--matsuba); --kincha: #d9b56a; --accent: var(--kincha);
-            --muted: #b3a48c;
+            --washi: #1b1813;
+            --washi-deep: #242018;
+            --sumi: #ece4d3;
+            --sumi-soft: #b9af9c;
+            --indigo: #6f97c4;
+            --indigo-deep: #5982ad;
+            --gold: #d4a85e;
+
+            --background: var(--washi);
+            --card-bg: #242018;
+            --dark: var(--sumi);
+            --text: var(--sumi);
+            --border: #3a342a;
+            --input-bg: #2c2720;
         }
-        [data-font="basis"] { --font-display: 'Noto Sans JP', 'Zen Maru Gothic', sans-serif; }
+
         * { box-sizing: border-box; }
         body {
-            font-family: var(--font-body); background-color: var(--background); color: var(--text); margin: 0; padding: 15px;
-            display: flex; justify-content: center; align-items: center; min-height: 100vh; transition: background 0.3s, color 0.3s;
+            font-family: var(--font-body);
+            background: var(--background);
             background-image:
-                radial-gradient(circle at 12% 8%, color-mix(in srgb, var(--ai) 7%, transparent) 0 2px, transparent 3px),
-                repeating-linear-gradient(135deg, color-mix(in srgb, var(--ai) 5%, transparent) 0 1px, transparent 1px 26px);
-            background-size: 100% 100%, 52px 52px;
+                radial-gradient(circle at 8% 12%, rgba(192,57,43,0.05) 0%, transparent 38%),
+                radial-gradient(circle at 92% 85%, rgba(44,74,110,0.06) 0%, transparent 42%);
+            color: var(--text);
+            margin: 0;
+            padding: 18px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            transition: background 0.3s, color 0.3s;
         }
         .container {
-            background: var(--card-bg); padding: 28px 25px; border-radius: 18px;
-            box-shadow: 0 10px 30px rgba(43,36,32,0.12), 0 0 0 1px var(--border);
-            width: 100%; max-width: 600px; text-align: center; max-height: 95vh; overflow-y: auto; position: relative;
-            border-top: 6px solid var(--shu);
+            background: var(--card-bg);
+            padding: 28px 26px;
+            border-radius: 6px;
+            box-shadow: 0 1px 2px rgba(42,38,34,0.06), 0 18px 50px rgba(42,38,34,0.10);
+            border: 1px solid var(--border);
+            width: 100%;
+            max-width: 600px;
+            text-align: center;
+            max-height: 95vh;
+            overflow-y: auto;
+            position: relative;
         }
-        .container::after {
-            content: "学"; position: absolute; top: -16px; right: 18px; width: 34px; height: 34px; border-radius: 6px;
-            background: var(--shu); color: #fff8ee; font-family: var(--font-display); font-size: 19px; line-height: 34px;
-            box-shadow: 0 3px 8px rgba(0,0,0,0.25); transform: rotate(4deg);
+        .container::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--vermillion) 0%, var(--vermillion) 18%, var(--indigo) 18%, var(--indigo) 100%);
         }
-        h1, h2, h3 { margin-top: 0; color: var(--dark); font-family: var(--font-display); letter-spacing: .01em; }
-        h1 { font-weight: 800; } h3#quiz-progress-title { font-weight: 700; color: var(--muted); font-size: 16px; text-transform: uppercase; letter-spacing: .06em; }
-        .screen { display: none; } .screen.active { display: block; }
-        .top-controls { display: flex; justify-content: flex-end; gap: 10px; margin-bottom: 10px; }
-        .control-btn { background: none; border: 1px solid var(--border); border-radius: 5px; cursor: pointer; padding: 5px 8px; color: var(--text); font-family: var(--font-body); }
-        .control-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
-        .btn {
-            display: block; width: 100%; padding: 12px; margin: 8px 0; font-size: 16px; font-weight: 700; font-family: var(--font-body);
-            background: var(--primary); color: #fff8ee; border: none; border-radius: 10px; cursor: pointer; transition: transform 0.15s, box-shadow 0.15s;
-            box-shadow: 0 2px 0 rgba(0,0,0,0.12);
+        h1, h2, h3 { margin-top: 0; color: var(--dark); font-family: var(--font-display); font-weight: 700; letter-spacing: 0.01em; }
+        h1 { font-size: 26px; } h2 { font-size: 21px; } h3 { font-size: 17px; font-weight: 600; }
+        p { line-height: 1.5; }
+        .screen { display: none; } .screen.active { display: block; animation: fadeUp 0.28s ease; }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+        @media (prefers-reduced-motion: reduce) { .screen.active { animation: none; } }
+
+        /* Hanko zegel — signature element, gebruikt als logo + correct-stempel */
+        .hanko {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 38px; height: 38px; border-radius: 6px;
+            background: var(--vermillion); color: #fdf6ee;
+            font-family: var(--font-display); font-weight: 800; font-size: 17px;
+            border: 1.5px solid var(--vermillion-deep);
+            box-shadow: 0 2px 0 rgba(0,0,0,0.08) inset;
+            flex-shrink: 0;
         }
-        .btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 10px rgba(0,0,0,0.15); }
-        .btn-secondary { background: #8a7a64; } .btn-danger { background: var(--danger); } .btn-accent { background: var(--accent); }
-        .btn-memory { background: var(--budou); } .btn-drop { background: var(--ai); } .btn-collector { background: var(--matsuba); }
-        .btn:disabled { background: #bdb3a0; cursor: not-allowed; opacity: 0.7; box-shadow: none; }
-        .settings-section { background: var(--background); padding: 12px; border-radius: 10px; margin-bottom: 15px; text-align: left; border: 1px solid var(--border); }
-        .settings-section h4 { margin: 0 0 10px 0; color: var(--dark); font-family: var(--font-display); }
-        .radio-group, .selection-grid { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 5px; }
-        .radio-label, .checkbox-label {
-            flex: 1; background: var(--card-bg); border: 2px solid var(--border); padding: 8px; border-radius: 8px; cursor: pointer;
-            text-align: center; font-weight: 700; font-size: 13px; color: var(--text); position: relative; transition: border-color .15s, background .15s;
-        }
-        .radio-label input, .checkbox-label input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
-        .radio-label.checked, .checkbox-label.checked { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 12%, var(--card-bg)); color: var(--primary); }
-        .selection-grid { max-height: 220px; overflow-y: auto; justify-content: flex-start; }
-        .checkbox-label { flex: none; width: calc(50% - 10px); text-align: left; display: flex; align-items: center; }
-        .groep-sectie-kop { width: 100%; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 10px 0 4px; padding-top: 8px; border-top: 1px dashed var(--border); font-family: var(--font-display); }
-        .groep-sectie-kop:first-child { border-top: none; margin-top: 0; padding-top: 0; }
-        .dakuten-badge { display: inline-block; margin-left: 5px; font-weight: 800; color: var(--shu); font-size: 15px; }
-        .character-display {
-            font-size: 65px; font-weight: 700; margin: 14px 0; height: 90px; display: flex; justify-content: center; align-items: center;
-            color: var(--dark); text-align: center; font-family: var(--font-display); background: var(--input-bg); border-radius: 16px;
-            border: 1px solid var(--border); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--shu) 8%, transparent);
-        }
-        .play-audio-btn { background: var(--background); border: 1px solid var(--border); border-radius: 20px; cursor: pointer; padding: 6px 15px; font-size: 14px; color: var(--text); margin: 0 auto 10px auto; display: block; font-family: var(--font-body); }
-        .meaning-hint { font-size: 15px; color: var(--muted); margin-bottom: 10px; min-height: 20px; font-weight: 600; }
+        .brand-row { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 4px; }
+
+        .top-controls { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 14px; }
+        .control-btn { background: var(--background); border: 1px solid var(--border); border-radius: 999px; cursor: pointer; padding: 6px 12px; color: var(--text); font-family: var(--font-body); font-size: 13px; font-weight: 500; transition: all 0.15s; }
+        .control-btn:hover { border-color: var(--indigo); }
+        .control-btn.active { background: var(--indigo); color: #fff; border-color: var(--indigo); }
+
+        .btn { display: block; width: 100%; padding: 13px; margin: 8px 0; font-size: 15px; font-family: var(--font-body); font-weight: 700; background: var(--indigo); color: #fdf6ee; border: none; border-radius: 8px; cursor: pointer; transition: transform 0.12s, box-shadow 0.12s, background 0.15s; box-shadow: 0 2px 0 var(--indigo-deep); }
+        .btn:hover { background: var(--indigo-deep); }
+        .btn:active { transform: translateY(2px); box-shadow: none; }
+        .btn-secondary { background: var(--sumi-soft); box-shadow: 0 2px 0 var(--sumi); }
+        .btn-danger { background: var(--vermillion); box-shadow: 0 2px 0 var(--vermillion-deep); }
+        .btn-accent { background: var(--gold); box-shadow: 0 2px 0 #8c6628; }
+        .btn-memory { background: var(--powerup); box-shadow: 0 2px 0 #4f3866; }
+        .btn-drop { background: var(--sumi); box-shadow: 0 2px 0 #14110d; }
+        .btn-collector { background: var(--success); box-shadow: 0 2px 0 #2a5640; }
+        .btn:disabled { background: var(--border); color: var(--sumi-soft); cursor: not-allowed; opacity: 0.7; box-shadow: none; }
+
+        .settings-section { background: var(--background); padding: 14px; border-radius: 8px; margin-bottom: 14px; text-align: left; border: 1px solid var(--border); }
+        .settings-section h4 { margin: 0 0 10px 0; color: var(--dark); font-family: var(--font-body); font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--sumi-soft); }
+        .radio-group, .selection-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 5px; }
+        .radio-label, .checkbox-label { flex: 1; background: var(--card-bg); border: 1.5px solid var(--border); padding: 9px 8px; border-radius: 7px; cursor: pointer; text-align: center; font-weight: 600; font-size: 13px; color: var(--text); transition: all 0.15s; }
+        .radio-label input, .checkbox-label input { display: none; }
+        .radio-label.checked, .checkbox-label.checked { border-color: var(--indigo); background: rgba(44,74,110,0.08); color: var(--indigo); }
+        [data-theme="dark"] .radio-label.checked, [data-theme="dark"] .checkbox-label.checked { background: rgba(111,151,196,0.12); }
+        .selection-grid { max-height: 150px; overflow-y: auto; justify-content: flex-start; }
+        .checkbox-label { flex: none; width: calc(50% - 8px); text-align: left; display: flex; align-items: center; }
+        .checkbox-label input { display: inline-block; margin-right: 8px; }
+
+        .character-display { font-family: var(--font-display); font-size: 64px; font-weight: 700; margin: 6px 0; height: 96px; display: flex; justify-content: center; align-items: center; color: var(--dark); text-align: center; background: var(--background); border-radius: 10px; border: 1px solid var(--border); }
+        .play-audio-btn { background: var(--card-bg); border: 1px solid var(--border); border-radius: 999px; cursor: pointer; padding: 7px 16px; font-size: 13px; font-family: var(--font-body); font-weight: 600; color: var(--text); margin: 10px auto; display: block; transition: border-color 0.15s; }
+        .play-audio-btn:hover { border-color: var(--indigo); color: var(--indigo); }
+        .meaning-hint { font-size: 14px; color: var(--sumi-soft); margin-bottom: 10px; min-height: 20px; font-style: italic; }
+
         .input-container { display: flex; justify-content: center; gap: 10px; margin-bottom: 15px; }
-        input[type="text"] {
-            font-size: 20px; padding: 10px; width: 100%; max-width: 180px; text-align: center; border: 2px solid var(--border);
-            border-radius: 8px; background: var(--input-bg); color: var(--text); font-family: var(--font-body);
-        }
-        .quiz-btn { font-size: 16px; padding: 10px 20px; background: var(--success); color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; }
+        input[type="text"] { font-family: var(--font-mono); font-size: 19px; padding: 10px; width: 100%; max-width: 180px; text-align: center; border: 1.5px solid var(--border); border-radius: 8px; background: var(--input-bg); color: var(--text); }
+        input[type="text"]:focus { outline: none; border-color: var(--indigo); box-shadow: 0 0 0 3px rgba(44,74,110,0.12); }
+        .quiz-btn { font-family: var(--font-body); font-size: 15px; font-weight: 700; padding: 10px 20px; background: var(--success); color: #fff; border: none; border-radius: 8px; cursor: pointer; box-shadow: 0 2px 0 #2a5640; }
+        .quiz-btn:active { transform: translateY(2px); box-shadow: none; }
+
         .choices-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
-        .choice-btn {
-            background: var(--card-bg); border: 2px solid var(--border); border-radius: 10px; padding: 15px; font-size: 22px;
-            font-weight: 700; cursor: pointer; color: var(--text); position: relative; font-family: var(--font-display);
-        }
-        .choice-btn .key-hint {
-            position: absolute; top: 6px; left: 6px; width: 18px; height: 18px; border-radius: 50%; background: var(--primary);
-            color: #fff; font-size: 11px; font-weight: 800; font-family: var(--font-body); display: flex; align-items: center; justify-content: center; opacity: .85;
-        }
-        .choice-btn .choice-text { display: block; }
-        .feedback { font-size: 16px; font-weight: 700; height: 40px; margin-bottom: 10px; }
-        .stats-tabs { display: flex; gap: 10px; margin-bottom: 10px; }
-        .tab-btn { flex: 1; padding: 8px; background: var(--background); border: 1px solid var(--border); border-radius: 8px; font-weight: 700; cursor: pointer; color: var(--text); font-family: var(--font-body); }
-        .tab-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+        .choice-btn { background: var(--card-bg); border: 1.5px solid var(--border); border-radius: 8px; padding: 15px; font-family: var(--font-display); font-size: 22px; font-weight: 700; cursor: pointer; color: var(--text); transition: all 0.15s; }
+        .choice-btn:hover { border-color: var(--indigo); }
+        .feedback { font-family: var(--font-body); font-size: 15px; font-weight: 700; height: 40px; margin-bottom: 8px; display: flex; align-items: center; justify-content: center; gap: 6px; }
+
+        .stats-tabs { display: flex; gap: 8px; margin-bottom: 12px; }
+        .tab-btn { flex: 1; padding: 9px; background: var(--background); border: 1px solid var(--border); border-radius: 8px; font-family: var(--font-body); font-weight: 700; font-size: 13px; cursor: pointer; color: var(--text); }
+        .tab-btn.active { background: var(--indigo); color: #fff; border-color: var(--indigo); }
         .stats-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 14px; }
-        .stats-table th, .stats-table td { padding: 8px; border-bottom: 1px solid var(--border); }
-        .level-bar { background: var(--border); border-radius: 4px; overflow: hidden; width: 60px; height: 10px; display: inline-block; vertical-align: middle; }
+        .stats-table th { font-family: var(--font-body); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--sumi-soft); padding-bottom: 8px; }
+        .stats-table th, .stats-table td { padding: 9px 6px; border-bottom: 1px solid var(--border); }
+        .level-bar { background: var(--border); border-radius: 4px; overflow: hidden; width: 60px; height: 8px; display: inline-block; vertical-align: middle; }
         .level-fill { background: var(--success); height: 100%; width: 0%; }
+
         .memory-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; max-width: 400px; margin: 0 auto 15px auto; }
-        .memory-card { background: var(--primary); color: transparent; border-radius: 10px; height: 60px; display: flex; justify-content: center; align-items: center; font-size: 20px; font-weight: 700; cursor: pointer; border: 2px solid transparent; user-select: none; font-family: var(--font-display); }
-        .memory-card.flipped { background: var(--card-bg); color: var(--dark); border-color: var(--primary); }
+        .memory-card { background: var(--indigo); color: transparent; border-radius: 8px; height: 60px; display: flex; justify-content: center; align-items: center; font-family: var(--font-display); font-size: 20px; font-weight: 700; cursor: pointer; border: 2px solid transparent; user-select: none; transition: transform 0.15s; }
+        .memory-card.flipped { background: var(--card-bg); color: var(--dark); border-color: var(--indigo); }
         .memory-card.matched { background: var(--success); color: #fff; border-color: var(--success); }
-        .drop-area { width: 100%; height: 250px; background: var(--input-bg); border: 2px solid var(--border); border-radius: 10px; position: relative; overflow: hidden; margin-bottom: 15px; }
-        .drop-item { position: absolute; font-size: 36px; font-weight: 700; left: 50%; transform: translateX(-50%); font-family: var(--font-display); }
-        .galgje-word { font-size: 32px; letter-spacing: 8px; font-weight: 700; margin: 20px 0; min-height: 40px; color: var(--dark); }
-        .eco-dashboard { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; text-align: left; margin-bottom: 15px; }
-        .eco-box { background: var(--background); padding: 15px; border-radius: 10px; border: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; text-align: center; position: relative; }
-        .eco-box h4 { margin: 0 0 10px 0; color: var(--dark); font-size: 15px; width: 100%; border-bottom: 2px solid var(--border); padding-bottom: 5px; font-family: var(--font-display); }
-        .eco-stat { font-size: 26px; font-weight: 700; color: var(--primary); margin: 5px 0; }
-        .eco-btn { background: var(--primary); color: #fff; border: none; padding: 8px 12px; border-radius: 6px; cursor: pointer; font-weight: 700; width: 100%; font-size: 12px; margin-top: 5px; }
-        .eco-btn:disabled { background: #bdb3a0; cursor: not-allowed; }
-        .eco-btn.harvest { background: var(--success); } .eco-btn.feed { background: var(--accent); } .powerup-btn { background: var(--powerup); color: #fff; font-size: 12px; margin-bottom: 8px; }
-        .market-list { text-align: left; width: 100%; max-height: 200px; overflow-y: auto; background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 5px; box-sizing: border-box; }
+
+        .drop-area { width: 100%; height: 250px; background: var(--background); border: 1.5px solid var(--border); border-radius: 8px; position: relative; overflow: hidden; margin-bottom: 15px; }
+        .drop-item { position: absolute; font-family: var(--font-display); font-size: 36px; font-weight: 700; left: 50%; transform: translateX(-50%); color: var(--dark); }
+        .galgje-word { font-family: var(--font-mono); font-size: 30px; letter-spacing: 8px; font-weight: 600; margin: 20px 0; min-height: 40px; color: var(--dark); }
+
+        .eco-dashboard { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; text-align: left; margin-bottom: 15px; }
+        .eco-box { background: var(--background); padding: 15px; border-radius: 8px; border: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; text-align: center; position: relative; }
+        .eco-box h4 { margin: 0 0 10px 0; color: var(--dark); font-family: var(--font-body); font-size: 14px; font-weight: 700; width: 100%; border-bottom: 2px solid var(--border); padding-bottom: 6px; }
+        .eco-stat { font-family: var(--font-display); font-size: 26px; font-weight: 700; color: var(--indigo); margin: 5px 0; }
+        .eco-btn { background: var(--indigo); color: #fff; border: none; padding: 8px 12px; border-radius: 6px; cursor: pointer; font-family: var(--font-body); font-weight: 700; width: 100%; font-size: 12px; margin-top: 5px; }
+        .eco-btn:disabled { background: var(--border); color: var(--sumi-soft); cursor: not-allowed; }
+        .eco-btn.harvest { background: var(--success); } .eco-btn.feed { background: var(--gold); }
+        .powerup-btn { background: var(--powerup); color: #fff; font-size: 12px; margin-bottom: 8px; }
+
+        .market-list { text-align: left; width: 100%; max-height: 200px; overflow-y: auto; background: var(--card-bg); border: 1px solid var(--border); border-radius: 6px; padding: 5px; box-sizing: border-box; }
         .market-row { display: flex; justify-content: space-between; align-items: center; padding: 8px; border-bottom: 1px solid var(--border); font-size: 12px; }
-        .nest-grid { display: grid; grid-template-columns: repeat(20, 1fr); gap: 2px; margin-top: 10px; width: 100%; background: #6b4a30; padding: 4px; border-radius: 8px; box-sizing: border-box; }
-        .nest-block { aspect-ratio: 1; background: #4a3220; border-radius: 1px; cursor: pointer; font-size: 0; transition: background 0.2s; }
+        .nest-grid { display: grid; grid-template-columns: repeat(20, 1fr); gap: 2px; margin-top: 10px; width: 100%; background: #5c4029; padding: 4px; border-radius: 6px; box-sizing: border-box; }
+        .nest-block { aspect-ratio: 1; background: #3c2a1a; border-radius: 1px; cursor: pointer; font-size: 0; transition: background 0.2s; }
         .nest-block.dug { background: var(--background); border: none; cursor: default; }
-        .nest-block.pillar { background: var(--muted); border: 1px solid var(--sumi); cursor: default; }
-        .nest-block.reservoir { background: var(--ai); border: 1px dashed color-mix(in srgb, var(--ai) 60%, black); cursor: default; }
-        .nest-block:hover { background: #c9bca3; }
-        .boss-word { font-size: 50px; font-weight: 800; color: var(--danger); margin: 20px 0; font-family: var(--font-display); }
-        .boss-timer { font-size: 40px; font-weight: 700; color: var(--dark); }
+        .nest-block.pillar { background: var(--sumi-soft); border: 1px solid var(--sumi); cursor: default; }
+        .nest-block.reservoir { background: var(--indigo); border: 1px dashed var(--indigo-deep); cursor: default; }
+        .nest-block:hover { background: var(--gold); }
+
+        .boss-word { font-family: var(--font-display); font-size: 48px; font-weight: 700; color: var(--vermillion); margin: 20px 0; }
+        .boss-timer { font-family: var(--font-mono); font-size: 38px; font-weight: 700; color: var(--dark); }
         .food-item-row { width: 100%; display: flex; justify-content: space-between; font-size: 13px; font-weight: 700; margin: 4px 0; }
-        .build-btn { flex: 1; background: var(--card-bg); color: var(--dark); border: 1px solid var(--border); font-size: 11px; padding: 4px; border-radius: 6px; cursor: pointer; }
-        .card {
-            background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 12px 10px; text-align: center;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.05);
-        }
-        .card h3 { font-size: 13px; margin: 0 0 6px 0; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; font-family: var(--font-body); font-weight: 700; }
-        .card div { font-size: 18px; font-weight: 800; color: var(--primary); font-family: var(--font-display); }
+        .build-btn { flex: 1; background: var(--card-bg); color: var(--dark); border: 1px solid var(--border); font-size: 11px; padding: 5px; border-radius: 5px; cursor: pointer; font-family: var(--font-body); font-weight: 600; }
 
-        /* ===== Toetsenbord-toegankelijkheid ===== */
-        button:focus-visible, .choice-btn:focus-visible, .control-btn:focus-visible, .tab-btn:focus-visible,
-        .build-btn:focus-visible, .eco-btn:focus-visible, input:focus-visible,
-        .radio-label:has(input:focus-visible), .checkbox-label:has(input:focus-visible) {
-            outline: 3px solid var(--shu); outline-offset: 2px; border-radius: 6px;
-        }
+        .card { background: var(--background); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+        .card h3 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--sumi-soft); margin-bottom: 6px; }
 
-        /* ===== Meldingen (cloud-fouten e.d.) ===== */
-        #toast-melding {
-            position: fixed; top: -80px; left: 50%; transform: translateX(-50%); z-index: 999; max-width: 90vw;
-            background: var(--card-bg); color: var(--text); border: 1px solid var(--border); border-left: 5px solid var(--ai);
-            border-radius: 10px; padding: 12px 18px; font-weight: 700; font-size: 14px; box-shadow: 0 10px 25px rgba(0,0,0,0.18);
-            transition: top 0.35s ease;
-        }
-        #toast-melding.show { top: 16px; }
-        #toast-melding.toast-error { border-left-color: var(--shu); }
-        #toast-melding.toast-success { border-left-color: var(--matsuba); }
-
-        /* ===== Gachapon ===== */
-        :root { --rarity-common: #9aa0a6; --rarity-rare: #3b82f6; --rarity-epic: #a855f7; --rarity-legendary: #f0b429; }
-        .gacha-header { display:flex; justify-content:center; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
-        .gacha-balance { background:var(--background); border:1px solid var(--border); border-radius:10px; padding:8px 14px; font-weight:800; font-size:14px; }
-        .gacha-stage { position:relative; width:220px; height:220px; margin:10px auto; display:flex; align-items:center; justify-content:center; }
-        .gacha-capsule { font-size:90px; line-height:1; filter: drop-shadow(0 0 0 transparent); transition: filter .2s; }
-        .gacha-capsule.is-shaking { animation: gacha-shake 0.32s infinite; }
-        .gacha-capsule.glow-common    { filter: drop-shadow(0 0 12px var(--rarity-common)); }
-        .gacha-capsule.glow-rare      { filter: drop-shadow(0 0 16px var(--rarity-rare)); }
-        .gacha-capsule.glow-epic      { filter: drop-shadow(0 0 18px var(--rarity-epic)); }
-        .gacha-capsule.glow-legendary { filter: drop-shadow(0 0 24px var(--rarity-legendary)); animation: gacha-shake 0.32s infinite, gacha-pulse 0.5s infinite alternate; }
-        .gacha-flash-overlay { position:absolute; inset:0; border-radius:50%; background:#fff; opacity:0; pointer-events:none; z-index:5; }
-        .gacha-flash-overlay.active { animation: gacha-flash 0.2s ease-out forwards; }
-        .screen.is-screenshaking { animation: gacha-screenshake 0.4s ease-out; }
-        .gacha-result-card { border:2px solid var(--border); border-radius:14px; padding:16px; margin-top:6px; background:var(--card-bg); }
-        .gacha-result-card.rarity-common    { border-color: var(--rarity-common); }
-        .gacha-result-card.rarity-rare      { border-color: var(--rarity-rare); }
-        .gacha-result-card.rarity-epic      { border-color: var(--rarity-epic); }
-        .gacha-result-card.rarity-legendary { border-color: var(--rarity-legendary); box-shadow: 0 0 20px color-mix(in srgb, var(--rarity-legendary) 35%, transparent); }
-        .gacha-rarity-tag { display:inline-block; font-size:11px; font-weight:800; padding:2px 10px; border-radius:10px; color:#fff; text-transform:uppercase; letter-spacing:.04em; }
-        .gacha-rarity-tag.rarity-common    { background: var(--rarity-common); }
-        .gacha-rarity-tag.rarity-rare      { background: var(--rarity-rare); }
-        .gacha-rarity-tag.rarity-epic      { background: var(--rarity-epic); }
-        .gacha-rarity-tag.rarity-legendary { background: var(--rarity-legendary); color:#3a2a00; }
-        .gacha-tabs { display:flex; gap:8px; margin-bottom:10px; }
-        .gacha-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap:8px; max-height:260px; overflow-y:auto; padding:4px; }
-        .gacha-slot { aspect-ratio:1; border-radius:10px; border:2px solid var(--border); display:flex; align-items:center; justify-content:center; font-size:22px; cursor:pointer; background:var(--background); position:relative; }
-        .gacha-slot.owned { border-color: var(--matsuba); background: color-mix(in srgb, var(--matsuba) 12%, var(--card-bg)); }
-        .gacha-slot.locked { opacity: .35; filter: grayscale(1); cursor: default; }
-        .gacha-slot.equipped::after { content:'✓'; position:absolute; top:-6px; right:-6px; width:18px; height:18px; border-radius:50%; background:var(--shu); color:#fff; font-size:11px; font-weight:800; display:flex; align-items:center; justify-content:center; }
-
-        @keyframes gacha-shake {
-            0%, 100% { transform: translate(0,0) rotate(0deg); }
-            15% { transform: translate(-5px,-3px) rotate(-4deg); }
-            30% { transform: translate(5px,2px) rotate(4deg); }
-            45% { transform: translate(-4px,3px) rotate(-3deg); }
-            60% { transform: translate(4px,-2px) rotate(3deg); }
-            75% { transform: translate(-3px,-3px) rotate(-2deg); }
-            90% { transform: translate(3px,2px) rotate(2deg); }
-        }
-        @keyframes gacha-pulse { from { opacity: .75; } to { opacity: 1; } }
-        @keyframes gacha-flash { 0% { opacity:0; transform:scale(1); } 40% { opacity:1; transform:scale(1.2); } 100% { opacity:0; transform:scale(1.3); } }
-        @keyframes gacha-screenshake {
-            0%, 100% { transform: translate(0,0); }
-            20% { transform: translate(-7px,4px); }
-            40% { transform: translate(7px,-4px); }
-            60% { transform: translate(-5px,-3px); }
-            80% { transform: translate(5px,3px); }
-        }
+        ::-webkit-scrollbar { width: 8px; } ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
     </style>
-
 </head>
 <body>
 <div class="container">
-    <div class="top-controls"><span class="control-btn" id="coin-badge" style="cursor:default;">🪙 0</span><button class="control-btn" id="font-toggle" onclick="toggleFont()" title="Wissel tussen Japans en basis lettertype">あ Mincho</button><button class="control-btn" id="audio-toggle" onclick="toggleAudio()">🔊 Aan</button><button class="control-btn" id="theme-toggle" onclick="toggleTheme()">🌙</button></div>
+    <div class="top-controls"><button class="control-btn" id="audio-toggle" onclick="toggleAudio()">🔊 Aan</button><button class="control-btn" id="theme-toggle" onclick="toggleTheme()">🌙</button></div>
     
     <div id="screen-login" class="screen active">
-        <h1>🇯🇵 Kana Master</h1>
-        <p>Voer een gebruikersnaam in om te starten.</p>
+        <div class="brand-row"><span class="hanko">蘭</span><h1 style="margin:0;">Kana Master</h1></div>
+        <p style="color:var(--sumi-soft);">Voer een gebruikersnaam in om te starten.</p>
         <div class="input-container"><input type="text" id="username-input" placeholder="Naam..." autocomplete="off"><button class="quiz-btn" onclick="login()" id="login-btn">Start</button></div><div id="login-feedback" style="color: var(--danger); font-weight: bold;"></div>
     </div>
 
     
     <div id="screen-menu" class="screen">
-        <h1>🇯🇵 Welkom, <span id="display-username"></span>!</h1>
-        <div id="equipped-title-display" style="font-size:13px; color:var(--shu); font-weight:700; margin-top:-8px; margin-bottom:10px; display:none;"></div>
+        <div class="brand-row"><span class="hanko">蘭</span><h1 style="margin:0;">Welkom, <span id="display-username"></span>!</h1></div>
 
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:20px 0;">
             <div class="card"><h3>🔥 Streak</h3><div id="menu-streak">Data laden...</div></div>
             <div class="card"><h3>⭐ XP</h3><div id="menu-xp">Data laden...</div></div>
             <div class="card"><h3>📚 Woorden</h3><div id="menu-words">Data laden...</div></div>
             <div class="card"><h3>🔤 Kana</h3><div id="menu-kana">Data laden...</div></div>
-            <div class="card"><h3>㊙️ Kanji</h3><div id="menu-kanji">Data laden...</div></div>
         </div>
 
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-            <button class="btn" onclick="openStats()">📊 Statistieken</button>
+            <button class="btn" onclick="switchScreen('screen-selection')">🏠 Dashboard</button>
             <button class="btn" onclick="switchScreen('screen-selection')">📚 Leren</button>
-            <button class="btn" onclick="laadLeaderboard('score')">🏆 Leaderboard</button>
-            <button class="btn" style="background:var(--budou);" onclick="switchScreen('screen-compare')">🤝 Vrienden</button>
             <button class="btn btn-memory" onclick="startMemoryGame()">🃏 Kana Memory</button>
             <button class="btn btn-drop" onclick="startKanaDropInit()">🌧️ Kana Drop</button>
             <button class="btn btn-accent" onclick="startGalgjeInit()">🔤 Kana Galgje</button>
-            <button class="btn" style="background:var(--special);" onclick="startTekenenInit()">✍️ Teken Training</button>
-            <button class="btn" style="background:var(--kincha); color:#3a2a00;" onclick="openGachaScreen()">🎰 Gachapon</button>
             <button class="btn btn-collector" onclick="openEcosysteem()">🐜 Imperium</button>
         </div>
     </div>
@@ -254,7 +248,6 @@
             <div class="radio-group">
                 <label class="radio-label checked"><input type="radio" name="quiz-niveau" value="tekens" checked onchange="updateRadioStyles(); bouwGroepenSelectie();"> Tekens</label>
                 <label class="radio-label"><input type="radio" name="quiz-niveau" value="woorden" onchange="updateRadioStyles(); bouwGroepenSelectie();"> Woorden</label>
-                <label class="radio-label"><input type="radio" name="quiz-niveau" value="kanji" onchange="updateRadioStyles(); bouwGroepenSelectie();"> Kanji</label>
                 <label class="radio-label"><input type="radio" name="quiz-niveau" value="zinnen" onchange="updateRadioStyles(); bouwGroepenSelectie();"> Praktische Zinnen</label>
             </div>
         </div>
@@ -267,23 +260,11 @@
             </div>
             <p id="zinnen-note" style="font-size: 12px; color: var(--primary); display: none;">* Zinnen worden altijd gespeeld als meerkeuzevragen.</p>
         </div>
-        <div class="settings-section" id="jlpt-niveau-sectie" style="display:none;">
-            <h4>JLPT-niveau <span style="font-size:11px; font-weight:normal; color:var(--muted);">(optioneel)</span>:</h4>
-            <div class="radio-group" id="jlpt-niveau-group">
-                <label class="radio-label checked"><input type="radio" name="quiz-jlpt" value="alle" checked onchange="updateRadioStyles()"> Alle</label>
-                <label class="radio-label"><input type="radio" name="quiz-jlpt" value="N5" onchange="updateRadioStyles()"> N5 · Beginner</label>
-                <label class="radio-label"><input type="radio" name="quiz-jlpt" value="N4" onchange="updateRadioStyles()"> N4 · Gevorderd</label>
-            </div>
-        </div>
         <div class="settings-section">
             <h4 id="groepen-titel">3. Categorieën:</h4>
-            <div style="margin-bottom: 10px; text-align: left; display:flex; flex-wrap:wrap; gap:6px;">
-                <button type="button" onclick="toggleCheckboxes(true)" class="control-btn" style="font-size:12px;">Alles</button>
-                <button type="button" onclick="toggleCheckboxes(false)" class="control-btn" style="font-size:12px;">Niets</button>
-                <button type="button" onclick="selecteerSpecifiek('Hira:')" class="control-btn hira-kata-btn" style="display:none; font-size:12px;">あ Hiragana</button>
-                <button type="button" onclick="selecteerSpecifiek('Kata:')" class="control-btn hira-kata-btn" style="display:none; font-size:12px;">ア Katakana</button>
-                <button type="button" onclick="selecteerSpecifiek('akuten')" class="control-btn hira-kata-btn" style="display:none; font-size:12px;">゛ Met dakuten</button>
-                <button type="button" onclick="selecteerBasisKana()" class="control-btn hira-kata-btn" style="display:none; font-size:12px;">Basis (zonder dakuten)</button>
+            <div style="margin-bottom: 10px; text-align: left;">
+                <button type="button" onclick="toggleCheckboxes(true)" class="control-btn" style="font-size:12px;">Alles aan</button>
+                <button type="button" onclick="toggleCheckboxes(false)" class="control-btn" style="font-size:12px;">Alles uit</button>
             </div>
             <div class="selection-grid" id="groups-container"></div>
         </div>
@@ -294,17 +275,21 @@
     <div id="screen-quiz" class="screen">
         <h3 id="quiz-progress-title">Quiz</h3>
         <div class="character-display" id="char-display" style="font-size: 45px;">-</div>
-        <button class="play-audio-btn" onclick="speelHuidigTekenAf()">🔊 Beluister</button>
+        <div style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
+            <button class="play-audio-btn" onclick="speelHuidigTekenAf()">🔊 Beluister</button>
+            <button class="play-audio-btn" id="hint-toggle-btn" onclick="toggleEzelsbruggetje()">💡 Ezelsbruggetje</button>
+        </div>
         <div class="meaning-hint" id="meaning-display"></div>
+        <div id="mnemonic-display" style="display:none; background: var(--background); border: 1px dashed var(--border); border-radius: 8px; padding: 10px 12px; margin: 0 0 12px 0; font-size: 13px; color: var(--sumi-soft); text-align: left;"></div>
         <div class="input-container" id="quiz-text-input-container">
             <input type="text" id="quiz-input" placeholder="romaji" autocomplete="off" style="text-transform: lowercase;">
             <button class="quiz-btn" onclick="checkTextAnswer()">Vink</button>
         </div>
         <div class="choices-grid" id="quiz-choices-container" style="display: none;">
-            <button class="choice-btn" onclick="checkChoiceAnswer(0)"><span class="key-hint">1</span><span class="choice-text">-</span></button>
-            <button class="choice-btn" onclick="checkChoiceAnswer(1)"><span class="key-hint">2</span><span class="choice-text">-</span></button>
-            <button class="choice-btn" onclick="checkChoiceAnswer(2)"><span class="key-hint">3</span><span class="choice-text">-</span></button>
-            <button class="choice-btn" onclick="checkChoiceAnswer(3)"><span class="key-hint">4</span><span class="choice-text">-</span></button>
+            <button class="choice-btn" onclick="checkChoiceAnswer(0)">-</button>
+            <button class="choice-btn" onclick="checkChoiceAnswer(1)">-</button>
+            <button class="choice-btn" onclick="checkChoiceAnswer(2)">-</button>
+            <button class="choice-btn" onclick="checkChoiceAnswer(3)">-</button>
         </div>
         <div class="feedback" id="quiz-feedback"></div>
         <button class="btn btn-secondary" onclick="switchScreen('screen-menu')">Stoppen</button>
@@ -315,7 +300,6 @@
         <div class="stats-tabs">
             <button class="tab-btn active" id="tab-tekens" onclick="toonStatsTabel('tekens')">Tekens</button>
             <button class="tab-btn" id="tab-woorden" onclick="toonStatsTabel('woorden')">Woorden</button>
-            <button class="tab-btn" id="tab-kanji" onclick="toonStatsTabel('kanji')">Kanji</button>
             <button class="tab-btn" id="tab-zinnen" onclick="toonStatsTabel('zinnen')">Zinnen</button>
         </div>
         <div style="max-height: 300px; overflow-y: auto;">
@@ -330,85 +314,33 @@
     <div id="screen-leaderboard" class="screen"><h2>🏆 Leaderboard</h2><div class="stats-tabs"><button class="tab-btn active" id="tab-lb-score" onclick="laadLeaderboard('score')">🏆 Punten</button><button class="tab-btn" id="tab-lb-majors" onclick="laadLeaderboard('majors')">🛡️ Majors</button></div><div style="max-height: 300px; overflow-y: auto; margin-bottom: 15px;"><div id="leaderboard-container"></div></div><button class="btn btn-secondary" onclick="switchScreen('screen-menu')">Terug naar Menu</button></div>
     <div id="screen-memory" class="screen"><h2>🃏 Kana Memory</h2><div style="display: flex; justify-content: space-between; margin-bottom: 10px; font-weight: bold;"><span>Zetten: <span id="memory-moves">0</span></span><span>Paren: <span id="memory-score">0</span>/8</span></div><div class="memory-grid" id="memory-grid"></div><button class="btn btn-secondary" onclick="switchScreen('screen-menu')">Stoppen</button></div>
     <div id="screen-drop" class="screen"><h2>🌧️ Kana Drop</h2><button class="btn powerup-btn" id="btn-drop-freeze" onclick="koopDropFreeze()">❄️ Bevries de tijd (-5 Werksters)</button><div style="display: flex; justify-content: space-between; margin-bottom: 10px; font-weight: bold;"><span>Score: <span id="drop-score">0</span></span><span>Levens: <span id="drop-lives" style="color:var(--danger)">❤️❤️❤️</span></span></div><div class="drop-area"><div id="drop-item" class="drop-item">あ</div></div><div class="input-container"><input type="text" id="drop-input" placeholder="Typ snel!" autocomplete="off" style="text-transform: lowercase;"><button class="quiz-btn" onclick="checkDropAnswer()">Vuur!</button></div><button class="btn btn-secondary" onclick="stopKanaDrop()">Stoppen</button></div>
-    <div id="screen-galgje" class="screen"><h2>🔤 Kana Galgje</h2><button class="btn powerup-btn" id="btn-galgje-hint" onclick="koopGalgjeHint()">🐜 Vraag een mier om een hint (-5 Werksters)</button><div style="font-size: 24px; color: var(--muted); margin-bottom: 10px;" id="galgje-kana-display">-</div><div class="galgje-word" id="galgje-word-display">_ _ _ _</div><div style="color: var(--danger); font-weight: bold; margin-bottom: 15px;" id="galgje-feedback">Fouten: 0 / 6</div><div class="input-container"><input type="text" id="galgje-input" placeholder="Letter" maxlength="1" autocomplete="off" style="text-transform: lowercase; width: 80px;"><button class="quiz-btn" onclick="checkGalgjeAnswer()">Gok</button></div><button class="btn" onclick="startGalgjeInit()" style="display:none; margin-bottom: 10px;" id="galgje-next-btn">Volgende Woord</button><button class="btn btn-secondary" onclick="switchScreen('screen-menu')">Stoppen</button></div>
+    <div id="screen-galgje" class="screen"><h2>🔤 Kana Galgje</h2><button class="btn powerup-btn" id="btn-galgje-hint" onclick="koopGalgjeHint()">🐜 Vraag een mier om een hint (-5 Werksters)</button><div style="font-size: 24px; color: #7f8c8d; margin-bottom: 10px;" id="galgje-kana-display">-</div><div class="galgje-word" id="galgje-word-display">_ _ _ _</div><div style="color: var(--danger); font-weight: bold; margin-bottom: 15px;" id="galgje-feedback">Fouten: 0 / 6</div><div class="input-container"><input type="text" id="galgje-input" placeholder="Letter" maxlength="1" autocomplete="off" style="text-transform: lowercase; width: 80px;"><button class="quiz-btn" onclick="checkGalgjeAnswer()">Gok</button></div><button class="btn" onclick="startGalgjeInit()" style="display:none; margin-bottom: 10px;" id="galgje-next-btn">Volgende Woord</button><button class="btn btn-secondary" onclick="switchScreen('screen-menu')">Stoppen</button></div>
     <div id="screen-boss" class="screen"><h2>👑 De Bruidsvlucht</h2><p style="color:var(--danger); font-weight:bold;">Eén fout = -50 Majors. Vertaal er 20 goed binnen de tijd!</p><div class="boss-timer" id="boss-timer">60</div><div class="boss-word" id="boss-word">あ</div><div style="font-weight:bold; font-size:20px; margin-bottom:15px;">Reeks: <span id="boss-streak">0/20</span></div><div class="input-container"><input type="text" id="boss-input" placeholder="Romaji..." autocomplete="off"><button class="quiz-btn" onclick="checkBossAnswer()">Go!</button></div></div>
-
-    <div id="screen-draw" class="screen">
-        <h2>✍️ Teken Training <span style="font-size:11px; font-weight:normal; color:var(--muted);">(optioneel)</span></h2>
-        <p style="font-size:12px; color:var(--muted); margin-top:-8px;">Schrijf het teken na met je muis of vinger. Dit controleert geen exacte streekvolgorde — het is bedoeld om de vorm in je motoriek te krijgen.</p>
-        <div class="meaning-hint" id="draw-romaji" style="font-size:20px; font-weight:bold; color:var(--dark);">-</div>
-        <div style="position:relative; width:260px; height:260px; margin:10px auto; background:var(--input-bg); border:2px solid var(--border); border-radius:16px; overflow:hidden;">
-            <div id="draw-ghost" style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:170px; color:var(--border); font-family:var(--font-display); pointer-events:none; user-select:none;"></div>
-            <canvas id="draw-canvas" width="260" height="260" style="position:absolute; inset:0; touch-action:none; cursor:crosshair;"></canvas>
-        </div>
-        <div style="display:flex; gap:8px; margin-bottom:10px;">
-            <button class="btn btn-secondary" style="margin:0;" onclick="wisTekenCanvas()">🧹 Wis</button>
-            <button class="btn" id="btn-draw-ghost" style="margin:0; background:var(--budou);" onclick="toggleTekenGhost()">👻 Toon teken</button>
-            <button class="btn" style="margin:0;" onclick="volgendTekenenItem()">➡️ Volgende</button>
-        </div>
-        <button class="btn btn-secondary" onclick="switchScreen('screen-menu')">Stoppen</button>
-    </div>
-
-    <div id="screen-compare" class="screen">
-        <h2>🤝 Vergelijk met een vriend</h2>
-        <div class="input-container">
-            <input type="text" id="compare-input" placeholder="Gebruikersnaam..." autocomplete="off">
-            <button class="quiz-btn" onclick="vergelijkVriend()">Vergelijk</button>
-        </div>
-        <div id="compare-result"></div>
-        <button class="btn btn-secondary" onclick="switchScreen('screen-menu')" style="margin-top:15px;">Terug naar Menu</button>
-    </div>
-
-    <div id="screen-gacha" class="screen">
-        <h2>🎰 Gachapon</h2>
-        <div class="gacha-header">
-            <div class="gacha-balance">🪙 <span id="gacha-coins">0</span> Munten</div>
-            <div class="gacha-balance">🌸 <span id="gacha-petals">0</span> Petals</div>
-            <div class="gacha-balance">📿 Pity: <span id="gacha-pity">0</span>/20</div>
-        </div>
-        <div class="gacha-stage">
-            <div class="gacha-flash-overlay" id="gacha-flash"></div>
-            <div class="gacha-capsule" id="gacha-capsule">🎁</div>
-        </div>
-        <div id="gacha-result-area"></div>
-        <button class="btn" id="gacha-open-btn" onclick="trekGachapon()" style="background:var(--kincha); color:#3a2a00;">Open Gachapon (🪙 5)</button>
-
-        <div class="settings-section" style="margin-top:18px; text-align:left;">
-            <div class="gacha-tabs">
-                <button class="tab-btn active" id="gacha-tab-titel" onclick="toonGachaCollectie('title')">🏷️ Titels</button>
-                <button class="tab-btn" id="gacha-tab-thema" onclick="toonGachaCollectie('theme')">🎨 Thema's</button>
-                <button class="tab-btn" id="gacha-tab-sticker" onclick="toonGachaCollectie('sticker')">🗾 Album</button>
-                <button class="tab-btn" id="gacha-tab-shop" onclick="toonGachaShop()">🌸 Winkel</button>
-            </div>
-            <div id="gacha-collectie-container"></div>
-        </div>
-        <button class="btn btn-secondary" onclick="switchScreen('screen-menu')" style="margin-top:10px;">Terug naar Menu</button>
-    </div>
 
     <div id="screen-collector" class="screen">
         <h2>🐜 Het Mieren Imperium</h2>
         <p style="font-size:11px; color:var(--danger); font-weight:bold; margin-top:-10px;">💤 Anti-AFK: Pauzeert als je 2 min. niets doet.</p>
-        <div id="season-banner" style="background: color-mix(in srgb, var(--primary) 16%, transparent); border: 2px solid var(--primary); border-radius: 8px; padding: 10px; margin-bottom: 15px; font-weight: bold;">Seizoen: <span id="eco-season">-</span></div>
-        <div id="rush-banner" style="display:none; background: color-mix(in srgb, var(--accent) 20%, transparent); border: 2px solid var(--accent); border-radius: 8px; padding: 10px; margin-bottom: 15px; font-weight: bold; color: var(--accent);">⚡ SUIKERRUSH! <span id="rush-count">0</span> antwoorden dubbel water!</div>
+        <div id="season-banner" style="background: rgba(74, 144, 226, 0.2); border: 2px solid var(--primary); border-radius: 8px; padding: 10px; margin-bottom: 15px; font-weight: bold;">Seizoen: <span id="eco-season">-</span></div>
+        <div id="rush-banner" style="display:none; background: rgba(243, 156, 18, 0.2); border: 2px solid var(--accent); border-radius: 8px; padding: 10px; margin-bottom: 15px; font-weight: bold; color: var(--accent);">⚡ SUIKERRUSH! <span id="rush-count">0</span> antwoorden dubbel water!</div>
         
-        <div style="background: color-mix(in srgb, var(--primary) 10%, transparent); border: 2px solid var(--primary); border-radius: 8px; padding: 10px; margin-bottom: 15px;">
+        <div style="background: rgba(74, 144, 226, 0.1); border: 2px solid var(--primary); border-radius: 8px; padding: 10px; margin-bottom: 15px;">
             <h3 style="margin:0; color:var(--primary);">Beschikbaar Water: <span id="eco-water">0.0</span> / <span id="eco-max-water">100</span> 💧</h3>
         </div>
         
         <div class="eco-dashboard">
-            <div class="eco-box"><h4>🌱 De Moestuin</h4><div class="eco-stat" id="eco-plant-icon">🌱</div><p style="font-size:12px; margin:0 0 10px 0; color:var(--muted);" id="eco-plant-status">Geen gewas</p><div id="seed-selection-zone" style="display:none; width: 100%;"><button class="eco-btn" style="background:#2980b9;" onclick="plantGewas('komkommer')">🥒 Komkommer (2💧)</button><button class="eco-btn" style="background:#27ae60;" onclick="plantGewas('broccoli')">🥦 Broccoli (6💧)</button><button class="eco-btn" style="background:#d35400;" onclick="plantGewas('muismeloen')">🍈 Muismeloen (15💧)</button></div><button class="eco-btn" id="btn-water" onclick="geefWater()">💧 Geef Water (-1)</button><button class="eco-btn harvest" id="btn-oogst" onclick="oogstPlant()" style="display:none;">🧺 Oogst!</button><p id="sproeier-status" style="font-size:10px; color:var(--success); margin-top:5px; display:none;">Autom. sproeier actief 🚿</p></div>
+            <div class="eco-box"><h4>🌱 De Moestuin</h4><div class="eco-stat" id="eco-plant-icon">🌱</div><p style="font-size:12px; margin:0 0 10px 0; color:#7f8c8d;" id="eco-plant-status">Geen gewas</p><div id="seed-selection-zone" style="display:none; width: 100%;"><button class="eco-btn" style="background:#2980b9;" onclick="plantGewas('komkommer')">🥒 Komkommer (2💧)</button><button class="eco-btn" style="background:#27ae60;" onclick="plantGewas('broccoli')">🥦 Broccoli (6💧)</button><button class="eco-btn" style="background:#d35400;" onclick="plantGewas('muismeloen')">🍈 Muismeloen (15💧)</button></div><button class="eco-btn" id="btn-water" onclick="geefWater()">💧 Geef Water (-1)</button><button class="eco-btn harvest" id="btn-oogst" onclick="oogstPlant()" style="display:none;">🧺 Oogst!</button><p id="sproeier-status" style="font-size:10px; color:var(--success); margin-top:5px; display:none;">Autom. sproeier actief 🚿</p></div>
             <div class="eco-box"><h4>🥦 Magazijn & Luizen</h4><div style="width: 100%; padding: 5px 0;"><div class="food-item-row"><span>🥒 Komkommers:</span><span id="eco-food-komkommer">0</span></div><div class="food-item-row"><span>🥦 Broccoli:</span><span id="eco-food-broccoli">0</span></div><div class="food-item-row"><span>🍈 Muismeloenen:</span><span id="eco-food-meloen">0</span></div></div><div style="border-top: 1px solid var(--border); width:100%; margin-top:5px; padding-top:5px;"><p style="font-size:12px; margin:0; font-weight:bold;">Bladluizen: <span id="eco-aphids">0</span>/3 🦟</p><p style="font-size:10px; color:var(--primary); margin:2px 0;">(+1💧 / 2 min per luis)</p><button class="eco-btn" id="btn-buy-aphid" onclick="koopBladluis()" style="background:#16a085;">🦟 Koop Luis (-10 🐜)</button></div></div>
         </div>
         
         <div class="eco-box" style="width:100%; box-sizing:border-box; margin-bottom: 15px;">
             <h4>🐜 Nest (Messor barbarus)</h4>
-            <div style="display: flex; justify-content: space-around; width: 100%; margin-bottom: 10px;"><div><div class="eco-stat"><span id="eco-ants">0</span></div><p style="font-size:12px; margin:0; color:var(--muted);">Werksters</p></div><div><div class="eco-stat"><span id="eco-media">0</span></div><p style="font-size:12px; margin:0; color:var(--muted);">Media</p></div><div><div class="eco-stat"><span id="eco-majors">0</span></div><p style="font-size:12px; margin:0; color:var(--muted);">Majors</p></div></div>
+            <div style="display: flex; justify-content: space-around; width: 100%; margin-bottom: 10px;"><div><div class="eco-stat"><span id="eco-ants">0</span></div><p style="font-size:12px; margin:0; color:#7f8c8d;">Werksters</p></div><div><div class="eco-stat"><span id="eco-media">0</span></div><p style="font-size:12px; margin:0; color:#7f8c8d;">Media</p></div><div><div class="eco-stat"><span id="eco-majors">0</span></div><p style="font-size:12px; margin:0; color:#7f8c8d;">Majors</p></div></div>
             <div style="display:flex; flex-direction:column; gap:4px; width:100%; margin-bottom:10px;"><button class="eco-btn feed" id="btn-voer-k" onclick="voerKolonie('komkommer')">🥒 Voer Komkommer (-2)</button><button class="eco-btn feed" id="btn-voer-b" onclick="voerKolonie('broccoli')">🥦 Voer Broccoli (-2)</button><button class="eco-btn feed" id="btn-voer-m" onclick="voerKolonie('muismeloen')">🍈 Voer Muismeloen (-2)</button></div>
             <div style="display: flex; gap: 5px; width: 100%; margin-bottom:10px;"><button class="eco-btn" id="btn-up-media" onclick="koopMedia()" style="background-color: #8e44ad;">⬆️ Train Media (-10 🐜)</button><button class="eco-btn" id="btn-up-major" onclick="koopMajor()" style="background-color: #e67e22;">🛡️ Train Major (-10 Med)</button></div><p id="major-grens-status" style="font-size:11px; font-weight:bold; color:var(--danger); margin: 0;"></p>
             <div style="border-top: 1px solid var(--border); width:100%; margin-top:5px; padding-top:10px;"><h4 style="margin:0 0 2px 0;">🏗️ Nest Architectuur</h4><div style="font-size:12px; font-weight:bold; margin-bottom:5px;">Integriteit: <span id="eco-integrity">100</span>% <span id="integrity-warning" style="color:var(--danger); display:none;">(Instortingsgevaar!)</span></div><div style="display:flex; gap:5px; margin-bottom:5px;"><button class="build-btn" id="mode-1" onclick="setBuildMode(1)">🕳️ Kamer<br>(-3 Med)</button><button class="build-btn" id="mode-2" onclick="setBuildMode(2)">🧱 Pilaar<br>(-5 🥦)</button><button class="build-btn" id="mode-3" onclick="setBuildMode(3)">💧 Reservoir<br>(-5 🥒, -3 Med)</button></div><div class="nest-grid" id="nest-grid"></div></div>
         </div>
 
-        <div class="eco-box" style="width:100%; box-sizing:border-box; margin-bottom: 15px;"><h4>👑 Koninklijke Kamers (Alates)</h4><div class="eco-stat"><span id="eco-alates">0</span> Prinsessen</div><p style="font-size:12px; margin:0 0 10px 0; color:var(--muted);">Elke prinses geeft +50 Max Water & +5% passieve waterproductie!</p><button class="eco-btn" style="background:#8e44ad;" onclick="kweekAlate()">👑 Kweek Prinses (-5 🍈, -10 Majors)</button></div>
+        <div class="eco-box" style="width:100%; box-sizing:border-box; margin-bottom: 15px;"><h4>👑 Koninklijke Kamers (Alates)</h4><div class="eco-stat"><span id="eco-alates">0</span> Prinsessen</div><p style="font-size:12px; margin:0 0 10px 0; color:#7f8c8d;">Elke prinses geeft +50 Max Water & +5% passieve waterproductie!</p><button class="eco-btn" style="background:#8e44ad;" onclick="kweekAlate()">👑 Kweek Prinses (-5 🍈, -10 Majors)</button></div>
         <div class="eco-box" id="nest-camponotus" style="width:100%; box-sizing:border-box; margin-bottom: 15px; border-color: var(--danger); display:none;"><h4 style="color: var(--danger);">🪲 Satellietnest (Camponotus)</h4><div class="eco-stat" style="color: var(--danger);">Passief Voedsel +1/min</div></div>
         <div class="eco-box" style="width:100%; box-sizing:border-box; margin-bottom: 15px;"><h4>⚖️ Wereldmarkt (Live Cloud)</h4><div style="display:flex; gap:5px; width:100%; margin-bottom:10px;"><button class="eco-btn" style="background:#d35400;" onclick="plaatsMarktAanbod('food_for_ants')">📢 Verkoop 5 🥒 (Vraag: 10 🐜)</button><button class="eco-btn" style="background:#2980b9;" onclick="plaatsMarktAanbod('ants_for_food')">📢 Verkoop 10 🐜 (Vraag: 5 🥒)</button></div><div class="market-list" id="market-offers-container"></div></div>
         <div class="eco-box" style="width:100%; box-sizing:border-box;"><h4>🛒 Cloud Upgrades</h4><button class="btn powerup-btn" id="btn-buy-sproeier" onclick="koopSproeier()">🚿 Koop Automatische Sproeier (-50 Werksters)</button><button class="btn powerup-btn" style="background:var(--accent);" id="btn-buy-rush" onclick="koopSuikerrush()">⚡ Suikerrush! Versnel alles 10 rondes (-5 🥦)</button><button class="btn powerup-btn" style="background:var(--danger);" id="btn-start-boss" onclick="startBossBattle()">👑 Start De Bruidsvlucht (-100 Majors)</button></div>
@@ -423,10 +355,8 @@
     const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
     let huidigeGebruiker = null; 
-    let progressieKana = {}; let progressieWoorden = {}; let progressieZinnen = {}; let progressieKanji = {}; 
-    let actieveQuizLijst = []; let huigigSchermModus = "normal"; let huidigeVraagRichting = "normal"; let huidigTeken = null; let isChecking = false; let huidigeStatsTab = 'tekens'; let huidigeMeerkeuzeLijst = []; let audioAan = true; let huidigThema = "light"; let huidigFont = "japans";
-    let huidigeCoins = 0, huidigePetals = 0, huidigPityCount = 0, huidigeEquippedTitle = null, huidigeEquippedTheme = null;
-    let gachaItemsCache = null, gachaInventory = new Set(), gachaBusy = false, gachaActieveTab = 'title';
+    let progressieKana = {}; let progressieWoorden = {}; let progressieZinnen = {}; 
+    let actieveQuizLijst = []; let huigigSchermModus = "normal"; let huidigeVraagRichting = "normal"; let huidigTeken = null; let isChecking = false; let huidigeStatsTab = 'tekens'; let huidigeMeerkeuzeLijst = []; let audioAan = true; let huidigThema = "light";
     let ecoStatus = { spentWater: 0, plantStage: 0, ants: 0, media: 0, majors: 0, sproeier: false, prestige: false, rushVragen: 0, plantType: 'none', plantTarget: 3, aphids: 0, nest: Array(400).fill(0), bossBeaten: false, stankTimer: 0, eventCooldown: 0, foodKomkommer: 0, foodBroccoli: 0, foodMuismeloen: 0, alates: 0 };
     let sproeierInterval, prestigeInterval, luizenInterval, nestInterval;
     let laatsteActiviteit = Date.now();
@@ -436,182 +366,39 @@
     function getSeason() { let m = new Date().getMonth(); if(m>=2 && m<=4) return {n:'Lente 🌸', m:1}; if(m>=5 && m<=7) return {n:'Zomer ☀️', m:2}; if(m>=8 && m<=10) return {n:'Herfst 🍂', m:1}; return {n:'Winter ❄️', m:0.5}; }
 
     function getIntegrity() { let rooms = ecoStatus.nest.filter(x=>x===1).length; let reservoirs = ecoStatus.nest.filter(x=>x===3).length; let pillars = ecoStatus.nest.filter(x=>x===2).length; return Math.max(0, Math.min(100, 100 - (rooms * 2) - (reservoirs * 2) + (pillars * 5))); }
-    function getMaxWater() { const nest = Array.isArray(ecoStatus.nest) ? ecoStatus.nest : []; return 100 + (nest.filter(x=>x===3).length * 50) + ((ecoStatus.alates||0) * 50); }
+    function getMaxWater() { return 100 + (ecoStatus.nest.filter(x=>x===3).length * 50) + ((ecoStatus.alates||0) * 50); }
     function capWater() { let max = getMaxWater(); let tot = berekenTotaalScore(); if(tot - ecoStatus.spentWater > max) { ecoStatus.spentWater = tot - max; } }
 
     async function login() {
-        const input = document.getElementById('username-input').value.trim().toLowerCase(); if(input.length < 3) return alert("Minimaal 3 tekens aub.");
-        document.getElementById('login-btn').innerText = "Laden..."; document.getElementById('login-btn').disabled = true; document.getElementById('login-feedback').innerText = '';
-        try {
-            const { data, error } = await supabaseClient.from('kana_users').select('*').eq('username', input).maybeSingle(); 
-            if(error) throw error;
-            if(data) { 
-                progressieKana = data.kana_progress || {}; progressieWoorden = data.woorden_progress || {}; progressieZinnen = data.zinnen_progress || {}; progressieKanji = data.kanji_progress || {}; ecoStatus = data.eco_status || {};
-                ecoStatus.spentWater = ecoStatus.spentWater || 0; ecoStatus.plantStage = ecoStatus.plantStage || 0; ecoStatus.ants = ecoStatus.ants || 0; ecoStatus.media = ecoStatus.media || 0; ecoStatus.majors = ecoStatus.majors || 0; ecoStatus.sproeier = ecoStatus.sproeier || false; ecoStatus.prestige = ecoStatus.prestige || false; ecoStatus.rushVragen = ecoStatus.rushVragen || 0; ecoStatus.plantType = ecoStatus.plantType || 'none'; ecoStatus.plantTarget = ecoStatus.plantTarget || 3; ecoStatus.aphids = ecoStatus.aphids || 0; ecoStatus.alates = ecoStatus.alates || 0;
-                if(!ecoStatus.nest || ecoStatus.nest.length !== 400) ecoStatus.nest = Array(400).fill(0);
-                ecoStatus.bossBeaten = ecoStatus.bossBeaten || false; ecoStatus.stankTimer = ecoStatus.stankTimer || 0; ecoStatus.eventCooldown = ecoStatus.eventCooldown || 0; ecoStatus.foodKomkommer = ecoStatus.foodKomkommer || 0; ecoStatus.foodBroccoli = ecoStatus.foodBroccoli || 0; ecoStatus.foodMuismeloen = ecoStatus.foodMuismeloen || 0;
-                huidigeCoins = data.coins_100yen || 0; huidigPityCount = data.pulls_since_last_legendary || 0; huidigePetals = data.sakura_petals || 0; huidigeEquippedTitle = data.equipped_title || null; huidigeEquippedTheme = data.equipped_theme || null;
-            } else { progressieKana = {}; progressieWoorden = {}; progressieZinnen = {}; progressieKanji = {}; huidigeCoins = 0; huidigPityCount = 0; huidigePetals = 0; huidigeEquippedTitle = null; huidigeEquippedTheme = null; }
-            kanaData.forEach(i => { if(progressieKana[i.kana] === undefined) progressieKana[i.kana] = 0; }); woordenData.forEach(i => { if(progressieWoorden[i.kana] === undefined) progressieWoorden[i.kana] = 0; }); if(typeof zinnenData !== 'undefined') zinnenData.forEach(i => { if(progressieZinnen[i.kana] === undefined) progressieZinnen[i.kana] = 0; }); if(typeof kanjiData !== 'undefined') kanjiData.forEach(i => { if(progressieKanji[i.kana] === undefined) progressieKanji[i.kana] = 0; });
-            huidigeGebruiker = input; bijwerkenStreak(); localStorage.setItem('kana_cloud_user', input); document.getElementById('display-username').innerText = input.charAt(0).toUpperCase() + input.slice(1); document.getElementById('login-btn').innerText = "Start"; document.getElementById('login-btn').disabled = false; laatsteActiviteit = Date.now(); capWater(); startPassieveInkomens(); switchScreen('screen-menu'); updateMenuCards();
-            updateCoinBadge(); toonUitgerusteTitel(); pasUitgerusteThemaToe();
-            await syncToSupabase(input);
-        } catch (e) {
-            console.error('Login mislukt:', e);
-            document.getElementById('login-btn').innerText = "Start"; document.getElementById('login-btn').disabled = false;
-            document.getElementById('login-feedback').innerText = "⚠️ Kan geen verbinding maken met de cloud. Controleer je internetverbinding en probeer het opnieuw.";
-        }
-    }
-    function bijwerkenStreak() {
-        const vandaag = new Date().toISOString().slice(0, 10);
-        if (!ecoStatus.lastActiveDate) { ecoStatus.streak = 1; }
-        else if (ecoStatus.lastActiveDate === vandaag) { ecoStatus.streak = ecoStatus.streak || 1; }
-        else {
-            const gisteren = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-            ecoStatus.streak = (ecoStatus.lastActiveDate === gisteren) ? (ecoStatus.streak || 0) + 1 : 1;
-            controleerStreakBeloning();
-        }
-        ecoStatus.lastActiveDate = vandaag;
-    }
-    function controleerStreakBeloning() {
-        const mijlpalen = { 3: 10, 7: 25, 14: 50, 30: 100, 60: 200, 100: 400, 365: 1500 };
-        const bonus = mijlpalen[ecoStatus.streak];
-        if (bonus) {
-            ecoStatus.majors = (ecoStatus.majors || 0) + bonus;
-            setTimeout(() => { toonMelding(`🔥 ${ecoStatus.streak} dagen op rij! Bonus: +${bonus} Majors 🛡️`, 'success'); toonConfetti(); }, 600);
-        }
-    }
-    function toonConfetti() {
-        const kleuren = ['var(--shu)', 'var(--kincha)', 'var(--matsuba)', 'var(--ai)'];
-        for (let i = 0; i < 36; i++) {
-            const c = document.createElement('div');
-            c.style.position = 'fixed'; c.style.top = '-20px'; c.style.left = (Math.random() * 100) + 'vw';
-            c.style.width = (5 + Math.random() * 5) + 'px'; c.style.height = c.style.width;
-            c.style.background = kleuren[i % kleuren.length]; c.style.opacity = '0.9';
-            c.style.borderRadius = (Math.random() < 0.5 ? '50%' : '2px'); c.style.zIndex = '1001'; c.style.pointerEvents = 'none';
-            c.style.transition = `transform ${1.4 + Math.random()}s ease-in, opacity ${1.4 + Math.random()}s ease-in`;
-            document.body.appendChild(c);
-            requestAnimationFrame(() => { c.style.transform = `translateY(${75 + Math.random() * 25}vh) rotate(${Math.random() * 360}deg)`; c.style.opacity = '0'; });
-            setTimeout(() => c.remove(), 3000);
-        }
-    }
-    function updateMenuCards() {
-        const streakEl = document.getElementById('menu-streak'); if(!streakEl) return;
-        streakEl.innerText = `🔥 ${ecoStatus.streak || 0} ${(ecoStatus.streak === 1) ? 'dag' : 'dagen'}`;
-        document.getElementById('menu-xp').innerText = `${berekenTotaalScore()} XP`;
-        const woordenGeleerd = Object.values(progressieWoorden).filter(s => s > 0).length;
-        document.getElementById('menu-words').innerText = `${woordenGeleerd} / ${woordenData.length}`;
-        const kanaGeleerd = Object.values(progressieKana).filter(s => s > 0).length;
-        document.getElementById('menu-kana').innerText = `${kanaGeleerd} / ${kanaData.length}`;
-        const kanjiGeleerd = Object.values(progressieKanji).filter(s => s > 0).length;
-        document.getElementById('menu-kanji').innerText = `${kanjiGeleerd} / ${kanjiData.length}`;
+        const input = document.getElementById('username-input').value.trim().toLowerCase(); if(input.length < 3) return alert("Minimaal 3 tekens aub."); document.getElementById('login-btn').innerText = "Laden...";
+        const { data, error } = await supabaseClient.from('kana_users').select('*').eq('username', input).maybeSingle(); 
+        if(data) { 
+            progressieKana = data.kana_progress || {}; progressieWoorden = data.woorden_progress || {}; progressieZinnen = data.zinnen_progress || {}; ecoStatus = data.eco_status || {};
+            ecoStatus.spentWater = ecoStatus.spentWater || 0; ecoStatus.plantStage = ecoStatus.plantStage || 0; ecoStatus.ants = ecoStatus.ants || 0; ecoStatus.media = ecoStatus.media || 0; ecoStatus.majors = ecoStatus.majors || 0; ecoStatus.sproeier = ecoStatus.sproeier || false; ecoStatus.prestige = ecoStatus.prestige || false; ecoStatus.rushVragen = ecoStatus.rushVragen || 0; ecoStatus.plantType = ecoStatus.plantType || 'none'; ecoStatus.plantTarget = ecoStatus.plantTarget || 3; ecoStatus.aphids = ecoStatus.aphids || 0; ecoStatus.alates = ecoStatus.alates || 0;
+            if(!ecoStatus.nest || ecoStatus.nest.length !== 400) ecoStatus.nest = Array(400).fill(0);
+            ecoStatus.bossBeaten = ecoStatus.bossBeaten || false; ecoStatus.stankTimer = ecoStatus.stankTimer || 0; ecoStatus.eventCooldown = ecoStatus.eventCooldown || 0; ecoStatus.foodKomkommer = ecoStatus.foodKomkommer || 0; ecoStatus.foodBroccoli = ecoStatus.foodBroccoli || 0; ecoStatus.foodMuismeloen = ecoStatus.foodMuismeloen || 0;
+        } else { progressieKana = {}; progressieWoorden = {}; progressieZinnen = {}; await syncToSupabase(input); }
+        kanaData.forEach(i => { if(progressieKana[i.kana] === undefined) progressieKana[i.kana] = 0; }); woordenData.forEach(i => { if(progressieWoorden[i.kana] === undefined) progressieWoorden[i.kana] = 0; }); if(typeof zinnenData !== 'undefined') zinnenData.forEach(i => { if(progressieZinnen[i.kana] === undefined) progressieZinnen[i.kana] = 0; });
+        huidigeGebruiker = input; localStorage.setItem('kana_cloud_user', input); document.getElementById('display-username').innerText = input.charAt(0).toUpperCase() + input.slice(1); document.getElementById('login-btn').innerText = "Start"; laatsteActiviteit = Date.now(); capWater(); startPassieveInkomens(); switchScreen('screen-menu');
     }
     function logout() { huidigeGebruiker = null; clearInterval(sproeierInterval); clearInterval(prestigeInterval); clearInterval(luizenInterval); clearInterval(nestInterval); localStorage.removeItem('kana_cloud_user'); switchScreen('screen-login'); }
-    let cloudFoutGetoond = false;
-    async function syncToSupabase(user) {
-        if (!user || !supabaseClient) return;
-        try {
-            const { error } = await supabaseClient.from('kana_users').upsert({ username: user, kana_progress: progressieKana, woorden_progress: progressieWoorden, zinnen_progress: progressieZinnen, kanji_progress: progressieKanji, total_score: berekenTotaalScore(), eco_status: ecoStatus, majors: ecoStatus.majors });
-            if (error) throw error;
-            cloudFoutGetoond = false;
-        } catch (e) {
-            console.warn('Cloud-sync mislukt:', e);
-            if (!cloudFoutGetoond) { toonMelding('⚠️ Kan je voortgang nu niet opslaan naar de cloud. Je speelt lokaal door.', 'error'); cloudFoutGetoond = true; }
-        }
-    }
-    function toonMelding(tekst, type = 'info') {
-        let el = document.getElementById('toast-melding');
-        if (!el) { el = document.createElement('div'); el.id = 'toast-melding'; document.body.appendChild(el); }
-        el.className = 'toast-' + type; el.innerText = tekst; el.classList.add('show');
-        clearTimeout(el._tijd); el._tijd = setTimeout(() => el.classList.remove('show'), 4000);
-    }
+    async function syncToSupabase(user) { if (!user || !supabaseClient) return; await supabaseClient.from('kana_users').upsert({ username: user, kana_progress: progressieKana, woorden_progress: progressieWoorden, zinnen_progress: progressieZinnen, total_score: berekenTotaalScore(), eco_status: ecoStatus, majors: ecoStatus.majors }); }
     function saveProgressie() { syncToSupabase(huidigeGebruiker); }
     
     function verhoogScore(item) {
-        // De kern (score + spaced-repetition) staat BUITEN de try, en gebeurt dus altijd.
-        laatsteActiviteit = Date.now(); let progDB = progressieKana; if (woordenData.includes(item)) progDB = progressieWoorden; if (typeof kanjiData !== 'undefined' && kanjiData.includes(item)) progDB = progressieKanji; if (typeof zinnenData !== 'undefined' && zinnenData.includes(item)) progDB = progressieZinnen;
+        laatsteActiviteit = Date.now(); let progDB = progressieKana; if (woordenData.includes(item)) progDB = progressieWoorden; if (typeof zinnenData !== 'undefined' && zinnenData.includes(item)) progDB = progressieZinnen;
         if(progDB[item.kana] < 5) progDB[item.kana] += 1;
-        bijwerkenRepetitie(item.kana, true);
-        // Alles hieronder is een bijeffect (munten, eco-game-economie, random events). Een fout
-        // hierin mag NOOIT de hoofdflow (doorgaan naar de volgende vraag) blokkeren — vandaar de
-        // try/catch: in het slechtste geval mis je een bijeffect, maar de quiz loopt altijd door.
-        try {
-            wijsGachaMuntToe(1);
-            let p = ecoStatus.bossBeaten ? 2 : 1; if(ecoStatus.rushVragen > 0) { ecoStatus.rushVragen--; if(ecoStatus.spentWater > -9999) ecoStatus.spentWater -= p; }
-            // Let op: GEEN confirm()/alert() hier — die zijn blokkerend in een echte browser en
-            // kunnen de indruk geven dat de quiz "vastloopt" na een goed antwoord. Een los, niet-
-            // blokkerend modal-venster doet exact hetzelfde zonder de rest van de pagina te pauzeren.
-            if(Math.random() < 0.05 && Date.now() > ecoStatus.eventCooldown) { ecoStatus.eventCooldown = Date.now() + 300000; toonRandomEventModal(); }
-            capWater();
-        } catch (e) {
-            console.warn('Bijeffect in verhoogScore mislukt (quiz gaat gewoon door):', e);
-        }
-        saveProgressie();
+        let p = ecoStatus.bossBeaten ? 2 : 1; if(ecoStatus.rushVragen > 0) { ecoStatus.rushVragen--; if(ecoStatus.spentWater > -9999) ecoStatus.spentWater -= p; }
+        if(Math.random() < 0.05 && Date.now() > ecoStatus.eventCooldown) { ecoStatus.eventCooldown = Date.now() + 300000; if(confirm("🚨 RANDOM EVENT!\n\nDe buren klagen over de mestlucht! Bakken schoongespoelen (-10 Water) of negeren (5 min geen groei)?")) { if(berekenTotaalScore() - ecoStatus.spentWater >= 10) { ecoStatus.spentWater += 10; alert("Gelukt!"); } else { alert("Te weinig water! Stank blokkeert de boel."); ecoStatus.stankTimer = Date.now() + 300000; } } else { ecoStatus.stankTimer = Date.now() + 300000; } }
+        capWater(); saveProgressie();
     }
-    /* ===== Gachapon: munten toekennen =====
-       Optimistisch lokaal bijgewerkt voor een directe UI-reactie; de echte
-       toekenning gebeurt via een atomaire SQL-UPDATE (increment_coins), dus
-       zelfs bliksemsnel achter elkaar goed antwoorden geeft kan nooit een
-       muntje "verliezen" door een race-condition. */
-    let gachaMuntenInVlucht = [];
-    let gachaCoinFoutGetoond = false;
-    function wijsGachaMuntToe(aantal) {
-        if(!huidigeGebruiker) return;
-        huidigeCoins += aantal; updateCoinBadge();
-        // BELANGRIJK: supabase-js laat .rpc() vaak gewoon NORMAAL RESOLVEN (geen reject) ook als
-        // de server een fout teruggeeft — die fout staat dan in het 'error'-veld van het resultaat,
-        // niet als een geworpen exception. Een kale .catch() mist dat dus volledig; we moeten het
-        // resultaat zelf controleren om een mislukte toekenning ook echt te kunnen signaleren.
-        const verzoek = supabaseClient.rpc('increment_coins', { p_username: huidigeGebruiker, p_amount: aantal })
-            .then(({ error }) => { if (error) throw error; gachaCoinFoutGetoond = false; })
-            .catch(e => {
-                console.warn('Munt-toekenning mislukt (cloud):', e);
-                if (!gachaCoinFoutGetoond) {
-                    gachaCoinFoutGetoond = true;
-                    toonMelding('⚠️ Munten worden niet opgeslagen in de cloud (lokaal aantal kan afwijken van de server). Controleer of het laatste SQL-script volledig is uitgevoerd.', 'error');
-                }
-            });
-        gachaMuntenInVlucht.push(verzoek);
-        verzoek.finally(() => { gachaMuntenInVlucht = gachaMuntenInVlucht.filter(v => v !== verzoek); });
-    }
-    function updateCoinBadge() { const el = document.getElementById('coin-badge'); if(el) el.innerText = `🪙 ${huidigeCoins}`; }
-    /* ===== Spaced repetition (lichte SM-2-achtige aanpak) =====
-       Per item wordt onthouden wanneer het weer 'aan de beurt' is. Hoe vaker een item goed gaat,
-       hoe langer de wachttijd. Bij een fout antwoord komt het meteen weer in de beurt. */
-    const SRS_WACHTTIJD_MIN = [1, 10, 60, 480, 1440, 4320, 10080]; // 1 min, 10 min, 1u, 8u, 1 dag, 3 dagen, 1 week
-    function srsGroep(niveau) { return niveau === 'tekens' ? 'kana' : (niveau === 'woorden' ? 'woorden' : (niveau === 'kanji' ? 'kanji' : 'zinnen')); }
-    function bijwerkenRepetitie(kanaKey, juist) {
-        const niveau = document.querySelector('input[name="quiz-niveau"]:checked')?.value || 'tekens';
-        const groep = srsGroep(niveau);
-        if(!ecoStatus.srs) ecoStatus.srs = {};
-        if(!ecoStatus.srs[groep]) ecoStatus.srs[groep] = {};
-        if(juist) {
-            const progressie = groep === 'kana' ? progressieKana : (groep === 'woorden' ? progressieWoorden : progressieZinnen);
-            const idx = Math.min(progressie[kanaKey] || 0, SRS_WACHTTIJD_MIN.length - 1);
-            ecoStatus.srs[groep][kanaKey] = Date.now() + SRS_WACHTTIJD_MIN[idx] * 60000;
-        } else {
-            ecoStatus.srs[groep][kanaKey] = Date.now();
-        }
-    }
-    function berekenTotaalScore() { let total = 0; Object.values(progressieKana).forEach(s => total+=s); Object.values(progressieWoorden).forEach(s => total+=s); if(typeof progressieKanji !== 'undefined') Object.values(progressieKanji).forEach(s => total+=s); if(typeof progressieZinnen !== 'undefined') Object.values(progressieZinnen).forEach(s => total+=s); return total * (ecoStatus.bossBeaten ? 2 : 1); }
+    function berekenTotaalScore() { let total = 0; Object.values(progressieKana).forEach(s => total+=s); Object.values(progressieWoorden).forEach(s => total+=s); if(typeof progressieZinnen !== 'undefined') Object.values(progressieZinnen).forEach(s => total+=s); return total * (ecoStatus.bossBeaten ? 2 : 1); }
 
-    function switchScreen(id) { laatsteActiviteit = Date.now(); document.querySelectorAll('.screen').forEach(s => s.classList.remove('active')); document.getElementById(id).classList.add('active'); if(id === 'screen-quiz' && huidigeVraagRichting === 'normal') setTimeout(() => document.getElementById('quiz-input').focus(), 50); if(id === 'screen-drop') setTimeout(() => document.getElementById('drop-input').focus(), 50); if(id === 'screen-galgje') setTimeout(() => document.getElementById('galgje-input').focus(), 50); if(id === 'screen-boss') setTimeout(() => document.getElementById('boss-input').focus(), 50); if(id === 'screen-collector') { updateEcoUI(); laadMarktplaats(); tekenNest(); } if(id === 'screen-menu') updateMenuCards(); }
-    function toepassenVoorkeuren() { document.documentElement.setAttribute('data-theme', huidigThema); document.documentElement.setAttribute('data-font', huidigFont); document.getElementById('audio-toggle').innerText = audioAan ? "🔊 Aan" : "🔇 Uit"; document.getElementById('theme-toggle').innerText = huidigThema === 'light' ? "🌙" : "☀️"; document.getElementById('font-toggle').innerText = huidigFont === 'japans' ? "あ Mincho" : "A Basis"; }
-    function initVoorkeuren() { if(localStorage.getItem('app_audio')) audioAan = localStorage.getItem('app_audio') === 'true'; if(localStorage.getItem('app_theme')) huidigThema = localStorage.getItem('app_theme'); if(localStorage.getItem('app_font')) huidigFont = localStorage.getItem('app_font'); toepassenVoorkeuren(); const usr = localStorage.getItem('kana_cloud_user'); if(usr){ document.getElementById('username-input').value = usr; login(); } }
-    function toggleTheme() { huidigThema = huidigThema === 'light' ? 'dark' : 'light'; localStorage.setItem('app_theme', huidigThema); toepassenVoorkeuren(); }
-    function toggleAudio() { audioAan = !audioAan; localStorage.setItem('app_audio', audioAan); toepassenVoorkeuren(); }
-    function toggleFont() { huidigFont = huidigFont === 'japans' ? 'basis' : 'japans'; localStorage.setItem('app_font', huidigFont); toepassenVoorkeuren(); }
+    function switchScreen(id) { laatsteActiviteit = Date.now(); document.querySelectorAll('.screen').forEach(s => s.classList.remove('active')); document.getElementById(id).classList.add('active'); if(id === 'screen-quiz' && huidigeVraagRichting === 'normal') setTimeout(() => document.getElementById('quiz-input').focus(), 50); if(id === 'screen-drop') setTimeout(() => document.getElementById('drop-input').focus(), 50); if(id === 'screen-galgje') setTimeout(() => document.getElementById('galgje-input').focus(), 50); if(id === 'screen-boss') setTimeout(() => document.getElementById('boss-input').focus(), 50); if(id === 'screen-collector') { updateEcoUI(); laadMarktplaats(); tekenNest(); } }
+    function initVoorkeuren() { if(localStorage.getItem('app_audio')) audioAan = localStorage.getItem('app_audio') === 'true'; if(localStorage.getItem('app_theme')) huidigThema = localStorage.getItem('app_theme'); document.documentElement.setAttribute('data-theme', huidigThema); document.getElementById('audio-toggle').innerText = audioAan ? "🔊 Aan" : "🔇 Uit"; document.getElementById('theme-toggle').innerText = huidigThema === 'light' ? "🌙" : "☀️"; const usr = localStorage.getItem('kana_cloud_user'); if(usr){ document.getElementById('username-input').value = usr; login(); } }
+    function toggleTheme() { huidigThema = huidigThema === 'light' ? 'dark' : 'light'; document.documentElement.setAttribute('data-theme', huidigThema); localStorage.setItem('app_theme', huidigThema); initVoorkeuren(); }
+    function toggleAudio() { audioAan = !audioAan; localStorage.setItem('app_audio', audioAan); initVoorkeuren(); }
     function spreekJapansUit(tekst) { if(!audioAan || !window.speechSynthesis) return; window.speechSynthesis.cancel(); let u = new SpeechSynthesisUtterance(tekst); u.lang = 'ja-JP'; u.rate = 0.85; window.speechSynthesis.speak(u); }
-    function speelGeluid(type) {
-        if(!audioAan) return;
-        try {
-            const ctx = window._kanaAudioCtx || (window._kanaAudioCtx = new (window.AudioContext || window.webkitAudioContext)());
-            const o = ctx.createOscillator(); const g = ctx.createGain(); o.connect(g); g.connect(ctx.destination);
-            const nu = ctx.currentTime;
-            if(type === 'goed') { o.type = 'sine'; o.frequency.setValueAtTime(523.25, nu); o.frequency.setValueAtTime(783.99, nu + 0.09); g.gain.setValueAtTime(0.16, nu); g.gain.exponentialRampToValueAtTime(0.001, nu + 0.32); o.start(nu); o.stop(nu + 0.32); }
-            else { o.type = 'sawtooth'; o.frequency.setValueAtTime(190, nu); o.frequency.exponentialRampToValueAtTime(110, nu + 0.22); g.gain.setValueAtTime(0.13, nu); g.gain.exponentialRampToValueAtTime(0.001, nu + 0.24); o.start(nu); o.stop(nu + 0.24); }
-        } catch(e) { console.warn('Geluidseffect mislukt:', e); }
-    }
     function speelHuidigTekenAf() { if(huidigTeken) spreekJapansUit(huidigTeken.kana); }
     
     function updateRadioStyles() { 
@@ -624,34 +411,17 @@
             document.getElementById('richting-group').style.display = 'flex';
             document.getElementById('zinnen-note').style.display = 'none';
         }
-        document.getElementById('jlpt-niveau-sectie').style.display = (niveau === 'tekens') ? 'none' : 'block';
     }
     
     function toggleCheckboxes(status) { document.querySelectorAll('#groups-container input').forEach(cb => { cb.checked = status; cb.parentElement.classList.toggle('checked', status); }); }
     function selecteerSpecifiek(type) { document.querySelectorAll('#groups-container input').forEach(cb => { const isMatch = cb.value.includes(type); cb.checked = isMatch; cb.parentElement.classList.toggle('checked', isMatch); }); }
-    function selecteerBasisKana() { document.querySelectorAll('#groups-container input').forEach(cb => { const isBasis = !cb.value.includes('akuten'); cb.checked = isBasis; cb.parentElement.classList.toggle('checked', isBasis); }); }
-
+    
     function bouwGroepenSelectie() { 
         const niveau = document.querySelector('input[name="quiz-niveau"]:checked').value; const container = document.getElementById('groups-container'); container.innerHTML = ''; const typeKnoppen = document.querySelectorAll('.hira-kata-btn'); let uniekeItems = []; 
         if (niveau === 'tekens') { uniekeItems = [...new Set(kanaData.map(item => item.groep))]; typeKnoppen.forEach(btn => btn.style.display = 'inline-block'); } 
         else if (niveau === 'woorden') { uniekeItems = [...new Set(woordenData.map(item => item.thema))]; typeKnoppen.forEach(btn => btn.style.display = 'none'); } 
-        else if (niveau === 'kanji') { typeKnoppen.forEach(btn => btn.style.display = 'none'); if (typeof kanjiData === 'undefined') { container.innerHTML = '<p style="color:var(--danger); font-weight:bold;">⚠️ Kanji-data ontbreekt. Controleer of data.js up-to-date is (vervang dat bestand op je hosting/server en herlaad de pagina).</p>'; return; } uniekeItems = [...new Set(kanjiData.map(item => item.thema))]; } 
         else if (niveau === 'zinnen') { uniekeItems = [...new Set(zinnenData.map(item => item.thema))]; typeKnoppen.forEach(btn => btn.style.display = 'none'); } 
-        let laatsteSectie = null;
-        uniekeItems.forEach(itemNaam => { 
-            // Bij Tekens: zet een sectiekopje boven elke nieuwe Hiragana/Katakana-groep, zodat
-            // de 30 blokken niet als één ongesorteerde muur overkomen.
-            if (niveau === 'tekens') {
-                const sectie = itemNaam.startsWith('Hira:') ? 'あ Hiragana' : 'ア Katakana';
-                if (sectie !== laatsteSectie) { laatsteSectie = sectie; const kop = document.createElement('div'); kop.className = 'groep-sectie-kop'; kop.innerText = sectie; container.appendChild(kop); }
-            }
-            const label = document.createElement('label'); label.className = 'checkbox-label checked'; const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.value = itemNaam; checkbox.checked = true; checkbox.onchange = () => label.classList.toggle('checked', checkbox.checked); label.appendChild(checkbox); 
-            let weergaveNaam = itemNaam.replace('Hira: ', '').replace('Kata: ', '');
-            const dakutenMatch = weergaveNaam.match(/\((Han)?dakuten\)/i);
-            if (dakutenMatch) { weergaveNaam = weergaveNaam.replace(dakutenMatch[0], '').trim(); label.appendChild(document.createTextNode(weergaveNaam + ' ')); const badge = document.createElement('span'); badge.className = 'dakuten-badge'; badge.title = dakutenMatch[1] ? 'Handakuten' : 'Dakuten'; badge.innerText = dakutenMatch[1] ? '゜' : '゛'; label.appendChild(badge); }
-            else { label.appendChild(document.createTextNode(weergaveNaam)); }
-            container.appendChild(label); 
-        }); 
+        uniekeItems.forEach(itemNaam => { const label = document.createElement('label'); label.className = 'checkbox-label checked'; const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.value = itemNaam; checkbox.checked = true; checkbox.onchange = () => label.classList.toggle('checked', checkbox.checked); label.appendChild(checkbox); label.appendChild(document.createTextNode(itemNaam)); container.appendChild(label); }); 
     }
 
     function startQuiz() { 
@@ -659,39 +429,28 @@
         huigigSchermModus = document.querySelector('input[name="quiz-mode"]:checked').value; 
         const actieveSelecties = Array.from(document.querySelectorAll('#groups-container input:checked')).map(cb => cb.value); 
         if(actieveSelecties.length === 0) { alert('Selecteer minimaal één groep of thema!'); return; } 
-        if (niveau === 'kanji' && typeof kanjiData === 'undefined') { alert('⚠️ Kanji-data ontbreekt. Controleer of data.js up-to-date is (vervang dat bestand op je hosting/server en herlaad de pagina).'); return; }
         if (niveau === 'tekens') { actieveQuizLijst = kanaData.filter(item => actieveSelecties.includes(item.groep)); } 
         else if (niveau === 'woorden') { actieveQuizLijst = woordenData.filter(item => actieveSelecties.includes(item.thema)); } 
-        else if (niveau === 'kanji') { actieveQuizLijst = kanjiData.filter(item => actieveSelecties.includes(item.thema)); } 
         else if (niveau === 'zinnen') { actieveQuizLijst = zinnenData.filter(item => actieveSelecties.includes(item.thema)); } 
-        if (niveau !== 'tekens') {
-            const jlptFilter = document.querySelector('input[name="quiz-jlpt"]:checked')?.value || 'alle';
-            if (jlptFilter !== 'alle') actieveQuizLijst = actieveQuizLijst.filter(item => item.niveau === jlptFilter);
-        }
-        if (actieveQuizLijst.length === 0) { alert('Geen items gevonden voor deze combinatie van categorie en JLPT-niveau. Kies een ander niveau of meer categorieën.'); return; }
         switchScreen('screen-quiz'); volgendTeken(); 
     }
     
     function volgendTeken() { 
         if(actieveQuizLijst.length === 0) return; document.getElementById('quiz-input').value = ''; document.getElementById('quiz-feedback').innerHTML = ''; document.getElementById('meaning-display').innerText = ''; isChecking = false; 
+        document.getElementById('mnemonic-display').style.display = 'none'; document.getElementById('mnemonic-display').innerText = ''; 
         const niveau = document.querySelector('input[name="quiz-niveau"]:checked').value; 
-        const actieveProgressie = niveau === 'tekens' ? progressieKana : (niveau === 'woorden' ? progressieWoorden : (niveau === 'kanji' ? progressieKanji : progressieZinnen)); 
+        const actieveProgressie = niveau === 'tekens' ? progressieKana : (niveau === 'woorden' ? progressieWoorden : progressieZinnen); 
         if (huigigSchermModus === "mix" && niveau !== 'zinnen') { huidigeVraagRichting = Math.random() < 0.5 ? "normal" : "reverse"; } 
         else { huidigeVraagRichting = huigigSchermModus; } 
         
-        actieveQuizLijst.sort((a, b) => actieveProgressie[a.kana] - actieveProgressie[b.kana]);
-        const groep = srsGroep(niveau); const srsData = (ecoStatus.srs && ecoStatus.srs[groep]) || {}; const nu = Date.now();
-        const aanDeBeurt = actieveQuizLijst.filter(item => !srsData[item.kana] || srsData[item.kana] <= nu);
-        let kandidaten;
-        if (aanDeBeurt.length > 0) { kandidaten = aanDeBeurt; }
-        else { kandidaten = actieveQuizLijst.slice(0, Math.min(4, actieveQuizLijst.length)); }
-        huidigTeken = kandidaten[Math.floor(Math.random() * kandidaten.length)];
+        actieveQuizLijst.sort((a, b) => actieveProgressie[a.kana] - actieveProgressie[b.kana]); const poolGrootte = Math.min(4, actieveQuizLijst.length); huidigTeken = actieveQuizLijst[Math.floor(Math.random() * poolGrootte)]; 
         
 		if (niveau === 'zinnen') {
             document.getElementById('quiz-text-input-container').style.display = 'none'; 
             document.getElementById('quiz-choices-container').style.display = 'grid'; 
             document.getElementById('char-display').innerText = huidigTeken.kana; 
             document.getElementById('char-display').style.fontSize = '35px';
+            document.getElementById('hint-toggle-btn').style.display = 'none';
             
             // HIER IS DE AANPASSING:
             // We zetten de tekst op "???" of laten hem leeg, in plaats van huidigTeken.romaji
@@ -700,42 +459,53 @@
             document.getElementById('quiz-progress-title').innerText = `Wat is de vertaling van deze zin?`; 
             genereerMeerkeuzeKnoppen();
         } else if (huidigeVraagRichting === 'reverse') {
-            // Rom → Jap: toon de romaji (en eventueel de betekenis), laat het juiste teken kiezen uit meerkeuze
+            // Rom -> Jap: toon romaji, vraag het teken (tekst of meerkeuze)
             document.getElementById('char-display').style.fontSize = '45px';
             document.getElementById('char-display').innerText = huidigTeken.romaji;
+            document.getElementById('meaning-display').innerText = huidigTeken.betekenis ? huidigTeken.betekenis : '';
+            document.getElementById('quiz-progress-title').innerText = niveau === 'tekens' ? 'Welk teken is dit?' : 'Welk woord is dit?';
             document.getElementById('quiz-text-input-container').style.display = 'none';
             document.getElementById('quiz-choices-container').style.display = 'grid';
-            if (huidigTeken.betekenis) document.getElementById('meaning-display').innerText = huidigTeken.betekenis;
-            document.getElementById('quiz-progress-title').innerText = niveau === 'woorden' ? 'Welk woord is dit?' : 'Welk teken is dit?';
+            document.getElementById('hint-toggle-btn').style.display = heeftEzelsbruggetje(huidigTeken) ? 'inline-block' : 'none';
             genereerMeerkeuzeKnoppen();
         } else {
-            // Jap → Rom: toon het teken, laat de romaji intypen
+            // Jap -> Rom (normal): toon kana/woord, vraag romaji via tekstinvoer
             document.getElementById('char-display').style.fontSize = '45px';
             document.getElementById('char-display').innerText = huidigTeken.kana;
-            document.getElementById('quiz-text-input-container').style.display = 'flex';
+            document.getElementById('meaning-display').innerText = huidigTeken.betekenis ? huidigTeken.betekenis : '';
+            document.getElementById('quiz-progress-title').innerText = niveau === 'tekens' ? 'Wat is de romaji van dit teken?' : 'Wat is de romaji van dit woord?';
             document.getElementById('quiz-choices-container').style.display = 'none';
-            if (huidigTeken.betekenis) document.getElementById('meaning-display').innerText = huidigTeken.betekenis;
-            document.getElementById('quiz-progress-title').innerText = 'Wat is de romaji?';
+            document.getElementById('quiz-text-input-container').style.display = 'flex';
+            document.getElementById('hint-toggle-btn').style.display = heeftEzelsbruggetje(huidigTeken) ? 'inline-block' : 'none';
         }
+    }
+
+    function heeftEzelsbruggetje(item) { return !!(item && typeof kanaMnemonics !== 'undefined' && kanaMnemonics[item.kana]); }
+    function toggleEzelsbruggetje() {
+        const paneel = document.getElementById('mnemonic-display');
+        if (paneel.style.display === 'block') { paneel.style.display = 'none'; return; }
+        if (!huidigTeken) return;
+        const tekst = (typeof kanaMnemonics !== 'undefined') ? kanaMnemonics[huidigTeken.kana] : null;
+        paneel.innerText = tekst ? ('💡 ' + tekst) : 'Voor dit teken heb ik nog geen ezelsbruggetje klaarstaan.';
+        paneel.style.display = 'block';
     }
     
     function genereerMeerkeuzeKnoppen() { 
         const niveau = document.querySelector('input[name="quiz-niveau"]:checked').value;
         const typePool = actieveQuizLijst.filter(item => item.kana !== huidigTeken.kana); const fouteAntwoorden = typePool.sort(() => 0.5 - Math.random()).slice(0, 3); huidigeMeerkeuzeLijst = [huidigTeken, ...fouteAntwoorden].sort(() => 0.5 - Math.random()); const knoppen = document.querySelectorAll('#quiz-choices-container .choice-btn'); 
         knoppen.forEach((knop, index) => { 
-            const tekstEl = knop.querySelector('.choice-text');
             if(niveau === 'zinnen') {
-                tekstEl.innerText = huidigeMeerkeuzeLijst[index].betekenis;
-                tekstEl.style.fontSize = '14px';
+                knop.innerText = huidigeMeerkeuzeLijst[index].betekenis;
+                knop.style.fontSize = '14px';
             } else {
-                tekstEl.innerText = huidigeMeerkeuzeLijst[index].kana; 
-                tekstEl.style.fontSize = '22px';
+                knop.innerText = huidigeMeerkeuzeLijst[index].kana; 
+                knop.style.fontSize = '22px';
             }
             knop.style.borderColor = 'var(--border)'; knop.style.background = 'var(--card-bg)'; 
         }); 
     }
     
-    function checkTextAnswer() { if(isChecking || !huidigTeken) return; isChecking = true; laatsteActiviteit = Date.now(); const invoer = document.getElementById('quiz-input').value.trim().toLowerCase(); const feedback = document.getElementById('quiz-feedback'); if (invoer === huidigTeken.romaji) { speelGeluid('goed'); feedback.innerHTML = `Goed zo! 🎉`; feedback.style.color = "var(--success)"; try { verhoogScore(huidigTeken); } catch(e) { console.warn('verhoogScore mislukt (quiz gaat door):', e); } setTimeout(volgendTeken, 1000); } else { speelGeluid('fout'); bijwerkenRepetitie(huidigTeken.kana, false); feedback.innerHTML = `Fout! Het was '${huidigTeken.romaji.toUpperCase()}'`; feedback.style.color = "var(--danger)"; setTimeout(volgendTeken, 2200); } }
+    function checkTextAnswer() { if(isChecking || !huidigTeken) return; isChecking = true; laatsteActiviteit = Date.now(); const invoer = document.getElementById('quiz-input').value.trim().toLowerCase(); const feedback = document.getElementById('quiz-feedback'); if (invoer === huidigTeken.romaji) { feedback.innerHTML = `<span class="hanko" style="width:26px;height:26px;font-size:13px;border-radius:4px;">正</span> Goed zo!`; feedback.style.color = "var(--success)"; verhoogScore(huidigTeken); setTimeout(volgendTeken, 1000); } else { feedback.innerHTML = `Fout! Het was '${huidigTeken.romaji.toUpperCase()}'`; feedback.style.color = "var(--danger)"; setTimeout(volgendTeken, 2200); } }
     
     function checkChoiceAnswer(index) { 
         if(isChecking || !huidigTeken) return; isChecking = true; laatsteActiviteit = Date.now(); const feedback = document.getElementById('quiz-feedback'); 
@@ -744,300 +514,32 @@
         const correcteWaarde = niveau === 'zinnen' ? huidigTeken.betekenis : huidigTeken.kana;
         
         const knoppen = document.querySelectorAll('#quiz-choices-container .choice-btn'); 
-        knoppen.forEach(knop => { if (knop.querySelector('.choice-text').innerText === correcteWaarde) { knop.style.background = 'rgba(76, 107, 79, 0.18)'; knop.style.borderColor = 'var(--success)'; } }); 
+        knoppen.forEach(knop => { if (knop.innerText === correcteWaarde) { knop.style.background = 'rgba(63,125,88,0.12)'; knop.style.borderColor = 'var(--success)'; } }); 
         spreekJapansUit(huidigTeken.kana); 
-        if (gekozenWaarde === correcteWaarde) { speelGeluid('goed'); feedback.innerHTML = `Goed zo! 🎉`; feedback.style.color = "var(--success)"; try { verhoogScore(huidigTeken); } catch(e) { console.warn('verhoogScore mislukt (quiz gaat door):', e); } setTimeout(volgendTeken, 1000); } 
-        else { speelGeluid('fout'); bijwerkenRepetitie(huidigTeken.kana, false); knoppen[index].style.background = 'rgba(171, 58, 53, 0.18)'; knoppen[index].style.borderColor = 'var(--danger)'; feedback.innerHTML = `Helaas! Dit is ${correcteWaarde}`; feedback.style.color = "var(--danger)"; setTimeout(volgendTeken, 2200); } 
+        if (gekozenWaarde === correcteWaarde) { feedback.innerHTML = `<span class="hanko" style="width:26px;height:26px;font-size:13px;border-radius:4px;">正</span> Goed zo!`; feedback.style.color = "var(--success)"; verhoogScore(huidigTeken); setTimeout(volgendTeken, 1000); } 
+        else { knoppen[index].style.background = 'rgba(192,57,43,0.12)'; knoppen[index].style.borderColor = 'var(--danger)'; feedback.innerHTML = `Helaas! Dit is ${correcteWaarde}`; feedback.style.color = "var(--danger)"; setTimeout(volgendTeken, 2200); } 
     }
 
     function openStats() { switchScreen('screen-stats'); toonStatsTabel('tekens'); }
     function toonStatsTabel(tab) { 
-        document.getElementById('tab-tekens').classList.toggle('active', tab === 'tekens'); document.getElementById('tab-woorden').classList.toggle('active', tab === 'woorden'); document.getElementById('tab-kanji').classList.toggle('active', tab === 'kanji'); document.getElementById('tab-zinnen').classList.toggle('active', tab === 'zinnen');
+        document.getElementById('tab-tekens').classList.toggle('active', tab === 'tekens'); document.getElementById('tab-woorden').classList.toggle('active', tab === 'woorden'); document.getElementById('tab-zinnen').classList.toggle('active', tab === 'zinnen');
         const tbody = document.getElementById('stats-table-body'); tbody.innerHTML = ''; 
-        if (tab === 'kanji' && typeof kanjiData === 'undefined') { tbody.innerHTML = '<tr><td colspan="3" style="color:var(--danger); font-weight:bold; padding:14px;">⚠️ Kanji-data ontbreekt. Controleer of data.js up-to-date is (vervang dat bestand op je hosting/server en herlaad de pagina).</td></tr>'; return; }
         let basisData = kanaData; let progressie = progressieKana;
         if(tab === 'woorden') { basisData = woordenData; progressie = progressieWoorden; }
-        if(tab === 'kanji') { basisData = kanjiData; progressie = progressieKanji; }
         if(tab === 'zinnen') { basisData = zinnenData; progressie = progressieZinnen; }
         const gesorteerdeData = [...basisData].sort((a,b) => progressie[a.kana] - progressie[b.kana]); 
-        gesorteerdeData.forEach(item => { const score = progressie[item.kana] || 0; const percentage = (score / 5) * 100; const tr = document.createElement('tr'); let extraInfo = item.betekenis ? `<br><span style="font-size:11px; font-weight:normal; color:var(--muted);">${item.betekenis}</span>` : ''; let niveauBadge = item.niveau ? `<span style="font-size:10px; font-weight:bold; padding:1px 6px; border-radius:8px; margin-left:5px; background:${item.niveau === 'N4' ? 'var(--budou)' : 'var(--ai)'}; color:#fff;">${item.niveau}</span>` : ''; tr.innerHTML = `<td style="font-size: 16px; font-weight: bold; color: var(--dark); cursor: pointer;" onclick="spreekJapansUit('${item.kana}')" title="Klik om te horen">${item.kana} 🔊${niveauBadge}</td><td><strong>${item.romaji}</strong>${extraInfo}</td><td><div class="level-bar"><div class="level-fill" style="width: ${percentage}%; background-color: ${score <= 1 ? 'var(--danger)' : score <= 3 ? '#f1c40f' : 'var(--success)'}"></div></div><span style="font-size: 11px; margin-left: 5px;">${score}/5</span></td>`; tbody.appendChild(tr); }); 
+        gesorteerdeData.forEach(item => { const score = progressie[item.kana]; const percentage = (score / 5) * 100; const tr = document.createElement('tr'); let extraInfo = item.betekenis ? `<br><span style="font-size:11px; font-weight:normal; color:#7f8c8d;">${item.betekenis}</span>` : ''; tr.innerHTML = `<td style="font-size: 16px; font-weight: bold; color: var(--dark); cursor: pointer;" onclick="spreekJapansUit('${item.kana}')" title="Klik om te horen">${item.kana} 🔊</td><td><strong>${item.romaji}</strong>${extraInfo}</td><td><div class="level-bar"><div class="level-fill" style="width: ${percentage}%; background-color: ${score <= 1 ? 'var(--danger)' : score <= 3 ? '#f1c40f' : 'var(--success)'}"></div></div><span style="font-size: 11px; margin-left: 5px;">${score}/5</span></td>`; tbody.appendChild(tr); }); 
     }
-    async function laadLeaderboard(type) { switchScreen('screen-leaderboard'); document.getElementById('tab-lb-score').classList.toggle('active', type === 'score'); document.getElementById('tab-lb-majors').classList.toggle('active', type === 'majors'); const container = document.getElementById('leaderboard-container'); container.innerHTML = "<p>Laden...</p>"; const orderField = type === 'score' ? 'total_score' : 'majors'; try { const { data, error } = await supabaseClient.from('kana_users').select(`username, ${orderField}`).order(orderField, { ascending: false }).limit(10); if (error) throw error; container.innerHTML = ""; data.forEach((user, index) => { let medaille = `${index + 1}.`; if (index === 0) medaille = "🥇"; if (index === 1) medaille = "🥈"; if (index === 2) medaille = "🥉"; const val = user[orderField]; const suffix = type === 'score' ? 'pts' : 'Majors 🛡️'; const item = document.createElement('div'); item.style.padding = "10px"; item.style.borderBottom = "1px solid var(--border)"; item.style.display = "flex"; item.style.justifyContent = "space-between"; item.style.fontWeight = "bold"; if(user.username === huidigeGebruiker) { item.style.backgroundColor = "color-mix(in srgb, var(--primary) 10%, transparent)"; item.style.color = "var(--primary)"; } item.innerHTML = `<span>${medaille} <span style="text-transform: capitalize;">${user.username}</span></span><span>${val || 0} ${suffix}</span>`; container.appendChild(item); }); } catch(e) { console.warn('Leaderboard laden mislukt:', e); container.innerHTML = "<p>⚠️ Kan het leaderboard niet laden. Controleer je verbinding.</p>"; } }
+    async function laadLeaderboard(type) { switchScreen('screen-leaderboard'); document.getElementById('tab-lb-score').classList.toggle('active', type === 'score'); document.getElementById('tab-lb-majors').classList.toggle('active', type === 'majors'); const container = document.getElementById('leaderboard-container'); container.innerHTML = "<p>Laden...</p>"; const orderField = type === 'score' ? 'total_score' : 'majors'; const { data, error } = await supabaseClient.from('kana_users').select(`username, ${orderField}`).order(orderField, { ascending: false }).limit(10); if (error) { container.innerHTML = "<p>Kan leaderboard niet laden.</p>"; return; } container.innerHTML = ""; data.forEach((user, index) => { let medaille = `${index + 1}.`; if (index === 0) medaille = "🥇"; if (index === 1) medaille = "🥈"; if (index === 2) medaille = "🥉"; const val = user[orderField]; const suffix = type === 'score' ? 'pts' : 'Majors 🛡️'; const item = document.createElement('div'); item.style.padding = "10px"; item.style.borderBottom = "1px solid var(--border)"; item.style.display = "flex"; item.style.justifyContent = "space-between"; item.style.fontWeight = "bold"; if(user.username === huidigeGebruiker) { item.style.backgroundColor = "rgba(74, 144, 226, 0.1)"; item.style.color = "var(--primary)"; } item.innerHTML = `<span>${medaille} <span style="text-transform: capitalize;">${user.username}</span></span><span>${val || 0} ${suffix}</span>`; container.appendChild(item); }); }
 
     let memFlipped=false, memLock=false, mem1, mem2, memMoves=0, memMatches=0; function startMemoryGame() { switchScreen('screen-memory'); const grid = document.getElementById('memory-grid'); grid.innerHTML = ''; memMoves = 0; memMatches = 0; document.getElementById('memory-moves').innerText = memMoves; document.getElementById('memory-score').innerText = memMatches; let pool = [...kanaData].sort(()=>0.5-Math.random()).slice(0,8); let cards = []; pool.forEach(i => { cards.push({t: i.kana, m: i.kana}); cards.push({t: i.romaji, m: i.kana}); }); cards.sort(()=>0.5-Math.random()).forEach(c => { let el = document.createElement('div'); el.className = 'memory-card'; el.innerText = c.t; el.dataset.m = c.m; el.onclick = flipMemoryCard; grid.appendChild(el); }); } function flipMemoryCard() { if(memLock || this === mem1) return; this.classList.add('flipped'); laatsteActiviteit = Date.now(); if(!memFlipped) { memFlipped = true; mem1 = this; return; } mem2 = this; memMoves++; document.getElementById('memory-moves').innerText = memMoves; checkMemoryMatch(); } function checkMemoryMatch() { if(mem1.dataset.m === mem2.dataset.m) { spreekJapansUit(mem1.dataset.m); mem1.onclick = null; mem2.onclick = null; mem1.classList.add('matched'); mem2.classList.add('matched'); memMatches++; document.getElementById('memory-score').innerText = memMatches; [memFlipped, memLock, mem1, mem2] = [false, false, null, null]; if(memMatches === 8) { setTimeout(()=>alert(`Gewonnen in ${memMoves} zetten!`), 500); } } else { memLock = true; setTimeout(() => { mem1.classList.remove('flipped'); mem2.classList.remove('flipped'); [memFlipped, memLock, mem1, mem2] = [false, false, null, null]; }, 1000); } }
-    let dropInterval, dropY=-50, dropSpeed=1.5, dropLives=3, dropScore=0, actieveDropItem=null, dropFrozen=false; function startKanaDropInit() { switchScreen('screen-drop'); dropLives = 3; dropScore = 0; dropSpeed = 1.5; document.getElementById('drop-score').innerText = dropScore; document.getElementById('drop-lives').innerText = '❤️'.repeat(dropLives); document.getElementById('btn-drop-freeze').disabled = ((ecoStatus.ants||0) < 5); startNieuweDrop(); } function startNieuweDrop() { clearInterval(dropInterval); document.getElementById('drop-input').value = ''; const allItems = [...kanaData, ...woordenData, ...kanjiData]; actieveDropItem = allItems[Math.floor(Math.random() * allItems.length)]; dropY = -50; document.getElementById('drop-item').innerText = actieveDropItem.kana; document.getElementById('drop-item').style.top = dropY + 'px'; dropInterval = setInterval(() => { if(!dropFrozen) { dropY += dropSpeed; document.getElementById('drop-item').style.top = dropY + 'px'; } if(dropY > 230) { clearInterval(dropInterval); speelGeluid('fout'); dropLives--; document.getElementById('drop-lives').innerText = '❤️'.repeat(dropLives); if(dropLives <= 0) { alert(`Game Over! Score: ${dropScore}`); stopKanaDrop(); } else { startNieuweDrop(); } } }, 20); } function checkDropAnswer() { const inp = document.getElementById('drop-input').value.trim().toLowerCase(); laatsteActiviteit = Date.now(); if(inp === actieveDropItem.romaji) { speelGeluid('goed'); dropScore++; document.getElementById('drop-score').innerText = dropScore; dropSpeed += 0.1; spreekJapansUit(actieveDropItem.kana); verhoogScore(actieveDropItem); startNieuweDrop(); } else { document.getElementById('drop-input').value = ''; } } function stopKanaDrop() { clearInterval(dropInterval); switchScreen('screen-menu'); } function koopDropFreeze() { if(ecoStatus.ants >= 5 && !dropFrozen) { ecoStatus.ants -= 5; slaEcoSysteemOp(); document.getElementById('btn-drop-freeze').disabled = true; dropFrozen = true; document.getElementById('drop-item').style.color = "var(--primary)"; setTimeout(()=>{ dropFrozen = false; document.getElementById('drop-item').style.color = "var(--dark)"; document.getElementById('btn-drop-freeze').disabled = (ecoStatus.ants < 5); }, 5000); } }
-    let galgjeItem=null, galgjeLetters=[], galgjeMistakes=0; function startGalgjeInit() { switchScreen('screen-galgje'); document.getElementById('galgje-input').style.display = 'inline-block'; document.getElementById('galgje-next-btn').style.display = 'none'; document.getElementById('btn-galgje-hint').style.display = 'inline-block'; document.getElementById('btn-galgje-hint').disabled = ((ecoStatus.ants||0) < 5); galgjeMistakes = 0; document.getElementById('galgje-feedback').innerText = `Fouten: 0 / 6`; document.getElementById('galgje-feedback').style.color = "var(--text)"; document.getElementById('galgje-input').value = ''; const galgjePool = [...woordenData, ...kanjiData]; galgjeItem = galgjePool[Math.floor(Math.random() * galgjePool.length)]; galgjeLetters = []; document.getElementById('galgje-kana-display').innerText = `${galgjeItem.kana} (${galgjeItem.betekenis})`; updateGalgjeDisplay(); } function updateGalgjeDisplay() { let displayStr = ''; let allFound = true; for(let char of galgjeItem.romaji) { if(galgjeLetters.includes(char)) { displayStr += char + ' '; } else { displayStr += '_ '; allFound = false; } } document.getElementById('galgje-word-display').innerText = displayStr.trim(); if(allFound) { speelGeluid('goed'); document.getElementById('galgje-feedback').innerText = "Gewonnen! 🎉"; document.getElementById('galgje-feedback').style.color = "var(--success)"; document.getElementById('galgje-input').style.display = 'none'; document.getElementById('galgje-next-btn').style.display = 'inline-block'; document.getElementById('btn-galgje-hint').style.display = 'none'; verhoogScore(galgjeItem); spreekJapansUit(galgjeItem.kana); } } function checkGalgjeAnswer() { const inp = document.getElementById('galgje-input').value.trim().toLowerCase(); document.getElementById('galgje-input').value = ''; laatsteActiviteit = Date.now(); if(!inp) return; if(galgjeItem.romaji.includes(inp)) { if(!galgjeLetters.includes(inp)) galgjeLetters.push(inp); } else { speelGeluid('fout'); galgjeMistakes++; document.getElementById('galgje-feedback').innerText = `Fouten: ${galgjeMistakes} / 6`; if(galgjeMistakes >= 6) { document.getElementById('galgje-feedback').innerText = `Verloren! Het was: ${galgjeItem.romaji}`; document.getElementById('galgje-feedback').style.color = "var(--danger)"; document.getElementById('galgje-word-display').innerText = galgjeItem.romaji.split('').join(' '); document.getElementById('galgje-input').style.display = 'none'; document.getElementById('galgje-next-btn').style.display = 'inline-block'; document.getElementById('btn-galgje-hint').style.display = 'none'; } } updateGalgjeDisplay(); } function koopGalgjeHint() { if(ecoStatus.ants >= 5) { ecoStatus.ants -= 5; slaEcoSysteemOp(); document.getElementById('btn-galgje-hint').disabled = (ecoStatus.ants < 5); let onbekend = galgjeItem.romaji.split('').filter(c => !galgjeLetters.includes(c)); if(onbekend.length > 0) { galgjeLetters.push(onbekend[Math.floor(Math.random() * onbekend.length)]); updateGalgjeDisplay(); } } }
+    let dropInterval, dropY=-50, dropSpeed=1.5, dropLives=3, dropScore=0, actieveDropItem=null, dropFrozen=false; function startKanaDropInit() { switchScreen('screen-drop'); dropLives = 3; dropScore = 0; dropSpeed = 1.5; document.getElementById('drop-score').innerText = dropScore; document.getElementById('drop-lives').innerText = '❤️'.repeat(dropLives); document.getElementById('btn-drop-freeze').disabled = ((ecoStatus.ants||0) < 5); startNieuweDrop(); } function startNieuweDrop() { clearInterval(dropInterval); document.getElementById('drop-input').value = ''; const allItems = [...kanaData, ...woordenData]; actieveDropItem = allItems[Math.floor(Math.random() * allItems.length)]; dropY = -50; document.getElementById('drop-item').innerText = actieveDropItem.kana; document.getElementById('drop-item').style.top = dropY + 'px'; dropInterval = setInterval(() => { if(!dropFrozen) { dropY += dropSpeed; document.getElementById('drop-item').style.top = dropY + 'px'; } if(dropY > 230) { clearInterval(dropInterval); dropLives--; document.getElementById('drop-lives').innerText = '❤️'.repeat(dropLives); if(dropLives <= 0) { alert(`Game Over! Score: ${dropScore}`); stopKanaDrop(); } else { startNieuweDrop(); } } }, 20); } function checkDropAnswer() { const inp = document.getElementById('drop-input').value.trim().toLowerCase(); laatsteActiviteit = Date.now(); if(inp === actieveDropItem.romaji) { dropScore++; document.getElementById('drop-score').innerText = dropScore; dropSpeed += 0.1; spreekJapansUit(actieveDropItem.kana); verhoogScore(actieveDropItem); startNieuweDrop(); } else { document.getElementById('drop-input').value = ''; } } function stopKanaDrop() { clearInterval(dropInterval); switchScreen('screen-menu'); } function koopDropFreeze() { if(ecoStatus.ants >= 5 && !dropFrozen) { ecoStatus.ants -= 5; slaEcoSysteemOp(); document.getElementById('btn-drop-freeze').disabled = true; dropFrozen = true; document.getElementById('drop-item').style.color = "var(--primary)"; setTimeout(()=>{ dropFrozen = false; document.getElementById('drop-item').style.color = "var(--dark)"; document.getElementById('btn-drop-freeze').disabled = (ecoStatus.ants < 5); }, 5000); } }
+    let galgjeItem=null, galgjeLetters=[], galgjeMistakes=0; function startGalgjeInit() { switchScreen('screen-galgje'); document.getElementById('galgje-input').style.display = 'inline-block'; document.getElementById('galgje-next-btn').style.display = 'none'; document.getElementById('btn-galgje-hint').style.display = 'inline-block'; document.getElementById('btn-galgje-hint').disabled = ((ecoStatus.ants||0) < 5); galgjeMistakes = 0; document.getElementById('galgje-feedback').innerText = `Fouten: 0 / 6`; document.getElementById('galgje-feedback').style.color = "var(--text)"; document.getElementById('galgje-input').value = ''; galgjeItem = woordenData[Math.floor(Math.random() * woordenData.length)]; galgjeLetters = []; document.getElementById('galgje-kana-display').innerText = `${galgjeItem.kana} (${galgjeItem.betekenis})`; updateGalgjeDisplay(); } function updateGalgjeDisplay() { let displayStr = ''; let allFound = true; for(let char of galgjeItem.romaji) { if(galgjeLetters.includes(char)) { displayStr += char + ' '; } else { displayStr += '_ '; allFound = false; } } document.getElementById('galgje-word-display').innerText = displayStr.trim(); if(allFound) { document.getElementById('galgje-feedback').innerText = "Gewonnen! 🎉"; document.getElementById('galgje-feedback').style.color = "var(--success)"; document.getElementById('galgje-input').style.display = 'none'; document.getElementById('galgje-next-btn').style.display = 'inline-block'; document.getElementById('btn-galgje-hint').style.display = 'none'; verhoogScore(galgjeItem); spreekJapansUit(galgjeItem.kana); } } function checkGalgjeAnswer() { const inp = document.getElementById('galgje-input').value.trim().toLowerCase(); document.getElementById('galgje-input').value = ''; laatsteActiviteit = Date.now(); if(!inp) return; if(galgjeItem.romaji.includes(inp)) { if(!galgjeLetters.includes(inp)) galgjeLetters.push(inp); } else { galgjeMistakes++; document.getElementById('galgje-feedback').innerText = `Fouten: ${galgjeMistakes} / 6`; if(galgjeMistakes >= 6) { document.getElementById('galgje-feedback').innerText = `Verloren! Het was: ${galgjeItem.romaji}`; document.getElementById('galgje-feedback').style.color = "var(--danger)"; document.getElementById('galgje-word-display').innerText = galgjeItem.romaji.split('').join(' '); document.getElementById('galgje-input').style.display = 'none'; document.getElementById('galgje-next-btn').style.display = 'inline-block'; document.getElementById('btn-galgje-hint').style.display = 'none'; } } updateGalgjeDisplay(); } function koopGalgjeHint() { if(ecoStatus.ants >= 5) { ecoStatus.ants -= 5; slaEcoSysteemOp(); document.getElementById('btn-galgje-hint').disabled = (ecoStatus.ants < 5); let onbekend = galgjeItem.romaji.split('').filter(c => !galgjeLetters.includes(c)); if(onbekend.length > 0) { galgjeLetters.push(onbekend[Math.floor(Math.random() * onbekend.length)]); updateGalgjeDisplay(); } } }
 
     let bossTime=60, bossStreak=0, bossInterval, bossItem=null;
     function startBossBattle() { if(ecoStatus.majors < 100) return; ecoStatus.majors -= 100; slaEcoSysteemOp(); switchScreen('screen-boss'); bossTime=60; bossStreak=0; document.getElementById('boss-streak').innerText = '0/20'; document.getElementById('boss-timer').innerText = bossTime; bossInterval = setInterval(()=>{ bossTime--; document.getElementById('boss-timer').innerText=bossTime; if(bossTime<=0) failBoss(); },1000); nextBossWord(); }
-
-    /* ===== Teken Training (optionele vrije-hand oefening) ===== */
-    let tekenCtx = null, tekenItem = null, tekenGhostAan = false, tekenActief = false;
-    function startTekenenInit() { switchScreen('screen-draw'); instellenTekenCanvas(); volgendTekenenItem(); }
-    function instellenTekenCanvas() {
-        const canvas = document.getElementById('draw-canvas'); if(canvas.dataset.klaar) { wisTekenCanvas(); return; }
-        canvas.dataset.klaar = '1'; tekenCtx = canvas.getContext('2d');
-        tekenCtx.lineWidth = 9; tekenCtx.lineCap = 'round'; tekenCtx.lineJoin = 'round';
-        const positie = (e) => { const rect = canvas.getBoundingClientRect(); const cx = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left; const cy = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top; return { x: cx * (canvas.width / rect.width), y: cy * (canvas.height / rect.height) }; };
-        canvas.addEventListener('pointerdown', (e) => { tekenActief = true; tekenCtx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--dark').trim() || '#2b2420'; const p = positie(e); tekenCtx.beginPath(); tekenCtx.moveTo(p.x, p.y); });
-        canvas.addEventListener('pointermove', (e) => { if(!tekenActief) return; const p = positie(e); tekenCtx.lineTo(p.x, p.y); tekenCtx.stroke(); });
-        window.addEventListener('pointerup', () => tekenActief = false);
-    }
-    function wisTekenCanvas() { const canvas = document.getElementById('draw-canvas'); if(tekenCtx) tekenCtx.clearRect(0, 0, canvas.width, canvas.height); }
-    function volgendTekenenItem() {
-        wisTekenCanvas(); const pool = [...kanaData, ...woordenData, ...kanjiData]; tekenItem = pool[Math.floor(Math.random() * pool.length)];
-        document.getElementById('draw-romaji').innerText = tekenItem.romaji + (tekenItem.betekenis ? ` (${tekenItem.betekenis})` : '');
-        document.getElementById('draw-ghost').innerText = tekenGhostAan ? tekenItem.kana : '';
-    }
-    function toggleTekenGhost() { tekenGhostAan = !tekenGhostAan; document.getElementById('draw-ghost').innerText = tekenGhostAan && tekenItem ? tekenItem.kana : ''; document.getElementById('btn-draw-ghost').innerText = tekenGhostAan ? '🙈 Verberg teken' : '👻 Toon teken'; }
-
-    /* ===== Vergelijk met een vriend ===== */
-    async function vergelijkVriend() {
-        const naam = document.getElementById('compare-input').value.trim().toLowerCase(); const resultEl = document.getElementById('compare-result'); if(!naam) return;
-        resultEl.innerHTML = '<p>Laden...</p>';
-        try {
-            const { data, error } = await supabaseClient.from('kana_users').select('*').eq('username', naam).maybeSingle(); if(error) throw error;
-            if(!data) { resultEl.innerHTML = '<p>⚠️ Geen speler gevonden met die gebruikersnaam.</p>'; return; }
-            const vEco = data.eco_status || {}; const vWoorden = Object.values(data.woorden_progress || {}).filter(s => s > 0).length; const vKana = Object.values(data.kana_progress || {}).filter(s => s > 0).length; const vXp = data.total_score || 0;
-            const jijWoorden = Object.values(progressieWoorden).filter(s => s > 0).length; const jijKana = Object.values(progressieKana).filter(s => s > 0).length; const jijXp = berekenTotaalScore();
-            resultEl.innerHTML = `<div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px;">
-                <div class="card"><h3>${huidigeGebruiker}</h3><div>🔥 ${ecoStatus.streak || 0}</div></div>
-                <div class="card"><h3>${naam}</h3><div>🔥 ${vEco.streak || 0}</div></div>
-                <div class="card"><h3>⭐ XP</h3><div>${jijXp}</div></div>
-                <div class="card"><h3>⭐ XP</h3><div>${vXp}</div></div>
-                <div class="card"><h3>📚 Woorden</h3><div>${jijWoorden}/${woordenData.length}</div></div>
-                <div class="card"><h3>📚 Woorden</h3><div>${vWoorden}/${woordenData.length}</div></div>
-                <div class="card"><h3>🔤 Kana</h3><div>${jijKana}/${kanaData.length}</div></div>
-                <div class="card"><h3>🔤 Kana</h3><div>${vKana}/${kanaData.length}</div></div>
-            </div>`;
-        } catch(e) { console.warn('Vergelijken mislukt:', e); resultEl.innerHTML = '<p>⚠️ Kan niet vergelijken. Controleer je verbinding.</p>'; }
-    }
-
-    /* =====================================================================================
-       GACHAPON — frontend
-       De RNG, het pity-systeem en de dupe-conversie gebeuren NIET hier, maar atomair in de
-       database (zie gachapon_schema.sql: open_gachapon / buy_gacha_item_with_petals). Deze
-       laag is bewust "dom": ze toont alleen wat de server teruggeeft en zet de knop tijdens
-       een lopende request op disabled — dat laatste is fijne UX, maar GEEN beveiliging.
-       De échte garantie tegen dubbelklik-exploits zit in de SQL "FOR UPDATE"-rijlock.
-       ===================================================================================== */
-    const GACHA_ICOON_PER_TYPE = { title: '🏷️', theme: '🎨', sticker: '🗾' };
-    const GACHA_RARITY_LABEL = { common: 'Common', rare: 'Rare', epic: 'Epic', legendary: 'LEGENDARY' };
-    const GACHA_THEMA_VARS = ['--background', '--card-bg', '--primary', '--text', '--border', '--input-bg', '--shu', '--muted'];
-
-    async function openGachaScreen() {
-        switchScreen('screen-gacha');
-        document.getElementById('gacha-result-area').innerHTML = '';
-        const capsule = document.getElementById('gacha-capsule'); capsule.className = 'gacha-capsule'; capsule.innerText = '🎁';
-        document.getElementById('gacha-collectie-container').innerHTML = '<p>Laden...</p>';
-        try {
-            const { data: userData, error } = await supabaseClient.from('kana_users').select('coins_100yen, sakura_petals, pulls_since_last_legendary').eq('username', huidigeGebruiker).maybeSingle();
-            if (error) throw error;
-            // BELANGRIJK: munten worden na elk goed antwoord "fire-and-forget" naar de cloud
-            // gestuurd (zie wijsGachaMuntToe) — die achtergrond-update kan trager zijn dan het
-            // navigeren naar dit scherm. Neem daarom altijd het HOOGSTE van lokaal/server-saldo,
-            // anders kan een trage netwerkronde je net-verdiende munten laten "verdwijnen".
-            if (userData) {
-                const serverSaldo = userData.coins_100yen || 0;
-                // Als het server-saldo duidelijk achterblijft EN er niets meer "in de lucht" hangt
-                // (dus geen lopende verzoeken meer die het nog konden goedmaken), is dit geen
-                // race-condition meer maar een ECHTE mislukte opslag — dat moet je weten, want
-                // wachten lost het dan niet op (zie ook wijsGachaMuntToe).
-                if (huidigeCoins - serverSaldo >= 5 && gachaMuntenInVlucht.length === 0) {
-                    toonMelding(`⚠️ Lokaal toont ${huidigeCoins} munten, maar de server heeft maar ${serverSaldo} opgeslagen. Controleer of het volledige SQL-script (incl. "increment_coins") in Supabase is uitgevoerd.`, 'error');
-                }
-                huidigeCoins = Math.max(huidigeCoins, serverSaldo); huidigePetals = userData.sakura_petals || 0; huidigPityCount = userData.pulls_since_last_legendary || 0; updateCoinBadge();
-            }
-            await laadGachaItems();
-            await laadGachaInventory();
-            updateGachaBalansWeergave();
-            toonGachaCollectie('title');
-        } catch (e) {
-            console.warn('Gachapon laden mislukt:', e);
-            toonMelding('⚠️ Kan de Gachapon-data niet laden. Controleer je verbinding.', 'error');
-        }
-    }
-    async function laadGachaItems() { if (gachaItemsCache) return; const { data, error } = await supabaseClient.from('gacha_items').select('*'); if (error) throw error; gachaItemsCache = data || []; }
-    async function laadGachaInventory() { const { data, error } = await supabaseClient.from('user_inventory').select('item_id').eq('username', huidigeGebruiker); if (error) throw error; gachaInventory = new Set((data || []).map(r => r.item_id)); }
-    function updateGachaBalansWeergave() { document.getElementById('gacha-coins').innerText = huidigeCoins; document.getElementById('gacha-petals').innerText = huidigePetals; document.getElementById('gacha-pity').innerText = huidigPityCount; }
-
-    async function trekGachapon() {
-        if (gachaBusy || !huidigeGebruiker) return;
-        if (huidigeCoins < 5) { toonMelding('Je hebt minimaal 5 munten nodig. Beantwoord meer vragen goed om ze te verdienen!', 'error'); return; }
-        gachaBusy = true;
-        const btn = document.getElementById('gacha-open-btn'); btn.disabled = true; btn.innerText = 'Trekken...';
-        document.getElementById('gacha-result-area').innerHTML = '';
-        try {
-            // Wacht eventuele nog lopende munten-toekenningen af (zie wijsGachaMuntToe) vóór we
-            // daadwerkelijk trekken, anders kan de server nog een ouder (lager) saldo zien dan
-            // wat je net hebt verdiend, en de trekking ten onrechte afwijzen.
-            if (gachaMuntenInVlucht.length > 0) { btn.innerText = 'Even bijwerken...'; await Promise.all(gachaMuntenInVlucht); btn.innerText = 'Trekken...'; }
-            const { data: result, error } = await supabaseClient.rpc('open_gachapon', { p_username: huidigeGebruiker });
-            if (error) throw error;
-            huidigeCoins = result.new_coin_balance; huidigePetals = result.new_petal_balance; huidigPityCount = result.new_pity_count;
-            updateCoinBadge(); updateGachaBalansWeergave();
-            if (!result.is_dupe) gachaInventory.add(result.item.id);
-            try { speelGachaReveal(result); } catch(e) { console.warn('Reveal-animatie kon niet starten (knop wordt vrijgegeven):', e); gachaBusy = false; btn.disabled = false; btn.innerText = 'Open Gachapon (🪙 5)'; }
-        } catch (e) {
-            console.warn('Gachapon trekken mislukt:', e);
-            gachaBusy = false; btn.disabled = false; btn.innerText = 'Open Gachapon (🪙 5)';
-            toonMelding(e?.message ? `⚠️ ${e.message}` : '⚠️ Trekken is mislukt. Controleer je verbinding en probeer opnieuw.', 'error');
-        }
-    }
-
-    // De 4-staps "juice"-state machine: (1) shake + (2) rarity-glow lopen gelijktijdig 1500ms,
-    // dan (3) een 200ms flash, dan (4) de reveal met een korte screen-shake.
-    function speelGachaReveal(result) {
-        const capsule = document.getElementById('gacha-capsule'); const flash = document.getElementById('gacha-flash'); const scherm = document.getElementById('screen-gacha'); const btn = document.getElementById('gacha-open-btn');
-        const rarity = result.rarity;
-        capsule.innerText = '🎁'; capsule.className = 'gacha-capsule is-shaking glow-' + rarity; flash.className = 'gacha-flash-overlay';
-
-        setTimeout(() => { // Stage 1+2 (1500ms) voorbij -> Stage 3: flash
-            try {
-                capsule.classList.remove('is-shaking');
-                flash.classList.add('active');
-            } catch(e) { console.warn('Gacha-animatie (flash) mislukt:', e); }
-            setTimeout(() => { // Stage 3 (200ms) voorbij -> Stage 4: reveal
-                try {
-                    flash.className = 'gacha-flash-overlay';
-                    capsule.className = 'gacha-capsule';
-                    capsule.innerText = GACHA_ICOON_PER_TYPE[result.item.item_type] || '🎁';
-                    scherm.classList.add('is-screenshaking');
-                    setTimeout(() => scherm.classList.remove('is-screenshaking'), 420);
-                    renderGachaResultKaart(result);
-                } catch(e) {
-                    console.warn('Gacha-reveal mislukt (knop wordt alvast weer vrijgegeven):', e);
-                } finally {
-                    // Wat er ook misgaat in de animatie/weergave: de knop en de busy-vlag
-                    // moeten ALTIJD weer vrijkomen, anders zit de speler vast.
-                    gachaBusy = false; btn.disabled = false; btn.innerText = 'Open Gachapon (🪙 5)';
-                }
-            }, 200);
-        }, 1500);
-    }
-
-    function renderGachaResultKaart(result) {
-        const area = document.getElementById('gacha-result-area'); const item = result.item;
-        let inhoud = `<span class="gacha-rarity-tag rarity-${result.rarity}">${GACHA_RARITY_LABEL[result.rarity]}</span><h3 style="margin:8px 0 4px;">${item.name}</h3>`;
-        if (item.description) inhoud += `<p style="font-size:13px; color:var(--muted); margin:0 0 6px;">${item.description}</p>`;
-        if (result.is_dupe) { inhoud += `<p style="font-weight:700; color:var(--budou);">Dubbel! Omgezet naar +${result.petals_gained} 🌸 Sakura Petals.</p>`; }
-        else { inhoud += `<p style="font-weight:700; color:var(--matsuba);">Nieuw in je verzameling! 🎉</p>`; speelGeluid('goed'); if (result.rarity === 'legendary' || result.rarity === 'epic') toonConfetti(); }
-        area.innerHTML = `<div class="gacha-result-card rarity-${result.rarity}">${inhoud}</div>`;
-        toonGachaCollectie(gachaActieveTab);
-    }
-
-    function gachaTabActief(tab) { ['titel', 'thema', 'sticker', 'shop'].forEach(t => document.getElementById('gacha-tab-' + t).classList.toggle('active', t === tab)); }
-
-    function toonGachaCollectie(type) {
-        gachaActieveTab = type; gachaTabActief(type === 'title' ? 'titel' : (type === 'theme' ? 'thema' : 'sticker'));
-        const container = document.getElementById('gacha-collectie-container'); if (!gachaItemsCache) { container.innerHTML = '<p>Laden...</p>'; return; }
-        const items = gachaItemsCache.filter(i => i.item_type === type).sort((a, b) => (a.payload?.prefecture_number || 0) - (b.payload?.prefecture_number || 0));
-        const grid = document.createElement('div'); grid.className = 'gacha-grid';
-        items.forEach(item => {
-            const owned = gachaInventory.has(item.id); const equipped = (type === 'title' && huidigeEquippedTitle === item.id) || (type === 'theme' && huidigeEquippedTheme === item.id);
-            const slot = document.createElement('div'); slot.className = 'gacha-slot' + (owned ? ' owned' : ' locked') + (equipped ? ' equipped' : '');
-            slot.title = owned ? item.name : '??? (nog niet ontgrendeld)';
-            slot.innerText = owned ? (GACHA_ICOON_PER_TYPE[type] || '🎁') : '❓';
-            if (owned) slot.onclick = () => gachaSlotKlik(item, type);
-            grid.appendChild(slot);
-        });
-        container.innerHTML = ''; container.appendChild(grid);
-        if (type === 'sticker') { const teller = document.createElement('p'); teller.style.cssText = 'font-size:12px; color:var(--muted); margin-top:8px;'; teller.innerText = `${items.filter(i => gachaInventory.has(i.id)).length} / ${items.length} prefecturen verzameld`; container.appendChild(teller); }
-    }
-
-    function gachaSlotKlik(item, type) { if (type === 'title' || type === 'theme') gachaEquip(item.id, type); else if (type === 'sticker') toonGachaStickerModal(item); }
-
-    async function gachaEquip(itemId, type) {
-        const veld = type === 'title' ? 'equipped_title' : 'equipped_theme';
-        try {
-            const { error } = await supabaseClient.from('kana_users').update({ [veld]: itemId }).eq('username', huidigeGebruiker); if (error) throw error;
-            if (type === 'title') { huidigeEquippedTitle = itemId; toonUitgerusteTitel(); } else { huidigeEquippedTheme = itemId; pasUitgerusteThemaToe(); }
-            toonMelding('✅ Uitgerust!', 'success'); toonGachaCollectie(type);
-        } catch (e) { console.warn('Uitrusten mislukt:', e); toonMelding('⚠️ Kon dit niet instellen. Controleer je verbinding.', 'error'); }
-    }
-
-    /* ===== Random event (eco-game) — niet-blokkerend modal i.p.v. confirm()/alert() ===== */
-    function toonRandomEventModal() {
-        const bestaand = document.getElementById('random-event-modal'); if (bestaand) bestaand.remove();
-        const overlay = document.createElement('div'); overlay.id = 'random-event-modal';
-        overlay.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.55); display:flex; align-items:center; justify-content:center; z-index:1003; padding:20px;';
-        overlay.innerHTML = `<div style="background:var(--card-bg); border-radius:16px; padding:20px; max-width:340px; text-align:center; border:2px solid var(--shu);">
-            <h3 style="margin-top:0;">🚨 Random Event!</h3>
-            <p style="font-size:14px;">De buren klagen over de mestlucht! Bakken schoonspoelen (-10 Water) of negeren (5 min geen groei)?</p>
-            <div style="display:flex; gap:8px; margin-top:14px;">
-                <button class="btn" style="margin:0; font-size:13px;" onclick="verwerkRandomEvent(true)">Schoonspoelen</button>
-                <button class="btn btn-secondary" style="margin:0; font-size:13px;" onclick="verwerkRandomEvent(false)">Negeren</button>
-            </div>
-        </div>`;
-        document.body.appendChild(overlay);
-    }
-    function verwerkRandomEvent(schoonspoelen) {
-        const modal = document.getElementById('random-event-modal'); if (modal) modal.remove();
-        if (schoonspoelen) {
-            if (berekenTotaalScore() - ecoStatus.spentWater >= 10) { ecoStatus.spentWater += 10; toonMelding('✅ Gelukt! De bakken zijn weer schoon.', 'success'); }
-            else { toonMelding('⚠️ Te weinig water! Stank blokkeert de groei voor 5 minuten.', 'error'); ecoStatus.stankTimer = Date.now() + 300000; }
-        } else {
-            ecoStatus.stankTimer = Date.now() + 300000;
-        }
-        slaEcoSysteemOp();
-    }
-    function toonGachaStickerModal(item) {
-        const p = item.payload || {}; const bestaand = document.getElementById('gacha-sticker-modal'); if (bestaand) bestaand.remove();
-        const overlay = document.createElement('div'); overlay.id = 'gacha-sticker-modal';
-        overlay.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.55); display:flex; align-items:center; justify-content:center; z-index:1002; padding:20px;';
-        const veiligJp = (p.story_jp || '').replace(/'/g, "\\'");
-        overlay.innerHTML = `<div style="background:var(--card-bg); border-radius:16px; padding:20px; max-width:380px; text-align:left; border:2px solid var(--border);">
-            <h3 style="margin-top:0; font-family:var(--font-display);">${item.name}</h3>
-            <span style="font-size:11px; color:var(--muted);">Prefectuur #${p.prefecture_number || '?'} · ${p.region || ''} · Niveau ${item.jlpt_level || ''}</span>
-            <p style="font-size:18px; margin:14px 0 4px; cursor:pointer;" onclick="spreekJapansUit('${veiligJp}')">${p.story_jp || ''} 🔊</p>
-            <p style="font-size:12px; color:var(--muted); margin:0 0 10px;">${p.story_romaji || ''}</p>
-            <p style="font-size:13px;">${p.story_nl || ''}</p>
-            <button class="btn btn-secondary" style="margin-top:10px;" onclick="document.getElementById('gacha-sticker-modal').remove()">Sluiten</button>
-        </div>`;
-        document.body.appendChild(overlay);
-    }
-
-    function toonGachaShop() {
-        gachaTabActief('shop'); const container = document.getElementById('gacha-collectie-container'); if (!gachaItemsCache) { container.innerHTML = '<p>Laden...</p>'; return; }
-        const volgorde = { common: 1, rare: 2, epic: 3, legendary: 4 };
-        const teKoop = gachaItemsCache.filter(i => !gachaInventory.has(i.id)).sort((a, b) => volgorde[a.rarity] - volgorde[b.rarity]);
-        if (teKoop.length === 0) { container.innerHTML = '<p style="font-size:13px; color:var(--muted);">Je hebt alles al verzameld! 🎉</p>'; return; }
-        container.innerHTML = `<p style="font-size:12px; color:var(--muted); margin-bottom:8px;">Koop een specifiek ontbrekend item voor 100 🌸 Sakura Petals (verkregen via dubbele trekkingen).</p>`;
-        teKoop.forEach(item => { const rij = document.createElement('div'); rij.className = 'market-row'; rij.innerHTML = `<span><span class="gacha-rarity-tag rarity-${item.rarity}" style="margin-right:6px;">${item.rarity}</span>${item.name}</span><button class="quiz-btn" style="font-size:11px; padding:4px 10px;" ${huidigePetals < 100 ? 'disabled' : ''} onclick="koopMetPetals('${item.id}')">🌸 100</button>`; container.appendChild(rij); });
-    }
-
-    let gachaShopBusy = false;
-    async function koopMetPetals(itemId) {
-        if (gachaShopBusy) return; gachaShopBusy = true;
-        try {
-            const { data: result, error } = await supabaseClient.rpc('buy_gacha_item_with_petals', { p_username: huidigeGebruiker, p_item_id: itemId }); if (error) throw error;
-            huidigePetals = result.new_petal_balance; gachaInventory.add(itemId); updateGachaBalansWeergave();
-            toonMelding(`🎉 ${result.item.name} gekocht!`, 'success'); toonGachaShop();
-        } catch (e) { console.warn('Aankoop mislukt:', e); toonMelding(e?.message ? `⚠️ ${e.message}` : '⚠️ Aankoop mislukt. Controleer je verbinding.', 'error'); }
-        finally { gachaShopBusy = false; }
-    }
-
-    async function toonUitgerusteTitel() {
-        const el = document.getElementById('equipped-title-display'); if (!huidigeEquippedTitle) { el.style.display = 'none'; return; }
-        try {
-            let naam = huidigeEquippedTitle;
-            if (gachaItemsCache) { const it = gachaItemsCache.find(i => i.id === huidigeEquippedTitle); if (it) naam = it.name; }
-            else { const { data } = await supabaseClient.from('gacha_items').select('name').eq('id', huidigeEquippedTitle).maybeSingle(); if (data) naam = data.name; }
-            el.innerText = `「${naam}」`; el.style.display = 'block';
-        } catch (e) { console.warn('Titel laden mislukt:', e); el.style.display = 'none'; }
-    }
-    async function pasUitgerusteThemaToe() {
-        GACHA_THEMA_VARS.forEach(v => document.documentElement.style.removeProperty(v)); if (!huidigeEquippedTheme) return;
-        try {
-            let payload = null;
-            if (gachaItemsCache) { const it = gachaItemsCache.find(i => i.id === huidigeEquippedTheme); if (it) payload = it.payload; }
-            if (!payload) { const { data } = await supabaseClient.from('gacha_items').select('payload').eq('id', huidigeEquippedTheme).maybeSingle(); if (data) payload = data.payload; }
-            if (payload && payload.css_vars) Object.entries(payload.css_vars).forEach(([k, v]) => document.documentElement.style.setProperty(k, v));
-        } catch (e) { console.warn('Thema laden mislukt:', e); }
-    }
-
     function nextBossWord() { bossItem = woordenData[Math.floor(Math.random()*woordenData.length)]; document.getElementById('boss-word').innerText = bossItem.kana; document.getElementById('boss-input').value = ''; document.getElementById('boss-input').focus(); }
-    function checkBossAnswer() { const inp = document.getElementById('boss-input').value.trim().toLowerCase(); laatsteActiviteit = Date.now(); if(inp === bossItem.romaji) { speelGeluid('goed'); bossStreak++; document.getElementById('boss-streak').innerText = bossStreak+'/20'; if(bossStreak >= 20) { winBoss(); } else { nextBossWord(); } } else { speelGeluid('fout'); failBoss(); } }
+    function checkBossAnswer() { const inp = document.getElementById('boss-input').value.trim().toLowerCase(); laatsteActiviteit = Date.now(); if(inp === bossItem.romaji) { bossStreak++; document.getElementById('boss-streak').innerText = bossStreak+'/20'; if(bossStreak >= 20) { winBoss(); } else { nextBossWord(); } } else { failBoss(); } }
     function failBoss() { clearInterval(bossInterval); alert("Mislukt! De bruidsvlucht is gecrasht. Je verliest 50 Majors."); ecoStatus.majors = Math.max(0, ecoStatus.majors - 50); slaEcoSysteemOp(); switchScreen('screen-menu'); }
     function winBoss() { clearInterval(bossInterval); alert("BRUIDSVLUCHT VOLTOOID! 👑 Je hebt een permanente 2x water multiplier!"); ecoStatus.bossBeaten = true; slaEcoSysteemOp(); switchScreen('screen-menu'); }
 
@@ -1127,49 +629,15 @@
         nestInterval = setInterval(() => { if(isActief()) { let dugAmt = ecoStatus.nest.filter(x=>x===1).length; if(dugAmt > 0 && ecoStatus.spentWater > -9999) { ecoStatus.spentWater -= (dugAmt * 0.1 * alateMult); slaEcoSysteemOp(); } } }, 60000);
     }
 
-    async function laadMarktplaats() { const lc = document.getElementById('market-offers-container'); if(!lc) return; try { const { data, error } = await supabaseClient.from('kana_market').select('*').order('id', { ascending: false }); if(error) throw error; if(!data || data.length === 0) { lc.innerHTML = `<span style="font-size:12px; color:var(--muted);">Geen actieve ruilverzoeken.</span>`; return; } lc.innerHTML = ""; data.forEach(o => { const r = document.createElement('div'); r.className = 'market-row'; let oI = o.offer_item === 'food' ? '🥒' : '🐜'; let dI = o.demand_item === 'food' ? '🥒' : '🐜'; let btn = o.username === huidigeGebruiker ? `<span style="color:var(--muted);">Jouw aanbod</span>` : `<button class="quiz-btn" style="font-size:11px; padding:4px 10px;" onclick="koopMarktAanbod(${o.id}, '${o.username}', '${o.offer_item}', ${o.offer_amount}, '${o.demand_item}', ${o.demand_amount})">Koop</button>`; r.innerHTML = `<span><b>${o.username}</b>: ${o.offer_amount}x ${oI} (Vraagt: ${o.demand_amount}x ${dI})</span>${btn}`; lc.appendChild(r); }); } catch(e) { console.warn('Marktplaats laden mislukt:', e); lc.innerHTML = `<span style="font-size:12px; color:var(--danger);">⚠️ Kan de marktplaats niet laden.</span>`; } }
-    async function plaatsMarktAanbod(type) {
-        if(type === 'food_for_ants') {
-            if(ecoStatus.foodKomkommer < 5) return alert("Minimaal 5 komkommers nodig.");
-            ecoStatus.foodKomkommer -= 5;
-            try { const { error } = await supabaseClient.from('kana_market').insert({ username: huidigeGebruiker, offer_item: 'food', offer_amount: 5, demand_item: 'ants', demand_amount: 10 }); if(error) throw error; }
-            catch(e) { console.warn('Aanbod plaatsen mislukt:', e); ecoStatus.foodKomkommer += 5; toonMelding('⚠️ Aanbod plaatsen is mislukt. Probeer het later opnieuw.', 'error'); return; }
-        } else {
-            if((ecoStatus.ants || 0) < 10) return alert("Minimaal 10 werksters nodig.");
-            ecoStatus.ants -= 10;
-            try { const { error } = await supabaseClient.from('kana_market').insert({ username: huidigeGebruiker, offer_item: 'ants', offer_amount: 10, demand_item: 'food', demand_amount: 5 }); if(error) throw error; }
-            catch(e) { console.warn('Aanbod plaatsen mislukt:', e); ecoStatus.ants += 10; toonMelding('⚠️ Aanbod plaatsen is mislukt. Probeer het later opnieuw.', 'error'); return; }
-        }
-        slaEcoSysteemOp(); setTimeout(laadMarktplaats, 400);
-    }
-    async function koopMarktAanbod(id, s, oI, oA, dI, dA) {
-        if(dI === 'food' && ecoStatus.foodKomkommer < dA) return alert("Niet genoeg komkommers.");
-        if(dI === 'ants' && (ecoStatus.ants || 0) < dA) return alert("Niet genoeg werksters.");
-        if(dI === 'food') ecoStatus.foodKomkommer -= dA; if(dI === 'ants') ecoStatus.ants -= dA;
-        if(oI === 'food') ecoStatus.foodKomkommer += oA; if(oI === 'ants') ecoStatus.ants = (ecoStatus.ants || 0) + oA;
-        try {
-            const { data: sData, error: selError } = await supabaseClient.from('kana_users').select('*').eq('username', s).maybeSingle(); if(selError) throw selError;
-            if(sData) { let sEco = sData.eco_status || {}; if(dI === 'food') sEco.foodKomkommer = (sEco.foodKomkommer || 0) + dA; if(dI === 'ants') sEco.ants = (sEco.ants || 0) + dA; const { error: upError } = await supabaseClient.from('kana_users').upsert({ username: s, eco_status: sEco, majors: sEco.majors || 0 }); if(upError) throw upError; }
-            const { error: delError } = await supabaseClient.from('kana_market').delete().eq('id', id); if(delError) throw delError;
-            slaEcoSysteemOp(); toonMelding('🎉 Transactie voltooid via de cloud!', 'success'); setTimeout(laadMarktplaats, 300);
-        } catch(e) {
-            console.warn('Transactie mislukt:', e);
-            if(dI === 'food') ecoStatus.foodKomkommer += dA; if(dI === 'ants') ecoStatus.ants -= dA;
-            if(oI === 'food') ecoStatus.foodKomkommer -= oA; if(oI === 'ants') ecoStatus.ants -= oA;
-            toonMelding('⚠️ Transactie is mislukt. Er is niets afgeschreven.', 'error');
-        }
-    }
+    async function laadMarktplaats() { const lc = document.getElementById('market-offers-container'); if(!lc) return; const { data, error } = await supabaseClient.from('kana_market').select('*').order('id', { ascending: false }); if(error || !data || data.length === 0) { lc.innerHTML = `<span style="font-size:12px; color:#7f8c8d;">Geen actieve ruilverzoeken.</span>`; return; } lc.innerHTML = ""; data.forEach(o => { const r = document.createElement('div'); r.className = 'market-row'; let oI = o.offer_item === 'food' ? '🥒' : '🐜'; let dI = o.demand_item === 'food' ? '🥒' : '🐜'; let btn = o.username === huidigeGebruiker ? `<span style="color:#7f8c8d;">Jouw aanbod</span>` : `<button class="quiz-btn" style="font-size:11px; padding:4px 10px;" onclick="koopMarktAanbod(${o.id}, '${o.username}', '${o.offer_item}', ${o.offer_amount}, '${o.demand_item}', ${o.demand_amount})">Koop</button>`; r.innerHTML = `<span><b>${o.username}</b>: ${o.offer_amount}x ${oI} (Vraagt: ${o.demand_amount}x ${dI})</span>${btn}`; lc.appendChild(r); }); }
+    async function plaatsMarktAanbod(type) { if(type === 'food_for_ants') { if(ecoStatus.foodKomkommer < 5) return alert("Minimaal 5 komkommers nodig."); ecoStatus.foodKomkommer -= 5; await supabaseClient.from('kana_market').insert({ username: huidigeGebruiker, offer_item: 'food', offer_amount: 5, demand_item: 'ants', demand_amount: 10 }); } else { if((ecoStatus.ants || 0) < 10) return alert("Minimaal 10 werksters nodig."); ecoStatus.ants -= 10; await supabaseClient.from('kana_market').insert({ username: huidigeGebruiker, offer_item: 'ants', offer_amount: 10, demand_item: 'food', demand_amount: 5 }); } slaEcoSysteemOp(); setTimeout(laadMarktplaats, 400); }
+    async function koopMarktAanbod(id, s, oI, oA, dI, dA) { if(dI === 'food' && ecoStatus.foodKomkommer < dA) return alert("Niet genoeg komkommers."); if(dI === 'ants' && (ecoStatus.ants || 0) < dA) return alert("Niet genoeg werksters."); if(dI === 'food') ecoStatus.foodKomkommer -= dA; if(dI === 'ants') ecoStatus.ants -= dA; if(oI === 'food') ecoStatus.foodKomkommer += oA; if(oI === 'ants') ecoStatus.ants = (ecoStatus.ants || 0) + oA; const { data: sData } = await supabaseClient.from('kana_users').select('*').eq('username', s).maybeSingle(); if(sData) { let sEco = sData.eco_status || {}; if(dI === 'food') sEco.foodKomkommer = (sEco.foodKomkommer || 0) + dA; if(dI === 'ants') sEco.ants = (sEco.ants || 0) + dA; await supabaseClient.from('kana_users').upsert({ username: s, eco_status: sEco, majors: sEco.majors || 0 }); } await supabaseClient.from('kana_market').delete().eq('id', id); slaEcoSysteemOp(); alert("Transactie voltooid via de cloud! 🎉"); setTimeout(laadMarktplaats, 300); }
 
     document.addEventListener('click', function() { laatsteActiviteit = Date.now(); });
     document.addEventListener('keydown', function(e) { laatsteActiviteit = Date.now(); const q = document.getElementById('screen-quiz').classList.contains('active'); const m = document.getElementById('quiz-choices-container').style.display === 'grid'; if (q && m && !isChecking) { if (e.key === '1') checkChoiceAnswer(0); if (e.key === '2') checkChoiceAnswer(1); if (e.key === '3') checkChoiceAnswer(2); if (e.key === '4') checkChoiceAnswer(3); } });
     
-    document.getElementById('quiz-input').addEventListener('keypress', function (e) { if (e.key === 'Enter') checkTextAnswer(); }); document.getElementById('drop-input').addEventListener('keypress', function (e) { if (e.key === 'Enter') checkDropAnswer(); }); document.getElementById('galgje-input').addEventListener('keypress', function (e) { if (e.key === 'Enter') checkGalgjeAnswer(); }); document.getElementById('boss-input').addEventListener('keypress', function (e) { if (e.key === 'Enter') checkBossAnswer(); }); document.getElementById('username-input').addEventListener('keypress', function (e) { if (e.key === 'Enter') login(); }); document.getElementById('compare-input').addEventListener('keypress', function (e) { if (e.key === 'Enter') vergelijkVriend(); });
+    document.getElementById('quiz-input').addEventListener('keypress', function (e) { if (e.key === 'Enter') checkTextAnswer(); }); document.getElementById('drop-input').addEventListener('keypress', function (e) { if (e.key === 'Enter') checkDropAnswer(); }); document.getElementById('galgje-input').addEventListener('keypress', function (e) { if (e.key === 'Enter') checkGalgjeAnswer(); }); document.getElementById('boss-input').addEventListener('keypress', function (e) { if (e.key === 'Enter') checkBossAnswer(); }); document.getElementById('username-input').addEventListener('keypress', function (e) { if (e.key === 'Enter') login(); });
     window.onload = function() { initVoorkeuren(); bouwGroepenSelectie(); };
-    if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-            navigator.serviceWorker.register('sw.js').catch((e) => console.warn('Service worker registratie mislukt (werkt alleen via https of localhost):', e));
-        });
-    }
 </script>
 </body>
 </html>
