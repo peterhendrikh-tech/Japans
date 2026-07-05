@@ -263,6 +263,7 @@
             <div class="radio-group" id="richting-group">
                 <label class="radio-label checked"><input type="radio" name="quiz-mode" value="normal" checked onchange="updateRadioStyles()"> Jap → Rom</label>
                 <label class="radio-label"><input type="radio" name="quiz-mode" value="reverse" onchange="updateRadioStyles()"> Rom → Jap</label>
+                <label class="radio-label"><input type="radio" name="quiz-mode" value="vertaling" onchange="updateRadioStyles()"> Jap → Vertaling</label>
                 <label class="radio-label"><input type="radio" name="quiz-mode" value="mix" onchange="updateRadioStyles()"> Mix</label> 
             </div>
             <p id="zinnen-note" style="font-size: 12px; color: var(--primary); display: none;">* Zinnen worden altijd gespeeld als meerkeuzevragen.</p>
@@ -676,7 +677,7 @@
         if(actieveQuizLijst.length === 0) return; document.getElementById('quiz-input').value = ''; document.getElementById('quiz-feedback').innerHTML = ''; document.getElementById('meaning-display').innerText = ''; isChecking = false; 
         const niveau = document.querySelector('input[name="quiz-niveau"]:checked').value; 
         const actieveProgressie = niveau === 'tekens' ? progressieKana : (niveau === 'woorden' ? progressieWoorden : (niveau === 'kanji' ? progressieKanji : progressieZinnen)); 
-        if (huigigSchermModus === "mix" && niveau !== 'zinnen') { huidigeVraagRichting = Math.random() < 0.5 ? "normal" : "reverse"; } 
+        if (huigigSchermModus === "mix" && niveau !== 'zinnen') { const heeftBetekenis = niveau === 'woorden' || niveau === 'kanji'; const opties = heeftBetekenis ? ["normal","reverse","vertaling"] : ["normal","reverse"]; huidigeVraagRichting = opties[Math.floor(Math.random()*opties.length)]; } 
         else { huidigeVraagRichting = huigigSchermModus; } 
         
         actieveQuizLijst.sort((a, b) => actieveProgressie[a.kana] - actieveProgressie[b.kana]);
@@ -708,13 +709,22 @@
             if (huidigTeken.betekenis) document.getElementById('meaning-display').innerText = huidigTeken.betekenis;
             document.getElementById('quiz-progress-title').innerText = niveau === 'woorden' ? 'Welk woord is dit?' : 'Welk teken is dit?';
             genereerMeerkeuzeKnoppen();
+        } else if (huidigeVraagRichting === 'vertaling') {
+            // Jap → Vertaling: toon kana, kies de Nederlandse betekenis — geen romaji zichtbaar
+            document.getElementById('char-display').style.fontSize = niveau === 'woorden' ? '38px' : '45px';
+            document.getElementById('char-display').innerText = huidigTeken.kana;
+            document.getElementById('quiz-text-input-container').style.display = 'none';
+            document.getElementById('quiz-choices-container').style.display = 'grid';
+            document.getElementById('meaning-display').innerText = '';
+            document.getElementById('quiz-progress-title').innerText = 'Wat betekent dit?';
+            genereerVertalingKnoppen();
         } else {
-            // Jap → Rom: toon het teken, laat de romaji intypen — betekenis pas tonen NA het antwoord
+            // Jap → Rom: toon het teken, laat de romaji intypen
             document.getElementById('char-display').style.fontSize = '45px';
             document.getElementById('char-display').innerText = huidigTeken.kana;
             document.getElementById('quiz-text-input-container').style.display = 'flex';
             document.getElementById('quiz-choices-container').style.display = 'none';
-            document.getElementById('meaning-display').innerText = '';  // verborgen houden tot na antwoord
+            document.getElementById('meaning-display').innerText = '';
             document.getElementById('quiz-progress-title').innerText = 'Wat is de romaji?';
         }
     }
@@ -736,19 +746,39 @@
     }
     
     function toonBetekenis() { if (huidigTeken && huidigTeken.betekenis) document.getElementById('meaning-display').innerText = huidigTeken.betekenis; }
+
+    function genereerVertalingKnoppen() {
+        const pool = actieveQuizLijst.filter(item => item.kana !== huidigTeken.kana && item.betekenis);
+        const fout = pool.sort(() => 0.5 - Math.random()).slice(0, 3);
+        huidigeMeerkeuzeLijst = [huidigTeken, ...fout].sort(() => 0.5 - Math.random());
+        const knoppen = document.querySelectorAll('#quiz-choices-container .choice-btn');
+        knoppen.forEach((knop, i) => {
+            const tekstEl = knop.querySelector('.choice-text');
+            tekstEl.innerText = huidigeMeerkeuzeLijst[i].betekenis || huidigeMeerkeuzeLijst[i].romaji;
+            tekstEl.style.fontSize = '15px';
+            knop.style.borderColor = 'var(--border)';
+            knop.style.background = 'var(--card-bg)';
+        });
+    }
+
     function checkTextAnswer() { if(isChecking || !huidigTeken) return; isChecking = true; laatsteActiviteit = Date.now(); const invoer = document.getElementById('quiz-input').value.trim().toLowerCase(); const feedback = document.getElementById('quiz-feedback'); toonBetekenis(); if (invoer === huidigTeken.romaji) { speelGeluid('goed'); feedback.innerHTML = `Goed zo! 🎉`; feedback.style.color = "var(--success)"; try { verhoogScore(huidigTeken); } catch(e) { console.warn('verhoogScore mislukt (quiz gaat door):', e); } setTimeout(volgendTeken, 1000); } else { speelGeluid('fout'); bijwerkenRepetitie(huidigTeken.kana, false); feedback.innerHTML = `Fout! Het was '${huidigTeken.romaji.toUpperCase()}'`; feedback.style.color = "var(--danger)"; setTimeout(volgendTeken, 2200); } }
     
     function checkChoiceAnswer(index) { 
         if(isChecking || !huidigTeken) return; isChecking = true; laatsteActiviteit = Date.now(); const feedback = document.getElementById('quiz-feedback'); 
         const niveau = document.querySelector('input[name="quiz-niveau"]:checked').value;
-        const gekozenWaarde = niveau === 'zinnen' ? huidigeMeerkeuzeLijst[index].betekenis : huidigeMeerkeuzeLijst[index].kana; 
-        const correcteWaarde = niveau === 'zinnen' ? huidigTeken.betekenis : huidigTeken.kana;
+        // Vertaling-modus: vergelijk op betekenis; zinnen ook op betekenis; anders op kana
+        const isVertaling = huidigeVraagRichting === 'vertaling';
+        const isZinnen = niveau === 'zinnen';
+        const gekozenWaarde = (isZinnen || isVertaling) ? huidigeMeerkeuzeLijst[index].betekenis : huidigeMeerkeuzeLijst[index].kana; 
+        const correcteWaarde = (isZinnen || isVertaling) ? huidigTeken.betekenis : huidigTeken.kana;
         
         const knoppen = document.querySelectorAll('#quiz-choices-container .choice-btn'); 
         knoppen.forEach(knop => { if (knop.querySelector('.choice-text').innerText === correcteWaarde) { knop.style.background = 'rgba(76, 107, 79, 0.18)'; knop.style.borderColor = 'var(--success)'; } }); 
         spreekJapansUit(huidigTeken.kana); 
+        // Na antwoord: toon romaji als extra info bij vertaling-modus
+        if (isVertaling) { document.getElementById('meaning-display').innerText = huidigTeken.romaji; }
         if (gekozenWaarde === correcteWaarde) { speelGeluid('goed'); feedback.innerHTML = `Goed zo! 🎉`; feedback.style.color = "var(--success)"; try { verhoogScore(huidigTeken); } catch(e) { console.warn('verhoogScore mislukt (quiz gaat door):', e); } setTimeout(volgendTeken, 1000); } 
-        else { speelGeluid('fout'); bijwerkenRepetitie(huidigTeken.kana, false); knoppen[index].style.background = 'rgba(171, 58, 53, 0.18)'; knoppen[index].style.borderColor = 'var(--danger)'; feedback.innerHTML = `Helaas! Dit is ${correcteWaarde}`; feedback.style.color = "var(--danger)"; setTimeout(volgendTeken, 2200); } 
+        else { speelGeluid('fout'); bijwerkenRepetitie(huidigTeken.kana, false); knoppen[index].style.background = 'rgba(171, 58, 53, 0.18)'; knoppen[index].style.borderColor = 'var(--danger)'; feedback.innerHTML = `Helaas! Het is: ${correcteWaarde}`; feedback.style.color = "var(--danger)"; setTimeout(volgendTeken, 2200); } 
     }
 
     function openStats() { switchScreen('screen-stats'); toonStatsTabel('tekens'); }
