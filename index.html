@@ -709,12 +709,12 @@
             document.getElementById('quiz-progress-title').innerText = niveau === 'woorden' ? 'Welk woord is dit?' : 'Welk teken is dit?';
             genereerMeerkeuzeKnoppen();
         } else {
-            // Jap → Rom: toon het teken, laat de romaji intypen
+            // Jap → Rom: toon het teken, laat de romaji intypen — betekenis pas tonen NA het antwoord
             document.getElementById('char-display').style.fontSize = '45px';
             document.getElementById('char-display').innerText = huidigTeken.kana;
             document.getElementById('quiz-text-input-container').style.display = 'flex';
             document.getElementById('quiz-choices-container').style.display = 'none';
-            if (huidigTeken.betekenis) document.getElementById('meaning-display').innerText = huidigTeken.betekenis;
+            document.getElementById('meaning-display').innerText = '';  // verborgen houden tot na antwoord
             document.getElementById('quiz-progress-title').innerText = 'Wat is de romaji?';
         }
     }
@@ -735,7 +735,8 @@
         }); 
     }
     
-    function checkTextAnswer() { if(isChecking || !huidigTeken) return; isChecking = true; laatsteActiviteit = Date.now(); const invoer = document.getElementById('quiz-input').value.trim().toLowerCase(); const feedback = document.getElementById('quiz-feedback'); if (invoer === huidigTeken.romaji) { speelGeluid('goed'); feedback.innerHTML = `Goed zo! 🎉`; feedback.style.color = "var(--success)"; try { verhoogScore(huidigTeken); } catch(e) { console.warn('verhoogScore mislukt (quiz gaat door):', e); } setTimeout(volgendTeken, 1000); } else { speelGeluid('fout'); bijwerkenRepetitie(huidigTeken.kana, false); feedback.innerHTML = `Fout! Het was '${huidigTeken.romaji.toUpperCase()}'`; feedback.style.color = "var(--danger)"; setTimeout(volgendTeken, 2200); } }
+    function toonBetekenis() { if (huidigTeken && huidigTeken.betekenis) document.getElementById('meaning-display').innerText = huidigTeken.betekenis; }
+    function checkTextAnswer() { if(isChecking || !huidigTeken) return; isChecking = true; laatsteActiviteit = Date.now(); const invoer = document.getElementById('quiz-input').value.trim().toLowerCase(); const feedback = document.getElementById('quiz-feedback'); toonBetekenis(); if (invoer === huidigTeken.romaji) { speelGeluid('goed'); feedback.innerHTML = `Goed zo! 🎉`; feedback.style.color = "var(--success)"; try { verhoogScore(huidigTeken); } catch(e) { console.warn('verhoogScore mislukt (quiz gaat door):', e); } setTimeout(volgendTeken, 1000); } else { speelGeluid('fout'); bijwerkenRepetitie(huidigTeken.kana, false); feedback.innerHTML = `Fout! Het was '${huidigTeken.romaji.toUpperCase()}'`; feedback.style.color = "var(--danger)"; setTimeout(volgendTeken, 2200); } }
     
     function checkChoiceAnswer(index) { 
         if(isChecking || !huidigTeken) return; isChecking = true; laatsteActiviteit = Date.now(); const feedback = document.getElementById('quiz-feedback'); 
