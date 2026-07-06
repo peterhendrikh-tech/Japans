@@ -206,6 +206,27 @@
             60% { transform: translate(-5px,-3px); }
             80% { transform: translate(5px,3px); }
         }
+        .rooster-kaart {
+            background: var(--primary);
+            border-radius: 10px;
+            padding: 10px 6px 8px;
+            display: flex; flex-direction: column; align-items: center; gap: 6px;
+            transition: background 0.2s;
+        }
+        .rooster-kaart .rooster-teken {
+            font-family: var(--font-display, serif);
+            font-size: 28px; font-weight: 700; color: #fff; line-height: 1;
+        }
+        .rooster-kaart input {
+            width: 100%; font-size: 13px; padding: 4px;
+            border-radius: 5px; border: none; text-align: center;
+            font-family: var(--font-mono, monospace);
+            background: rgba(255,255,255,0.9); color: #222; box-sizing: border-box;
+        }
+        .rooster-kaart input:disabled { background: rgba(255,255,255,0.6); }
+        .rooster-kaart.goed { background: var(--success); }
+        .rooster-kaart.fout { background: var(--danger); }
+        .rooster-correct { font-size: 11px; color: rgba(255,255,255,0.92); min-height: 14px; }
     </style>
 
 </head>
@@ -216,12 +237,12 @@
     <div id="screen-login" class="screen active">
         <h1>🇯🇵 Kana Master</h1>
         <p id="login-uitleg">Voer je gebruikersnaam en wachtwoord in.</p>
-        <div class="input-container" style="flex-direction: column; align-items: center; gap: 10px;">
-            <input type="text" id="username-input" placeholder="Gebruikersnaam..." autocomplete="off" style="max-width: 260px; width: 100%;">
-            <input type="password" id="password-input" placeholder="Wachtwoord..." autocomplete="current-password" style="max-width: 260px; width: 100%;">
-            <button class="quiz-btn" onclick="login()" id="login-btn" style="width: 260px; padding: 12px;">Start</button>
+        <div class="input-container" style="flex-direction:column;align-items:center;gap:10px;">
+            <input type="text" id="username-input" placeholder="Gebruikersnaam..." autocomplete="off" style="max-width:260px;width:100%;">
+            <input type="password" id="password-input" placeholder="Wachtwoord..." autocomplete="current-password" style="max-width:260px;width:100%;">
+            <button class="quiz-btn" onclick="login()" id="login-btn" style="width:260px;padding:12px;">Start</button>
         </div>
-        <div id="login-feedback" style="font-weight: bold; margin-top: 8px;"></div>
+        <div id="login-feedback" style="font-weight:bold;margin-top:8px;"></div>
     </div>
 
     
@@ -293,6 +314,7 @@
             <div class="selection-grid" id="groups-container"></div>
         </div>
         <button class="btn" onclick="startQuiz()">Start Quiz</button>
+        <button class="btn" style="background:var(--accent);" onclick="startRoosterQuiz()">📋 Rooster Quiz</button>
         <button class="btn btn-secondary" onclick="switchScreen('screen-menu')">Terug</button>
     </div>
 
@@ -330,6 +352,17 @@
             </table>
         </div>
         <button class="btn btn-secondary" onclick="switchScreen('screen-menu')" style="margin-top:15px;">Terug</button>
+    </div>
+
+    <div id="screen-rooster" class="screen">
+        <h2 id="rooster-titel">📋 Rooster Quiz</h2>
+        <p style="font-size:13px; color:var(--muted); margin-bottom:14px;">Typ de romaji voor elk teken. Druk Enter om door te gaan naar het volgende lege veld.</p>
+        <div id="rooster-grid" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(80px,1fr)); gap:10px; margin-bottom:18px;"></div>
+        <div id="rooster-resultaat" style="display:none; font-weight:bold; margin-bottom:12px; font-size:15px;"></div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <button class="btn" id="rooster-klaar-btn" onclick="checkRoosterAntwoorden()">✅ Klaar</button>
+            <button class="btn btn-secondary" onclick="switchScreen('screen-menu')">Stoppen</button>
+        </div>
     </div>
 
     <div id="screen-leaderboard" class="screen"><h2>🏆 Leaderboard</h2><div class="stats-tabs"><button class="tab-btn active" id="tab-lb-score" onclick="laadLeaderboard('score')">🏆 Punten</button><button class="tab-btn" id="tab-lb-majors" onclick="laadLeaderboard('majors')">🛡️ Majors</button></div><div style="max-height: 300px; overflow-y: auto; margin-bottom: 15px;"><div id="leaderboard-container"></div></div><button class="btn btn-secondary" onclick="switchScreen('screen-menu')">Terug naar Menu</button></div>
@@ -444,46 +477,13 @@
     function getMaxWater() { const nest = Array.isArray(ecoStatus.nest) ? ecoStatus.nest : []; return 100 + (nest.filter(x=>x===3).length * 50) + ((ecoStatus.alates||0) * 50); }
     function capWater() { let max = getMaxWater(); let tot = berekenTotaalScore(); if(tot - ecoStatus.spentWater > max) { ecoStatus.spentWater = tot - max; } }
 
-    async function hashWachtwoord(ww) {
-        const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(ww));
-        return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
-    }
-
-    function toonLoginFeedback(tekst, kleur) {
-        const el = document.getElementById('login-feedback');
-        el.innerText = tekst;
-        el.style.color = kleur || 'var(--danger)';
-    }
-
     async function login() {
-        const input = document.getElementById('username-input').value.trim().toLowerCase();
-        const ww = document.getElementById('password-input').value;
-        if (input.length < 3) { toonLoginFeedback('⚠️ Gebruikersnaam minimaal 3 tekens.'); return; }
-        if (ww.length < 4)    { toonLoginFeedback('⚠️ Wachtwoord minimaal 4 tekens.');    return; }
-        document.getElementById('login-btn').innerText = "Laden..."; document.getElementById('login-btn').disabled = true; toonLoginFeedback('');
+        const input = document.getElementById('username-input').value.trim().toLowerCase(); if(input.length < 3) return alert("Minimaal 3 tekens aub.");
+        document.getElementById('login-btn').innerText = "Laden..."; document.getElementById('login-btn').disabled = true; document.getElementById('login-feedback').innerText = '';
         try {
-            const { data, error } = await supabaseClient.from('kana_users').select('*').eq('username', input).maybeSingle();
-            if (error) throw error;
-
-            const ingetypteHash = await hashWachtwoord(ww);
-
-            if (!data || data.password_hash === null || data.password_hash === undefined) {
-                // Nieuw account of nog geen wachtwoord: opslaan in Supabase
-                const { error: pwErr } = await supabaseClient.from('kana_users')
-                    .upsert({ username: input, password_hash: ingetypteHash });
-                if (pwErr) throw pwErr;
-                toonLoginFeedback('✅ Wachtwoord ingesteld! Onthoud het goed.', 'var(--success)');
-                await new Promise(r => setTimeout(r, 1600));
-                toonLoginFeedback('');
-            } else if (data.password_hash !== ingetypteHash) {
-                toonLoginFeedback('❌ Onjuist wachtwoord.');
-                document.getElementById('login-btn').innerText = "Start";
-                document.getElementById('login-btn').disabled = false;
-                return;
-            }
-
-            // Wachtwoord correct — progressie inladen
-            if (data) {
+            const { data, error } = await supabaseClient.from('kana_users').select('*').eq('username', input).maybeSingle(); 
+            if(error) throw error;
+            if(data) { 
                 progressieKana = data.kana_progress || {}; progressieWoorden = data.woorden_progress || {}; progressieZinnen = data.zinnen_progress || {}; progressieKanji = data.kanji_progress || {}; ecoStatus = data.eco_status || {};
                 ecoStatus.spentWater = ecoStatus.spentWater || 0; ecoStatus.plantStage = ecoStatus.plantStage || 0; ecoStatus.ants = ecoStatus.ants || 0; ecoStatus.media = ecoStatus.media || 0; ecoStatus.majors = ecoStatus.majors || 0; ecoStatus.sproeier = ecoStatus.sproeier || false; ecoStatus.prestige = ecoStatus.prestige || false; ecoStatus.rushVragen = ecoStatus.rushVragen || 0; ecoStatus.plantType = ecoStatus.plantType || 'none'; ecoStatus.plantTarget = ecoStatus.plantTarget || 3; ecoStatus.aphids = ecoStatus.aphids || 0; ecoStatus.alates = ecoStatus.alates || 0;
                 if(!ecoStatus.nest || ecoStatus.nest.length !== 400) ecoStatus.nest = Array(400).fill(0);
@@ -497,7 +497,7 @@
         } catch (e) {
             console.error('Login mislukt:', e);
             document.getElementById('login-btn').innerText = "Start"; document.getElementById('login-btn').disabled = false;
-            toonLoginFeedback('⚠️ Kan geen verbinding maken met de cloud. Controleer je internetverbinding en probeer het opnieuw.');
+            document.getElementById('login-feedback').innerText = "⚠️ Kan geen verbinding maken met de cloud. Controleer je internetverbinding en probeer het opnieuw.";
         }
     }
     function bijwerkenStreak() {
@@ -635,7 +635,7 @@
 
     function switchScreen(id) { laatsteActiviteit = Date.now(); document.querySelectorAll('.screen').forEach(s => s.classList.remove('active')); document.getElementById(id).classList.add('active'); if(id === 'screen-quiz' && huidigeVraagRichting === 'normal') setTimeout(() => document.getElementById('quiz-input').focus(), 50); if(id === 'screen-drop') setTimeout(() => document.getElementById('drop-input').focus(), 50); if(id === 'screen-galgje') setTimeout(() => document.getElementById('galgje-input').focus(), 50); if(id === 'screen-boss') setTimeout(() => document.getElementById('boss-input').focus(), 50); if(id === 'screen-collector') { updateEcoUI(); laadMarktplaats(); tekenNest(); } if(id === 'screen-menu') updateMenuCards(); }
     function toepassenVoorkeuren() { document.documentElement.setAttribute('data-theme', huidigThema); document.documentElement.setAttribute('data-font', huidigFont); document.getElementById('audio-toggle').innerText = audioAan ? "🔊 Aan" : "🔇 Uit"; document.getElementById('theme-toggle').innerText = huidigThema === 'light' ? "🌙" : "☀️"; document.getElementById('font-toggle').innerText = huidigFont === 'japans' ? "あ Mincho" : "A Basis"; }
-    function initVoorkeuren() { if(localStorage.getItem('app_audio')) audioAan = localStorage.getItem('app_audio') === 'true'; if(localStorage.getItem('app_theme')) huidigThema = localStorage.getItem('app_theme'); if(localStorage.getItem('app_font')) huidigFont = localStorage.getItem('app_font'); toepassenVoorkeuren(); const usr = localStorage.getItem('kana_cloud_user'); if(usr){ document.getElementById('username-input').value = usr; setTimeout(() => document.getElementById('password-input').focus(), 100); } }
+    function initVoorkeuren() { if(localStorage.getItem('app_audio')) audioAan = localStorage.getItem('app_audio') === 'true'; if(localStorage.getItem('app_theme')) huidigThema = localStorage.getItem('app_theme'); if(localStorage.getItem('app_font')) huidigFont = localStorage.getItem('app_font'); toepassenVoorkeuren(); const usr = localStorage.getItem('kana_cloud_user'); if(usr){ document.getElementById('username-input').value = usr; login(); } }
     function toggleTheme() { huidigThema = huidigThema === 'light' ? 'dark' : 'light'; localStorage.setItem('app_theme', huidigThema); toepassenVoorkeuren(); }
     function toggleAudio() { audioAan = !audioAan; localStorage.setItem('app_audio', audioAan); toepassenVoorkeuren(); }
     function toggleFont() { huidigFont = huidigFont === 'japans' ? 'basis' : 'japans'; localStorage.setItem('app_font', huidigFont); toepassenVoorkeuren(); }
@@ -1201,7 +1201,81 @@
     document.addEventListener('click', function() { laatsteActiviteit = Date.now(); });
     document.addEventListener('keydown', function(e) { laatsteActiviteit = Date.now(); const q = document.getElementById('screen-quiz').classList.contains('active'); const m = document.getElementById('quiz-choices-container').style.display === 'grid'; if (q && m && !isChecking) { if (e.key === '1') checkChoiceAnswer(0); if (e.key === '2') checkChoiceAnswer(1); if (e.key === '3') checkChoiceAnswer(2); if (e.key === '4') checkChoiceAnswer(3); } });
     
-    document.getElementById('quiz-input').addEventListener('keypress', function (e) { if (e.key === 'Enter') checkTextAnswer(); }); document.getElementById('drop-input').addEventListener('keypress', function (e) { if (e.key === 'Enter') checkDropAnswer(); }); document.getElementById('galgje-input').addEventListener('keypress', function (e) { if (e.key === 'Enter') checkGalgjeAnswer(); }); document.getElementById('boss-input').addEventListener('keypress', function (e) { if (e.key === 'Enter') checkBossAnswer(); }); document.getElementById('username-input').addEventListener('keypress', function (e) { if (e.key === 'Enter') document.getElementById('password-input').focus(); }); document.getElementById('password-input').addEventListener('keypress', function (e) { if (e.key === 'Enter') login(); }); document.getElementById('compare-input').addEventListener('keypress', function (e) { if (e.key === 'Enter') vergelijkVriend(); });
+    function startRoosterQuiz() {
+        const niveau = document.querySelector('input[name="quiz-niveau"]:checked').value;
+        if (niveau === 'zinnen') { alert('Rooster Quiz werkt alleen bij Tekens, Woorden en Kanji.'); return; }
+        const selecties = [...document.querySelectorAll('#groups-container input:checked')].map(i => i.value);
+        if (selecties.length === 0) { alert('Selecteer eerst minstens één groep.'); return; }
+        if (niveau === 'tekens')       actieveQuizLijst = kanaData.filter(i => selecties.includes(i.groep));
+        else if (niveau === 'woorden') actieveQuizLijst = woordenData.filter(i => selecties.includes(i.thema));
+        else if (niveau === 'kanji')   actieveQuizLijst = kanjiData.filter(i => selecties.includes(i.thema));
+        if (actieveQuizLijst.length === 0) { alert('Geen tekens gevonden voor deze selectie.'); return; }
+
+        const lijst = [...actieveQuizLijst].sort(() => Math.random() - 0.5);
+        document.getElementById('rooster-titel').innerText =
+            niveau === 'woorden' ? '📋 Rooster Quiz — Woorden' :
+            niveau === 'kanji'   ? '📋 Rooster Quiz — Kanji' : '📋 Rooster Quiz — Tekens';
+        document.getElementById('rooster-resultaat').style.display = 'none';
+        document.getElementById('rooster-klaar-btn').style.display = 'inline-block';
+
+        const grid = document.getElementById('rooster-grid');
+        grid.innerHTML = '';
+        lijst.forEach((item, idx) => {
+            const kaart = document.createElement('div');
+            kaart.className = 'rooster-kaart';
+            kaart.dataset.romaji = item.romaji;
+            kaart.dataset.kana   = item.kana;
+            kaart.innerHTML = `
+                <div class="rooster-teken">${item.kana}</div>
+                <input type="text" placeholder="romaji" autocomplete="off"
+                       data-idx="${idx}" style="text-transform:lowercase;"
+                       onkeydown="roosterEnter(event,${idx})">
+                <div class="rooster-correct"></div>`;
+            grid.appendChild(kaart);
+        });
+        grid.querySelector('input').focus();
+        switchScreen('screen-rooster');
+    }
+
+    function roosterEnter(event, idx) {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        const velden = document.querySelectorAll('#rooster-grid input');
+        for (let i = idx + 1; i < velden.length; i++) {
+            if (velden[i].value.trim() === '') { velden[i].focus(); return; }
+        }
+        checkRoosterAntwoorden();
+    }
+
+    function checkRoosterAntwoorden() {
+        const kaarten = document.querySelectorAll('#rooster-grid .rooster-kaart');
+        let goed = 0, fout = 0;
+        kaarten.forEach(kaart => {
+            const invoer = kaart.querySelector('input').value.trim().toLowerCase();
+            const varianten = kaart.dataset.romaji.split('/').map(v => v.trim().toLowerCase());
+            const correctLabel = kaart.querySelector('.rooster-correct');
+            const isGoed = varianten.includes(invoer);
+            kaart.classList.remove('goed','fout');
+            kaart.querySelector('input').disabled = true;
+            if (isGoed) {
+                kaart.classList.add('goed'); correctLabel.innerText = ''; goed++;
+                try { verhoogScore(actieveQuizLijst.find(i => i.kana === kaart.dataset.kana)); } catch(e) {}
+            } else {
+                kaart.classList.add('fout');
+                correctLabel.innerText = kaart.dataset.romaji; fout++;
+                try { bijwerkenRepetitie(kaart.dataset.kana, false); } catch(e) {}
+            }
+        });
+        const pct = Math.round(goed / (goed + fout) * 100);
+        const res = document.getElementById('rooster-resultaat');
+        res.innerText = `${goed} van de ${goed+fout} goed (${pct}%)`;
+        res.style.color = pct >= 80 ? 'var(--success)' : pct >= 50 ? 'var(--accent)' : 'var(--danger)';
+        res.style.display = 'block';
+        document.getElementById('rooster-klaar-btn').style.display = 'none';
+        try { syncToSupabase(huidigeGebruiker); } catch(e) {}
+    }
+
+    document.getElementById('quiz-input').addEventListener('keypress', function (e) { if (e.key === 'Enter') checkTextAnswer(); }); document.getElementById('drop-input').addEventListener('keypress', function (e) { if (e.key === 'Enter') checkDropAnswer(); }); document.getElementById('galgje-input').addEventListener('keypress', function (e) { if (e.key === 'Enter') checkGalgjeAnswer(); }); document.getElementById('boss-input').addEventListener('keypress', function (e) { if (e.key === 'Enter') checkBossAnswer(); }); document.getElementById('username-input').addEventListener('keypress', function (e) { if (e.key === 'Enter') login(); }); document.getElementById('compare-input').addEventListener('keypress', function (e) { if (e.key === 'Enter') vergelijkVriend(); });
     window.onload = function() { initVoorkeuren(); bouwGroepenSelectie(); };
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
