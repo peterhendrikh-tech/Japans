@@ -215,8 +215,13 @@
     
     <div id="screen-login" class="screen active">
         <h1>🇯🇵 Kana Master</h1>
-        <p>Voer een gebruikersnaam in om te starten.</p>
-        <div class="input-container"><input type="text" id="username-input" placeholder="Naam..." autocomplete="off"><button class="quiz-btn" onclick="login()" id="login-btn">Start</button></div><div id="login-feedback" style="color: var(--danger); font-weight: bold;"></div>
+        <p id="login-uitleg">Voer je gebruikersnaam en wachtwoord in.</p>
+        <div class="input-container" style="flex-direction: column; align-items: center; gap: 10px;">
+            <input type="text" id="username-input" placeholder="Gebruikersnaam..." autocomplete="off" style="max-width: 260px; width: 100%;">
+            <input type="password" id="password-input" placeholder="Wachtwoord..." autocomplete="current-password" style="max-width: 260px; width: 100%;">
+            <button class="quiz-btn" onclick="login()" id="login-btn" style="width: 260px; padding: 12px;">Start</button>
+        </div>
+        <div id="login-feedback" style="font-weight: bold; margin-top: 8px;"></div>
     </div>
 
     
@@ -263,9 +268,6 @@
             <div class="radio-group" id="richting-group">
                 <label class="radio-label checked"><input type="radio" name="quiz-mode" value="normal" checked onchange="updateRadioStyles()"> Jap → Rom</label>
                 <label class="radio-label"><input type="radio" name="quiz-mode" value="reverse" onchange="updateRadioStyles()"> Rom → Jap</label>
-                <label class="radio-label"><input type="radio" name="quiz-mode" value="vertaling" onchange="updateRadioStyles()"> Jap → Vertaling</label>
-                <label class="radio-label"><input type="radio" name="quiz-mode" value="vertaling-reverse" onchange="updateRadioStyles()"> Vertaling → Jap</label>
-                <label class="radio-label"><input type="radio" name="quiz-mode" value="vertaling-typ" onchange="updateRadioStyles()"> Vertaling → Jap (typen)</label>
                 <label class="radio-label"><input type="radio" name="quiz-mode" value="mix" onchange="updateRadioStyles()"> Mix</label> 
             </div>
             <p id="zinnen-note" style="font-size: 12px; color: var(--primary); display: none;">* Zinnen worden altijd gespeeld als meerkeuzevragen.</p>
@@ -442,13 +444,46 @@
     function getMaxWater() { const nest = Array.isArray(ecoStatus.nest) ? ecoStatus.nest : []; return 100 + (nest.filter(x=>x===3).length * 50) + ((ecoStatus.alates||0) * 50); }
     function capWater() { let max = getMaxWater(); let tot = berekenTotaalScore(); if(tot - ecoStatus.spentWater > max) { ecoStatus.spentWater = tot - max; } }
 
+    async function hashWachtwoord(ww) {
+        const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(ww));
+        return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+    }
+
+    function toonLoginFeedback(tekst, kleur) {
+        const el = document.getElementById('login-feedback');
+        el.innerText = tekst;
+        el.style.color = kleur || 'var(--danger)';
+    }
+
     async function login() {
-        const input = document.getElementById('username-input').value.trim().toLowerCase(); if(input.length < 3) return alert("Minimaal 3 tekens aub.");
-        document.getElementById('login-btn').innerText = "Laden..."; document.getElementById('login-btn').disabled = true; document.getElementById('login-feedback').innerText = '';
+        const input = document.getElementById('username-input').value.trim().toLowerCase();
+        const ww = document.getElementById('password-input').value;
+        if (input.length < 3) { toonLoginFeedback('⚠️ Gebruikersnaam minimaal 3 tekens.'); return; }
+        if (ww.length < 4)    { toonLoginFeedback('⚠️ Wachtwoord minimaal 4 tekens.');    return; }
+        document.getElementById('login-btn').innerText = "Laden..."; document.getElementById('login-btn').disabled = true; toonLoginFeedback('');
         try {
-            const { data, error } = await supabaseClient.from('kana_users').select('*').eq('username', input).maybeSingle(); 
-            if(error) throw error;
-            if(data) { 
+            const { data, error } = await supabaseClient.from('kana_users').select('*').eq('username', input).maybeSingle();
+            if (error) throw error;
+
+            const ingetypteHash = await hashWachtwoord(ww);
+
+            if (!data || data.password_hash === null || data.password_hash === undefined) {
+                // Nieuw account of nog geen wachtwoord: opslaan in Supabase
+                const { error: pwErr } = await supabaseClient.from('kana_users')
+                    .upsert({ username: input, password_hash: ingetypteHash });
+                if (pwErr) throw pwErr;
+                toonLoginFeedback('✅ Wachtwoord ingesteld! Onthoud het goed.', 'var(--success)');
+                await new Promise(r => setTimeout(r, 1600));
+                toonLoginFeedback('');
+            } else if (data.password_hash !== ingetypteHash) {
+                toonLoginFeedback('❌ Onjuist wachtwoord.');
+                document.getElementById('login-btn').innerText = "Start";
+                document.getElementById('login-btn').disabled = false;
+                return;
+            }
+
+            // Wachtwoord correct — progressie inladen
+            if (data) {
                 progressieKana = data.kana_progress || {}; progressieWoorden = data.woorden_progress || {}; progressieZinnen = data.zinnen_progress || {}; progressieKanji = data.kanji_progress || {}; ecoStatus = data.eco_status || {};
                 ecoStatus.spentWater = ecoStatus.spentWater || 0; ecoStatus.plantStage = ecoStatus.plantStage || 0; ecoStatus.ants = ecoStatus.ants || 0; ecoStatus.media = ecoStatus.media || 0; ecoStatus.majors = ecoStatus.majors || 0; ecoStatus.sproeier = ecoStatus.sproeier || false; ecoStatus.prestige = ecoStatus.prestige || false; ecoStatus.rushVragen = ecoStatus.rushVragen || 0; ecoStatus.plantType = ecoStatus.plantType || 'none'; ecoStatus.plantTarget = ecoStatus.plantTarget || 3; ecoStatus.aphids = ecoStatus.aphids || 0; ecoStatus.alates = ecoStatus.alates || 0;
                 if(!ecoStatus.nest || ecoStatus.nest.length !== 400) ecoStatus.nest = Array(400).fill(0);
@@ -462,7 +497,7 @@
         } catch (e) {
             console.error('Login mislukt:', e);
             document.getElementById('login-btn').innerText = "Start"; document.getElementById('login-btn').disabled = false;
-            document.getElementById('login-feedback').innerText = "⚠️ Kan geen verbinding maken met de cloud. Controleer je internetverbinding en probeer het opnieuw.";
+            toonLoginFeedback('⚠️ Kan geen verbinding maken met de cloud. Controleer je internetverbinding en probeer het opnieuw.');
         }
     }
     function bijwerkenStreak() {
@@ -600,7 +635,7 @@
 
     function switchScreen(id) { laatsteActiviteit = Date.now(); document.querySelectorAll('.screen').forEach(s => s.classList.remove('active')); document.getElementById(id).classList.add('active'); if(id === 'screen-quiz' && huidigeVraagRichting === 'normal') setTimeout(() => document.getElementById('quiz-input').focus(), 50); if(id === 'screen-drop') setTimeout(() => document.getElementById('drop-input').focus(), 50); if(id === 'screen-galgje') setTimeout(() => document.getElementById('galgje-input').focus(), 50); if(id === 'screen-boss') setTimeout(() => document.getElementById('boss-input').focus(), 50); if(id === 'screen-collector') { updateEcoUI(); laadMarktplaats(); tekenNest(); } if(id === 'screen-menu') updateMenuCards(); }
     function toepassenVoorkeuren() { document.documentElement.setAttribute('data-theme', huidigThema); document.documentElement.setAttribute('data-font', huidigFont); document.getElementById('audio-toggle').innerText = audioAan ? "🔊 Aan" : "🔇 Uit"; document.getElementById('theme-toggle').innerText = huidigThema === 'light' ? "🌙" : "☀️"; document.getElementById('font-toggle').innerText = huidigFont === 'japans' ? "あ Mincho" : "A Basis"; }
-    function initVoorkeuren() { if(localStorage.getItem('app_audio')) audioAan = localStorage.getItem('app_audio') === 'true'; if(localStorage.getItem('app_theme')) huidigThema = localStorage.getItem('app_theme'); if(localStorage.getItem('app_font')) huidigFont = localStorage.getItem('app_font'); toepassenVoorkeuren(); const usr = localStorage.getItem('kana_cloud_user'); if(usr){ document.getElementById('username-input').value = usr; login(); } }
+    function initVoorkeuren() { if(localStorage.getItem('app_audio')) audioAan = localStorage.getItem('app_audio') === 'true'; if(localStorage.getItem('app_theme')) huidigThema = localStorage.getItem('app_theme'); if(localStorage.getItem('app_font')) huidigFont = localStorage.getItem('app_font'); toepassenVoorkeuren(); const usr = localStorage.getItem('kana_cloud_user'); if(usr){ document.getElementById('username-input').value = usr; setTimeout(() => document.getElementById('password-input').focus(), 100); } }
     function toggleTheme() { huidigThema = huidigThema === 'light' ? 'dark' : 'light'; localStorage.setItem('app_theme', huidigThema); toepassenVoorkeuren(); }
     function toggleAudio() { audioAan = !audioAan; localStorage.setItem('app_audio', audioAan); toepassenVoorkeuren(); }
     function toggleFont() { huidigFont = huidigFont === 'japans' ? 'basis' : 'japans'; localStorage.setItem('app_font', huidigFont); toepassenVoorkeuren(); }
@@ -679,7 +714,7 @@
         if(actieveQuizLijst.length === 0) return; document.getElementById('quiz-input').value = ''; document.getElementById('quiz-feedback').innerHTML = ''; document.getElementById('meaning-display').innerText = ''; isChecking = false; 
         const niveau = document.querySelector('input[name="quiz-niveau"]:checked').value; 
         const actieveProgressie = niveau === 'tekens' ? progressieKana : (niveau === 'woorden' ? progressieWoorden : (niveau === 'kanji' ? progressieKanji : progressieZinnen)); 
-        if (huigigSchermModus === "mix" && niveau !== 'zinnen') { const heeftBetekenis = niveau === 'woorden' || niveau === 'kanji'; const opties = heeftBetekenis ? ["normal","reverse","vertaling","vertaling-reverse","vertaling-typ"] : ["normal","reverse"]; huidigeVraagRichting = opties[Math.floor(Math.random()*opties.length)]; } 
+        if (huigigSchermModus === "mix" && niveau !== 'zinnen') { huidigeVraagRichting = Math.random() < 0.5 ? "normal" : "reverse"; } 
         else { huidigeVraagRichting = huigigSchermModus; } 
         
         actieveQuizLijst.sort((a, b) => actieveProgressie[a.kana] - actieveProgressie[b.kana]);
@@ -711,39 +746,13 @@
             if (huidigTeken.betekenis) document.getElementById('meaning-display').innerText = huidigTeken.betekenis;
             document.getElementById('quiz-progress-title').innerText = niveau === 'woorden' ? 'Welk woord is dit?' : 'Welk teken is dit?';
             genereerMeerkeuzeKnoppen();
-        } else if (huidigeVraagRichting === 'vertaling') {
-            // Jap → Vertaling: toon kana, kies de Nederlandse betekenis
-            document.getElementById('char-display').style.fontSize = niveau === 'woorden' ? '38px' : '45px';
-            document.getElementById('char-display').innerText = huidigTeken.kana;
-            document.getElementById('quiz-text-input-container').style.display = 'none';
-            document.getElementById('quiz-choices-container').style.display = 'grid';
-            document.getElementById('meaning-display').innerText = '';
-            document.getElementById('quiz-progress-title').innerText = 'Wat betekent dit?';
-            genereerVertalingKnoppen('betekenis');
-        } else if (huidigeVraagRichting === 'vertaling-reverse') {
-            // Vertaling → Jap: toon Nederlandse betekenis, kies het juiste kana
-            document.getElementById('char-display').style.fontSize = niveau === 'woorden' ? '28px' : '38px';
-            document.getElementById('char-display').innerText = huidigTeken.betekenis || huidigTeken.romaji;
-            document.getElementById('quiz-text-input-container').style.display = 'none';
-            document.getElementById('quiz-choices-container').style.display = 'grid';
-            document.getElementById('meaning-display').innerText = '';
-            document.getElementById('quiz-progress-title').innerText = 'Welk woord hoort hierbij?';
-            genereerVertalingKnoppen('kana');
-        } else if (huidigeVraagRichting === 'vertaling-typ') {
-            // Vertaling → Jap (typen): toon Nederlandse betekenis, typ het kana
-            document.getElementById('char-display').style.fontSize = niveau === 'woorden' ? '28px' : '38px';
-            document.getElementById('char-display').innerText = huidigTeken.betekenis || huidigTeken.romaji;
-            document.getElementById('quiz-text-input-container').style.display = 'flex';
-            document.getElementById('quiz-choices-container').style.display = 'none';
-            document.getElementById('meaning-display').innerText = '';
-            document.getElementById('quiz-progress-title').innerText = 'Typ het kana (in romaji):';
         } else {
             // Jap → Rom: toon het teken, laat de romaji intypen
             document.getElementById('char-display').style.fontSize = '45px';
             document.getElementById('char-display').innerText = huidigTeken.kana;
             document.getElementById('quiz-text-input-container').style.display = 'flex';
             document.getElementById('quiz-choices-container').style.display = 'none';
-            document.getElementById('meaning-display').innerText = '';
+            if (huidigTeken.betekenis) document.getElementById('meaning-display').innerText = huidigTeken.betekenis;
             document.getElementById('quiz-progress-title').innerText = 'Wat is de romaji?';
         }
     }
@@ -764,45 +773,17 @@
         }); 
     }
     
-    function toonBetekenis() { if (huidigTeken && huidigTeken.betekenis) document.getElementById('meaning-display').innerText = huidigTeken.betekenis; }
-
-    // antwoordVeld: 'betekenis' = knoppen tonen vertalingen, 'kana' = knoppen tonen kana-tekens
-    function genereerVertalingKnoppen(antwoordVeld) {
-        const pool = actieveQuizLijst.filter(item => item.kana !== huidigTeken.kana && item.betekenis);
-        const fout = pool.sort(() => 0.5 - Math.random()).slice(0, 3);
-        huidigeMeerkeuzeLijst = [huidigTeken, ...fout].sort(() => 0.5 - Math.random());
-        const knoppen = document.querySelectorAll('#quiz-choices-container .choice-btn');
-        knoppen.forEach((knop, i) => {
-            const tekstEl = knop.querySelector('.choice-text');
-            if (antwoordVeld === 'kana') {
-                tekstEl.innerText = huidigeMeerkeuzeLijst[i].kana;
-                tekstEl.style.fontSize = '22px';
-            } else {
-                tekstEl.innerText = huidigeMeerkeuzeLijst[i].betekenis || huidigeMeerkeuzeLijst[i].romaji;
-                tekstEl.style.fontSize = '15px';
-            }
-            knop.style.borderColor = 'var(--border)';
-            knop.style.background = 'var(--card-bg)';
-        });
-    }
-
-    function checkTextAnswer() { if(isChecking || !huidigTeken) return; isChecking = true; laatsteActiviteit = Date.now(); const invoer = document.getElementById('quiz-input').value.trim().toLowerCase(); const feedback = document.getElementById('quiz-feedback'); toonBetekenis(); if (invoer === huidigTeken.romaji) { speelGeluid('goed'); feedback.innerHTML = `Goed zo! 🎉`; feedback.style.color = "var(--success)"; try { verhoogScore(huidigTeken); } catch(e) { console.warn('verhoogScore mislukt (quiz gaat door):', e); } setTimeout(volgendTeken, 1000); } else { speelGeluid('fout'); bijwerkenRepetitie(huidigTeken.kana, false); feedback.innerHTML = `Fout! Het was '${huidigTeken.romaji.toUpperCase()}'`; feedback.style.color = "var(--danger)"; setTimeout(volgendTeken, 2200); } }
+    function checkTextAnswer() { if(isChecking || !huidigTeken) return; isChecking = true; laatsteActiviteit = Date.now(); const invoer = document.getElementById('quiz-input').value.trim().toLowerCase(); const feedback = document.getElementById('quiz-feedback'); if (invoer === huidigTeken.romaji) { speelGeluid('goed'); feedback.innerHTML = `Goed zo! 🎉`; feedback.style.color = "var(--success)"; try { verhoogScore(huidigTeken); } catch(e) { console.warn('verhoogScore mislukt (quiz gaat door):', e); } setTimeout(volgendTeken, 1000); } else { speelGeluid('fout'); bijwerkenRepetitie(huidigTeken.kana, false); feedback.innerHTML = `Fout! Het was '${huidigTeken.romaji.toUpperCase()}'`; feedback.style.color = "var(--danger)"; setTimeout(volgendTeken, 2200); } }
     
     function checkChoiceAnswer(index) { 
         if(isChecking || !huidigTeken) return; isChecking = true; laatsteActiviteit = Date.now(); const feedback = document.getElementById('quiz-feedback'); 
         const niveau = document.querySelector('input[name="quiz-niveau"]:checked').value;
-        const isVertaling = huidigeVraagRichting === 'vertaling' || huidigeVraagRichting === 'vertaling-reverse';
-        const gekozenWaarde = (niveau === 'zinnen' || huidigeVraagRichting === 'vertaling') ? huidigeMeerkeuzeLijst[index].betekenis
-                            : (huidigeVraagRichting === 'vertaling-reverse') ? huidigeMeerkeuzeLijst[index].kana
-                            : huidigeMeerkeuzeLijst[index].kana;
-        const correcteWaarde = (niveau === 'zinnen' || huidigeVraagRichting === 'vertaling') ? huidigTeken.betekenis
-                             : (huidigeVraagRichting === 'vertaling-reverse') ? huidigTeken.kana
-                             : huidigTeken.kana;
+        const gekozenWaarde = niveau === 'zinnen' ? huidigeMeerkeuzeLijst[index].betekenis : huidigeMeerkeuzeLijst[index].kana; 
+        const correcteWaarde = niveau === 'zinnen' ? huidigTeken.betekenis : huidigTeken.kana;
         
         const knoppen = document.querySelectorAll('#quiz-choices-container .choice-btn'); 
         knoppen.forEach(knop => { if (knop.querySelector('.choice-text').innerText === correcteWaarde) { knop.style.background = 'rgba(76, 107, 79, 0.18)'; knop.style.borderColor = 'var(--success)'; } }); 
-        spreekJapansUit(huidigTeken.kana);
-        if (isVertaling) document.getElementById('meaning-display').innerText = huidigTeken.romaji + (huidigTeken.betekenis ? '  ·  ' + huidigTeken.betekenis : '');
+        spreekJapansUit(huidigTeken.kana); 
         if (gekozenWaarde === correcteWaarde) { speelGeluid('goed'); feedback.innerHTML = `Goed zo! 🎉`; feedback.style.color = "var(--success)"; try { verhoogScore(huidigTeken); } catch(e) { console.warn('verhoogScore mislukt (quiz gaat door):', e); } setTimeout(volgendTeken, 1000); } 
         else { speelGeluid('fout'); bijwerkenRepetitie(huidigTeken.kana, false); knoppen[index].style.background = 'rgba(171, 58, 53, 0.18)'; knoppen[index].style.borderColor = 'var(--danger)'; feedback.innerHTML = `Helaas! Dit is ${correcteWaarde}`; feedback.style.color = "var(--danger)"; setTimeout(volgendTeken, 2200); } 
     }
@@ -1220,7 +1201,7 @@
     document.addEventListener('click', function() { laatsteActiviteit = Date.now(); });
     document.addEventListener('keydown', function(e) { laatsteActiviteit = Date.now(); const q = document.getElementById('screen-quiz').classList.contains('active'); const m = document.getElementById('quiz-choices-container').style.display === 'grid'; if (q && m && !isChecking) { if (e.key === '1') checkChoiceAnswer(0); if (e.key === '2') checkChoiceAnswer(1); if (e.key === '3') checkChoiceAnswer(2); if (e.key === '4') checkChoiceAnswer(3); } });
     
-    document.getElementById('quiz-input').addEventListener('keypress', function (e) { if (e.key === 'Enter') checkTextAnswer(); }); document.getElementById('drop-input').addEventListener('keypress', function (e) { if (e.key === 'Enter') checkDropAnswer(); }); document.getElementById('galgje-input').addEventListener('keypress', function (e) { if (e.key === 'Enter') checkGalgjeAnswer(); }); document.getElementById('boss-input').addEventListener('keypress', function (e) { if (e.key === 'Enter') checkBossAnswer(); }); document.getElementById('username-input').addEventListener('keypress', function (e) { if (e.key === 'Enter') login(); }); document.getElementById('compare-input').addEventListener('keypress', function (e) { if (e.key === 'Enter') vergelijkVriend(); });
+    document.getElementById('quiz-input').addEventListener('keypress', function (e) { if (e.key === 'Enter') checkTextAnswer(); }); document.getElementById('drop-input').addEventListener('keypress', function (e) { if (e.key === 'Enter') checkDropAnswer(); }); document.getElementById('galgje-input').addEventListener('keypress', function (e) { if (e.key === 'Enter') checkGalgjeAnswer(); }); document.getElementById('boss-input').addEventListener('keypress', function (e) { if (e.key === 'Enter') checkBossAnswer(); }); document.getElementById('username-input').addEventListener('keypress', function (e) { if (e.key === 'Enter') document.getElementById('password-input').focus(); }); document.getElementById('password-input').addEventListener('keypress', function (e) { if (e.key === 'Enter') login(); }); document.getElementById('compare-input').addEventListener('keypress', function (e) { if (e.key === 'Enter') vergelijkVriend(); });
     window.onload = function() { initVoorkeuren(); bouwGroepenSelectie(); };
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
