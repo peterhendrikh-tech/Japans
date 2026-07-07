@@ -874,13 +874,16 @@
             document.getElementById('quiz-progress-title').innerText = niveau === 'woorden' ? 'Welk woord is dit?' : 'Welk teken is dit?';
             genereerMeerkeuzeKnoppen();
         } else {
-            // Vertaalmodus Jap → NL: toon het teken, typ de Nederlandse betekenis (romaji als uitspraakhint).
+            // Vertaalmodus Jap → NL: toon het teken, typ de Nederlandse betekenis (uitspraak achter een knop, voor wie eerst zelf wil proberen).
             if (huidigeAntwoordVorm === 'betekenis') {
                 document.getElementById('char-display').style.fontSize = '45px';
                 document.getElementById('char-display').innerText = huidigTeken.kana;
                 document.getElementById('quiz-text-input-container').style.display = 'flex';
                 document.getElementById('quiz-choices-container').style.display = 'none';
-                document.getElementById('meaning-display').innerText = huidigTeken.romaji ? `uitspraak: ${huidigTeken.romaji}` : '';
+                document.getElementById('quiz-input').placeholder = 'vertaling (NL)';
+                document.getElementById('meaning-display').innerHTML = huidigTeken.romaji
+                    ? `<button type="button" class="control-btn" style="font-size:12px;" onclick="this.parentElement.innerText = 'uitspraak: ' + huidigTeken.romaji;">🔉 Toon uitspraak</button>`
+                    : '';
                 document.getElementById('quiz-progress-title').innerText = 'Wat is de betekenis (NL)?';
                 return;
             }
@@ -889,6 +892,7 @@
             document.getElementById('char-display').innerText = huidigTeken.kana;
             document.getElementById('quiz-text-input-container').style.display = 'flex';
             document.getElementById('quiz-choices-container').style.display = 'none';
+            document.getElementById('quiz-input').placeholder = 'romaji';
             if (huidigTeken.betekenis) document.getElementById('meaning-display').innerText = huidigTeken.betekenis;
             document.getElementById('quiz-progress-title').innerText = 'Wat is de romaji?';
         }
