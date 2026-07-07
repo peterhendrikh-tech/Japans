@@ -355,6 +355,14 @@
             </div>
             <p id="zinnen-note" style="font-size: 12px; color: var(--primary); display: none;">* Zinnen worden altijd gespeeld als meerkeuzevragen.</p>
         </div>
+        <div class="settings-section" id="antwoord-sectie" style="display:none;">
+            <h4>Oefenen met:</h4>
+            <div class="radio-group" id="antwoord-group">
+                <label class="radio-label checked"><input type="radio" name="quiz-antwoord" value="romaji" checked onchange="updateRadioStyles()"> Romaji</label>
+                <label class="radio-label"><input type="radio" name="quiz-antwoord" value="betekenis" onchange="updateRadioStyles()"> Vertaling (NL)</label>
+            </div>
+            <p style="font-size: 12px; color: var(--muted); margin: 6px 0 0;">Bij Vertaling: Jap → NL is typen, NL → Jap is meerkeuze.</p>
+        </div>
         <div class="settings-section" id="jlpt-niveau-sectie" style="display:none;">
             <h4>JLPT-niveau <span style="font-size:11px; font-weight:normal; color:var(--muted);">(optioneel)</span>:</h4>
             <div class="radio-group" id="jlpt-niveau-group">
@@ -555,6 +563,9 @@
     // Kanji hebben vaak meerdere lezingen, genoteerd als 'shi/yon'. Elke variant telt als goed antwoord.
     function romajiVarianten(item) { return String(item.romaji).split('/').map(v => v.trim().toLowerCase()).filter(Boolean); }
     function isRomajiGoed(invoer, item) { return romajiVarianten(item).includes(String(invoer).trim().toLowerCase()); }
+    // Nederlandse betekenissen kunnen ook varianten bevatten ('goedkoop / veilig', 'leuk vinden / goed'): elke variant telt.
+    function betekenisVarianten(item) { return String(item.betekenis || '').split(/[\/,]/).map(v => v.trim().toLowerCase()).filter(Boolean); }
+    function isBetekenisGoed(invoer, item) { const inp = String(invoer).trim().toLowerCase(); return inp !== '' && (betekenisVarianten(item).includes(inp) || inp === String(item.betekenis || '').trim().toLowerCase()); }
 
     const SUPABASE_URL = 'https://ozdddwddmotojuorgltb.supabase.co';
     const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im96ZGRkd2RkbW90b2p1b3JnbHRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE1OTcxOTUsImV4cCI6MjA5NzE3MzE5NX0.qcxZGh_-XYnNoFC4rPw4nfCM6wOGRhziYWpoadwTV7A';
@@ -562,7 +573,7 @@
 
     let huidigeGebruiker = null; 
     let progressieKana = {}; let progressieWoorden = {}; let progressieZinnen = {}; let progressieKanji = {}; 
-    let actieveQuizLijst = []; let huigigSchermModus = "normal"; let huidigeVraagRichting = "normal"; let huidigTeken = null; let isChecking = false; let huidigeStatsTab = 'tekens'; let huidigeMeerkeuzeLijst = []; let audioAan = true; let huidigThema = "light"; let huidigFont = "japans";
+    let actieveQuizLijst = []; let huigigSchermModus = "normal"; let huidigeVraagRichting = "normal"; let huidigeAntwoordVorm = "romaji"; let huidigTeken = null; let isChecking = false; let huidigeStatsTab = 'tekens'; let huidigeMeerkeuzeLijst = []; let audioAan = true; let huidigThema = "light"; let huidigFont = "japans";
     let huidigeCoins = 0, huidigePetals = 0, huidigPityCount = 0, huidigeEquippedTitle = null, huidigeEquippedTheme = null;
     let gachaItemsCache = null, gachaInventory = new Set(), gachaBusy = false, gachaActieveTab = 'title';
     let ecoStatus = { spentWater: 0, plantStage: 0, ants: 0, media: 0, majors: 0, sproeier: false, prestige: false, rushVragen: 0, plantType: 'none', plantTarget: 3, aphids: 0, nest: Array(400).fill(0), bossBeaten: false, stankTimer: 0, eventCooldown: 0, foodKomkommer: 0, foodBroccoli: 0, foodMuismeloen: 0, alates: 0 };
@@ -763,6 +774,8 @@
             document.getElementById('zinnen-note').style.display = 'none';
         }
         document.getElementById('jlpt-niveau-sectie').style.display = (niveau === 'tekens') ? 'none' : 'block';
+        // 'Oefenen met' (romaji of NL-vertaling) alleen bij Woorden en Kanji: kana-tekens hebben geen betekenis-veld.
+        document.getElementById('antwoord-sectie').style.display = (niveau === 'woorden' || niveau === 'kanji') ? 'block' : 'none';
     }
     
     function toggleCheckboxes(status) { document.querySelectorAll('#groups-container input').forEach(cb => { cb.checked = status; cb.parentElement.classList.toggle('checked', status); }); }
@@ -816,6 +829,10 @@
         const actieveProgressie = niveau === 'tekens' ? progressieKana : (niveau === 'woorden' ? progressieWoorden : (niveau === 'kanji' ? progressieKanji : progressieZinnen)); 
         if (huigigSchermModus === "mix" && niveau !== 'zinnen') { huidigeVraagRichting = Math.random() < 0.5 ? "normal" : "reverse"; } 
         else { huidigeVraagRichting = huigigSchermModus; } 
+        // Oefenen met romaji of de Nederlandse vertaling? (alleen relevant bij Woorden/Kanji)
+        huidigeAntwoordVorm = (niveau === 'woorden' || niveau === 'kanji')
+            ? (document.querySelector('input[name="quiz-antwoord"]:checked')?.value || 'romaji')
+            : 'romaji';
         
         actieveQuizLijst.sort((a, b) => actieveProgressie[a.kana] - actieveProgressie[b.kana]);
         const groep = srsGroep(niveau); const srsData = (ecoStatus.srs && ecoStatus.srs[groep]) || {}; const nu = Date.now();
@@ -838,6 +855,16 @@
             document.getElementById('quiz-progress-title').innerText = `Wat is de vertaling van deze zin?`; 
             genereerMeerkeuzeKnoppen();
         } else if (huidigeVraagRichting === 'reverse') {
+            // Vertaalmodus NL → Jap: toon de Nederlandse betekenis, kies het juiste teken/woord uit meerkeuze.
+            if (huidigeAntwoordVorm === 'betekenis') {
+                document.getElementById('char-display').style.fontSize = '28px';
+                document.getElementById('char-display').innerText = huidigTeken.betekenis;
+                document.getElementById('quiz-text-input-container').style.display = 'none';
+                document.getElementById('quiz-choices-container').style.display = 'grid';
+                document.getElementById('quiz-progress-title').innerText = niveau === 'woorden' ? 'Welk woord betekent dit?' : 'Welke kanji betekent dit?';
+                genereerMeerkeuzeKnoppen();
+                return;
+            }
             // Rom → Jap: toon de romaji (en eventueel de betekenis), laat het juiste teken kiezen uit meerkeuze
             document.getElementById('char-display').style.fontSize = '45px';
             document.getElementById('char-display').innerText = huidigTeken.romaji;
@@ -847,6 +874,16 @@
             document.getElementById('quiz-progress-title').innerText = niveau === 'woorden' ? 'Welk woord is dit?' : 'Welk teken is dit?';
             genereerMeerkeuzeKnoppen();
         } else {
+            // Vertaalmodus Jap → NL: toon het teken, typ de Nederlandse betekenis (romaji als uitspraakhint).
+            if (huidigeAntwoordVorm === 'betekenis') {
+                document.getElementById('char-display').style.fontSize = '45px';
+                document.getElementById('char-display').innerText = huidigTeken.kana;
+                document.getElementById('quiz-text-input-container').style.display = 'flex';
+                document.getElementById('quiz-choices-container').style.display = 'none';
+                document.getElementById('meaning-display').innerText = huidigTeken.romaji ? `uitspraak: ${huidigTeken.romaji}` : '';
+                document.getElementById('quiz-progress-title').innerText = 'Wat is de betekenis (NL)?';
+                return;
+            }
             // Jap → Rom: toon het teken, laat de romaji intypen
             document.getElementById('char-display').style.fontSize = '45px';
             document.getElementById('char-display').innerText = huidigTeken.kana;
@@ -873,7 +910,7 @@
         }); 
     }
     
-    function checkTextAnswer() { if(isChecking || !huidigTeken) return; isChecking = true; laatsteActiviteit = Date.now(); const invoer = document.getElementById('quiz-input').value.trim().toLowerCase(); const feedback = document.getElementById('quiz-feedback'); if (isRomajiGoed(invoer, huidigTeken)) { speelGeluid('goed'); feedback.innerHTML = `Goed zo! 🎉`; feedback.style.color = "var(--success)"; try { verhoogScore(huidigTeken); } catch(e) { console.warn('verhoogScore mislukt (quiz gaat door):', e); } setTimeout(volgendTeken, 1000); } else { speelGeluid('fout'); bijwerkenRepetitie(huidigTeken.kana, false); feedback.innerHTML = `Fout! Het was '${huidigTeken.romaji.toUpperCase()}'`; feedback.style.color = "var(--danger)"; setTimeout(volgendTeken, 2200); } }
+    function checkTextAnswer() { if(isChecking || !huidigTeken) return; isChecking = true; laatsteActiviteit = Date.now(); const invoer = document.getElementById('quiz-input').value.trim().toLowerCase(); const feedback = document.getElementById('quiz-feedback'); const isGoed = (huidigeAntwoordVorm === 'betekenis') ? isBetekenisGoed(invoer, huidigTeken) : isRomajiGoed(invoer, huidigTeken); if (isGoed) { speelGeluid('goed'); feedback.innerHTML = `Goed zo! 🎉`; feedback.style.color = "var(--success)"; try { verhoogScore(huidigTeken); } catch(e) { console.warn('verhoogScore mislukt (quiz gaat door):', e); } setTimeout(volgendTeken, 1000); } else { speelGeluid('fout'); bijwerkenRepetitie(huidigTeken.kana, false); const juisteAntwoord = (huidigeAntwoordVorm === 'betekenis') ? huidigTeken.betekenis : huidigTeken.romaji.toUpperCase(); feedback.innerHTML = `Fout! Het was '${juisteAntwoord}'`; feedback.style.color = "var(--danger)"; setTimeout(volgendTeken, 2200); } }
     
     function checkChoiceAnswer(index) { 
         if(isChecking || !huidigTeken) return; isChecking = true; laatsteActiviteit = Date.now(); const feedback = document.getElementById('quiz-feedback'); 
