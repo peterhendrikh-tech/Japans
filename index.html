@@ -227,6 +227,68 @@
         .rooster-kaart.goed { background: var(--success); }
         .rooster-kaart.fout { background: var(--danger); }
         .rooster-correct { font-size: 11px; color: rgba(255,255,255,0.92); min-height: 14px; }
+
+        /* ===== Polish-laag: verfijning van het bestaande washi/sumi-thema ===== */
+
+        /* Zachte overgang bij schermwissel */
+        @keyframes scherm-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+        .screen.active { animation: scherm-in .25s ease-out; }
+
+        /* Koppen: subtiele vermiljoen penseelstreep onder h2 (schermtitels) */
+        .screen h2 { display: inline-block; padding-bottom: 6px; position: relative; }
+        .screen h2::after {
+            content: ""; position: absolute; left: 8%; right: 8%; bottom: 0; height: 3px; border-radius: 3px;
+            background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--shu) 65%, transparent) 18%, color-mix(in srgb, var(--shu) 65%, transparent) 82%, transparent);
+        }
+
+        /* Knoppen: tastbaarder — indrukken voelbaar, kleuren iets levendiger op hover */
+        .btn:active:not(:disabled) { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,0.12); }
+        .choice-btn { transition: border-color .15s, background .15s, transform .1s; }
+        .choice-btn:hover:not(:disabled) { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 6%, var(--card-bg)); }
+        .choice-btn:active:not(:disabled) { transform: scale(.98); }
+        .radio-label:hover, .checkbox-label:hover { border-color: color-mix(in srgb, var(--primary) 55%, var(--border)); }
+        .tab-btn { transition: background .15s, color .15s; }
+        .control-btn:hover { border-color: var(--primary); }
+
+        /* Toetsenbord-navigatie: duidelijk zichtbare focus op alles wat klikbaar/invulbaar is */
+        :is(.btn, .choice-btn, .quiz-btn, .tab-btn, .control-btn, .eco-btn, .play-audio-btn, input[type="text"]):focus-visible,
+        :is(.radio-label, .checkbox-label):focus-within {
+            outline: 3px solid color-mix(in srgb, var(--kincha) 75%, transparent);
+            outline-offset: 2px;
+        }
+        input[type="text"]:focus { border-color: var(--primary); }
+
+        /* Feedback ("Goed zo!" / "Helaas!") krijgt een kleine pop zodat je oog ernaartoe getrokken wordt */
+        @keyframes feedback-pop { 0% { transform: scale(.85); opacity: 0; } 60% { transform: scale(1.06); } 100% { transform: scale(1); opacity: 1; } }
+        .feedback:not(:empty) { animation: feedback-pop .3s ease-out; }
+
+        /* Statistiek-tabellen: zebra-strepen en rij-highlight, leest veel rustiger */
+        .stats-table tbody tr:nth-child(even) { background: color-mix(in srgb, var(--ai) 4%, transparent); }
+        .stats-table tbody tr:hover { background: color-mix(in srgb, var(--kincha) 10%, transparent); }
+        .level-bar { height: 12px; border-radius: 6px; }
+        .level-fill { transition: width .4s ease; }
+
+        /* Scrollbars in washi-stijl (container + selectiegrids) */
+        .container::-webkit-scrollbar, .selection-grid::-webkit-scrollbar { width: 8px; }
+        .container::-webkit-scrollbar-thumb, .selection-grid::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+        .container::-webkit-scrollbar-thumb:hover, .selection-grid::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+        .container, .selection-grid { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+
+        /* Mobiel: iets compacter zodat er meer quiz op het scherm past */
+        @media (max-width: 480px) {
+            body { padding: 8px; }
+            .container { padding: 20px 14px; border-radius: 14px; max-height: 97vh; }
+            .character-display { font-size: 54px; height: 78px; margin: 10px 0; }
+            .choice-btn { padding: 12px 8px; font-size: 19px; }
+            .checkbox-label { width: calc(50% - 6px); font-size: 12px; }
+            .radio-group, .selection-grid { gap: 6px; }
+            .eco-dashboard { grid-template-columns: 1fr; }
+        }
+
+        /* Toegankelijkheid: wie liever geen beweging heeft, krijgt die ook niet */
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+        }
     </style>
 
 </head>
@@ -456,6 +518,36 @@
 
 <script src="data.js"></script>
 <script>
+    // ===== Data-zelfcheck & robuustheidsguard =====
+    // Ontbrekende datasets crashen de app niet meer, maar geven een duidelijke melding.
+    (function controleerData() {
+        const verwacht = ['kanaData', 'woordenData', 'zinnenData', 'kanjiData', 'kanaMnemonics'];
+        const ontbrekend = [];
+        verwacht.forEach(naam => {
+            if (typeof window[naam] === 'undefined') {
+                window[naam] = naam === 'kanaMnemonics' ? {} : [];
+                ontbrekend.push(naam);
+            }
+        });
+        const versie = (typeof DATA_VERSION !== 'undefined') ? DATA_VERSION : 'onbekend (oude data.js!)';
+        console.info(`Kana Master data-versie: ${versie}`,
+            { kana: kanaData.length, woorden: woordenData.length, zinnen: zinnenData.length, kanji: kanjiData.length });
+        if (ontbrekend.length) {
+            console.warn('Ontbrekende datasets (lege fallback actief):', ontbrekend);
+            document.addEventListener('DOMContentLoaded', () => {
+                const balk = document.createElement('div');
+                balk.style.cssText = 'background:#ab3a35;color:#fff;padding:10px 14px;font-weight:bold;text-align:center;position:sticky;top:0;z-index:9999;';
+                balk.textContent = `⚠️ data.js is verouderd of onvolledig: ${ontbrekend.join(', ')} ontbreekt. Vervang data.js en herlaad (evt. cache legen).`;
+                document.body.prepend(balk);
+            });
+        }
+    })();
+
+    // ===== Romaji-varianten =====
+    // Kanji hebben vaak meerdere lezingen, genoteerd als 'shi/yon'. Elke variant telt als goed antwoord.
+    function romajiVarianten(item) { return String(item.romaji).split('/').map(v => v.trim().toLowerCase()).filter(Boolean); }
+    function isRomajiGoed(invoer, item) { return romajiVarianten(item).includes(String(invoer).trim().toLowerCase()); }
+
     const SUPABASE_URL = 'https://ozdddwddmotojuorgltb.supabase.co';
     const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im96ZGRkd2RkbW90b2p1b3JnbHRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE1OTcxOTUsImV4cCI6MjA5NzE3MzE5NX0.qcxZGh_-XYnNoFC4rPw4nfCM6wOGRhziYWpoadwTV7A';
     const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -490,7 +582,7 @@
                 ecoStatus.bossBeaten = ecoStatus.bossBeaten || false; ecoStatus.stankTimer = ecoStatus.stankTimer || 0; ecoStatus.eventCooldown = ecoStatus.eventCooldown || 0; ecoStatus.foodKomkommer = ecoStatus.foodKomkommer || 0; ecoStatus.foodBroccoli = ecoStatus.foodBroccoli || 0; ecoStatus.foodMuismeloen = ecoStatus.foodMuismeloen || 0;
                 huidigeCoins = data.coins_100yen || 0; huidigPityCount = data.pulls_since_last_legendary || 0; huidigePetals = data.sakura_petals || 0; huidigeEquippedTitle = data.equipped_title || null; huidigeEquippedTheme = data.equipped_theme || null;
             } else { progressieKana = {}; progressieWoorden = {}; progressieZinnen = {}; progressieKanji = {}; huidigeCoins = 0; huidigPityCount = 0; huidigePetals = 0; huidigeEquippedTitle = null; huidigeEquippedTheme = null; }
-            kanaData.forEach(i => { if(progressieKana[i.kana] === undefined) progressieKana[i.kana] = 0; }); woordenData.forEach(i => { if(progressieWoorden[i.kana] === undefined) progressieWoorden[i.kana] = 0; }); if(typeof zinnenData !== 'undefined') zinnenData.forEach(i => { if(progressieZinnen[i.kana] === undefined) progressieZinnen[i.kana] = 0; }); if(typeof kanjiData !== 'undefined') kanjiData.forEach(i => { if(progressieKanji[i.kana] === undefined) progressieKanji[i.kana] = 0; });
+            kanaData.forEach(i => { if(progressieKana[i.kana] === undefined) progressieKana[i.kana] = 0; }); woordenData.forEach(i => { if(progressieWoorden[i.kana] === undefined) progressieWoorden[i.kana] = 0; }); zinnenData.forEach(i => { if(progressieZinnen[i.kana] === undefined) progressieZinnen[i.kana] = 0; }); kanjiData.forEach(i => { if(progressieKanji[i.kana] === undefined) progressieKanji[i.kana] = 0; });
             huidigeGebruiker = input; bijwerkenStreak(); localStorage.setItem('kana_cloud_user', input); document.getElementById('display-username').innerText = input.charAt(0).toUpperCase() + input.slice(1); document.getElementById('login-btn').innerText = "Start"; document.getElementById('login-btn').disabled = false; laatsteActiviteit = Date.now(); capWater(); startPassieveInkomens(); switchScreen('screen-menu'); updateMenuCards();
             updateCoinBadge(); toonUitgerusteTitel(); pasUitgerusteThemaToe();
             await syncToSupabase(input);
@@ -567,7 +659,7 @@
     
     function verhoogScore(item) {
         // De kern (score + spaced-repetition) staat BUITEN de try, en gebeurt dus altijd.
-        laatsteActiviteit = Date.now(); let progDB = progressieKana; if (woordenData.includes(item)) progDB = progressieWoorden; if (typeof kanjiData !== 'undefined' && kanjiData.includes(item)) progDB = progressieKanji; if (typeof zinnenData !== 'undefined' && zinnenData.includes(item)) progDB = progressieZinnen;
+        laatsteActiviteit = Date.now(); const bevatKana = (lijst) => lijst.some(d => d.kana === item.kana); let progDB = progressieKana; if (bevatKana(woordenData)) progDB = progressieWoorden; if (bevatKana(kanjiData)) progDB = progressieKanji; if (bevatKana(zinnenData)) progDB = progressieZinnen;
         if(progDB[item.kana] < 5) progDB[item.kana] += 1;
         bijwerkenRepetitie(item.kana, true);
         // Alles hieronder is een bijeffect (munten, eco-game-economie, random events). Een fout
@@ -673,7 +765,7 @@
         const niveau = document.querySelector('input[name="quiz-niveau"]:checked').value; const container = document.getElementById('groups-container'); container.innerHTML = ''; const typeKnoppen = document.querySelectorAll('.hira-kata-btn'); let uniekeItems = []; 
         if (niveau === 'tekens') { uniekeItems = [...new Set(kanaData.map(item => item.groep))]; typeKnoppen.forEach(btn => btn.style.display = 'inline-block'); } 
         else if (niveau === 'woorden') { uniekeItems = [...new Set(woordenData.map(item => item.thema))]; typeKnoppen.forEach(btn => btn.style.display = 'none'); } 
-        else if (niveau === 'kanji') { typeKnoppen.forEach(btn => btn.style.display = 'none'); if (typeof kanjiData === 'undefined') { container.innerHTML = '<p style="color:var(--danger); font-weight:bold;">⚠️ Kanji-data ontbreekt. Controleer of data.js up-to-date is (vervang dat bestand op je hosting/server en herlaad de pagina).</p>'; return; } uniekeItems = [...new Set(kanjiData.map(item => item.thema))]; } 
+        else if (niveau === 'kanji') { typeKnoppen.forEach(btn => btn.style.display = 'none'); if (kanjiData.length === 0) { container.innerHTML = '<p style="color:var(--danger); font-weight:bold;">⚠️ Kanji-data ontbreekt. Controleer of data.js up-to-date is (vervang dat bestand op je hosting/server en herlaad de pagina).</p>'; return; } uniekeItems = [...new Set(kanjiData.map(item => item.thema))]; } 
         else if (niveau === 'zinnen') { uniekeItems = [...new Set(zinnenData.map(item => item.thema))]; typeKnoppen.forEach(btn => btn.style.display = 'none'); } 
         let laatsteSectie = null;
         uniekeItems.forEach(itemNaam => { 
@@ -697,7 +789,7 @@
         huigigSchermModus = document.querySelector('input[name="quiz-mode"]:checked').value; 
         const actieveSelecties = Array.from(document.querySelectorAll('#groups-container input:checked')).map(cb => cb.value); 
         if(actieveSelecties.length === 0) { alert('Selecteer minimaal één groep of thema!'); return; } 
-        if (niveau === 'kanji' && typeof kanjiData === 'undefined') { alert('⚠️ Kanji-data ontbreekt. Controleer of data.js up-to-date is (vervang dat bestand op je hosting/server en herlaad de pagina).'); return; }
+        if (niveau === 'kanji' && kanjiData.length === 0) { alert('⚠️ Kanji-data ontbreekt. Controleer of data.js up-to-date is (vervang dat bestand op je hosting/server en herlaad de pagina).'); return; }
         if (niveau === 'tekens') { actieveQuizLijst = kanaData.filter(item => actieveSelecties.includes(item.groep)); } 
         else if (niveau === 'woorden') { actieveQuizLijst = woordenData.filter(item => actieveSelecties.includes(item.thema)); } 
         else if (niveau === 'kanji') { actieveQuizLijst = kanjiData.filter(item => actieveSelecties.includes(item.thema)); } 
@@ -773,7 +865,7 @@
         }); 
     }
     
-    function checkTextAnswer() { if(isChecking || !huidigTeken) return; isChecking = true; laatsteActiviteit = Date.now(); const invoer = document.getElementById('quiz-input').value.trim().toLowerCase(); const feedback = document.getElementById('quiz-feedback'); if (invoer === huidigTeken.romaji) { speelGeluid('goed'); feedback.innerHTML = `Goed zo! 🎉`; feedback.style.color = "var(--success)"; try { verhoogScore(huidigTeken); } catch(e) { console.warn('verhoogScore mislukt (quiz gaat door):', e); } setTimeout(volgendTeken, 1000); } else { speelGeluid('fout'); bijwerkenRepetitie(huidigTeken.kana, false); feedback.innerHTML = `Fout! Het was '${huidigTeken.romaji.toUpperCase()}'`; feedback.style.color = "var(--danger)"; setTimeout(volgendTeken, 2200); } }
+    function checkTextAnswer() { if(isChecking || !huidigTeken) return; isChecking = true; laatsteActiviteit = Date.now(); const invoer = document.getElementById('quiz-input').value.trim().toLowerCase(); const feedback = document.getElementById('quiz-feedback'); if (isRomajiGoed(invoer, huidigTeken)) { speelGeluid('goed'); feedback.innerHTML = `Goed zo! 🎉`; feedback.style.color = "var(--success)"; try { verhoogScore(huidigTeken); } catch(e) { console.warn('verhoogScore mislukt (quiz gaat door):', e); } setTimeout(volgendTeken, 1000); } else { speelGeluid('fout'); bijwerkenRepetitie(huidigTeken.kana, false); feedback.innerHTML = `Fout! Het was '${huidigTeken.romaji.toUpperCase()}'`; feedback.style.color = "var(--danger)"; setTimeout(volgendTeken, 2200); } }
     
     function checkChoiceAnswer(index) { 
         if(isChecking || !huidigTeken) return; isChecking = true; laatsteActiviteit = Date.now(); const feedback = document.getElementById('quiz-feedback'); 
@@ -792,7 +884,7 @@
     function toonStatsTabel(tab) { 
         document.getElementById('tab-tekens').classList.toggle('active', tab === 'tekens'); document.getElementById('tab-woorden').classList.toggle('active', tab === 'woorden'); document.getElementById('tab-kanji').classList.toggle('active', tab === 'kanji'); document.getElementById('tab-zinnen').classList.toggle('active', tab === 'zinnen');
         const tbody = document.getElementById('stats-table-body'); tbody.innerHTML = ''; 
-        if (tab === 'kanji' && typeof kanjiData === 'undefined') { tbody.innerHTML = '<tr><td colspan="3" style="color:var(--danger); font-weight:bold; padding:14px;">⚠️ Kanji-data ontbreekt. Controleer of data.js up-to-date is (vervang dat bestand op je hosting/server en herlaad de pagina).</td></tr>'; return; }
+        if (tab === 'kanji' && kanjiData.length === 0) { tbody.innerHTML = '<tr><td colspan="3" style="color:var(--danger); font-weight:bold; padding:14px;">⚠️ Kanji-data ontbreekt. Controleer of data.js up-to-date is (vervang dat bestand op je hosting/server en herlaad de pagina).</td></tr>'; return; }
         let basisData = kanaData; let progressie = progressieKana;
         if(tab === 'woorden') { basisData = woordenData; progressie = progressieWoorden; }
         if(tab === 'kanji') { basisData = kanjiData; progressie = progressieKanji; }
@@ -803,8 +895,8 @@
     async function laadLeaderboard(type) { switchScreen('screen-leaderboard'); document.getElementById('tab-lb-score').classList.toggle('active', type === 'score'); document.getElementById('tab-lb-majors').classList.toggle('active', type === 'majors'); const container = document.getElementById('leaderboard-container'); container.innerHTML = "<p>Laden...</p>"; const orderField = type === 'score' ? 'total_score' : 'majors'; try { const { data, error } = await supabaseClient.from('kana_users').select(`username, ${orderField}`).order(orderField, { ascending: false }).limit(10); if (error) throw error; container.innerHTML = ""; data.forEach((user, index) => { let medaille = `${index + 1}.`; if (index === 0) medaille = "🥇"; if (index === 1) medaille = "🥈"; if (index === 2) medaille = "🥉"; const val = user[orderField]; const suffix = type === 'score' ? 'pts' : 'Majors 🛡️'; const item = document.createElement('div'); item.style.padding = "10px"; item.style.borderBottom = "1px solid var(--border)"; item.style.display = "flex"; item.style.justifyContent = "space-between"; item.style.fontWeight = "bold"; if(user.username === huidigeGebruiker) { item.style.backgroundColor = "color-mix(in srgb, var(--primary) 10%, transparent)"; item.style.color = "var(--primary)"; } item.innerHTML = `<span>${medaille} <span style="text-transform: capitalize;">${user.username}</span></span><span>${val || 0} ${suffix}</span>`; container.appendChild(item); }); } catch(e) { console.warn('Leaderboard laden mislukt:', e); container.innerHTML = "<p>⚠️ Kan het leaderboard niet laden. Controleer je verbinding.</p>"; } }
 
     let memFlipped=false, memLock=false, mem1, mem2, memMoves=0, memMatches=0; function startMemoryGame() { switchScreen('screen-memory'); const grid = document.getElementById('memory-grid'); grid.innerHTML = ''; memMoves = 0; memMatches = 0; document.getElementById('memory-moves').innerText = memMoves; document.getElementById('memory-score').innerText = memMatches; let pool = [...kanaData].sort(()=>0.5-Math.random()).slice(0,8); let cards = []; pool.forEach(i => { cards.push({t: i.kana, m: i.kana}); cards.push({t: i.romaji, m: i.kana}); }); cards.sort(()=>0.5-Math.random()).forEach(c => { let el = document.createElement('div'); el.className = 'memory-card'; el.innerText = c.t; el.dataset.m = c.m; el.onclick = flipMemoryCard; grid.appendChild(el); }); } function flipMemoryCard() { if(memLock || this === mem1) return; this.classList.add('flipped'); laatsteActiviteit = Date.now(); if(!memFlipped) { memFlipped = true; mem1 = this; return; } mem2 = this; memMoves++; document.getElementById('memory-moves').innerText = memMoves; checkMemoryMatch(); } function checkMemoryMatch() { if(mem1.dataset.m === mem2.dataset.m) { spreekJapansUit(mem1.dataset.m); mem1.onclick = null; mem2.onclick = null; mem1.classList.add('matched'); mem2.classList.add('matched'); memMatches++; document.getElementById('memory-score').innerText = memMatches; [memFlipped, memLock, mem1, mem2] = [false, false, null, null]; if(memMatches === 8) { setTimeout(()=>alert(`Gewonnen in ${memMoves} zetten!`), 500); } } else { memLock = true; setTimeout(() => { mem1.classList.remove('flipped'); mem2.classList.remove('flipped'); [memFlipped, memLock, mem1, mem2] = [false, false, null, null]; }, 1000); } }
-    let dropInterval, dropY=-50, dropSpeed=1.5, dropLives=3, dropScore=0, actieveDropItem=null, dropFrozen=false; function startKanaDropInit() { switchScreen('screen-drop'); dropLives = 3; dropScore = 0; dropSpeed = 1.5; document.getElementById('drop-score').innerText = dropScore; document.getElementById('drop-lives').innerText = '❤️'.repeat(dropLives); document.getElementById('btn-drop-freeze').disabled = ((ecoStatus.ants||0) < 5); startNieuweDrop(); } function startNieuweDrop() { clearInterval(dropInterval); document.getElementById('drop-input').value = ''; const allItems = [...kanaData, ...woordenData, ...kanjiData]; actieveDropItem = allItems[Math.floor(Math.random() * allItems.length)]; dropY = -50; document.getElementById('drop-item').innerText = actieveDropItem.kana; document.getElementById('drop-item').style.top = dropY + 'px'; dropInterval = setInterval(() => { if(!dropFrozen) { dropY += dropSpeed; document.getElementById('drop-item').style.top = dropY + 'px'; } if(dropY > 230) { clearInterval(dropInterval); speelGeluid('fout'); dropLives--; document.getElementById('drop-lives').innerText = '❤️'.repeat(dropLives); if(dropLives <= 0) { alert(`Game Over! Score: ${dropScore}`); stopKanaDrop(); } else { startNieuweDrop(); } } }, 20); } function checkDropAnswer() { const inp = document.getElementById('drop-input').value.trim().toLowerCase(); laatsteActiviteit = Date.now(); if(inp === actieveDropItem.romaji) { speelGeluid('goed'); dropScore++; document.getElementById('drop-score').innerText = dropScore; dropSpeed += 0.1; spreekJapansUit(actieveDropItem.kana); verhoogScore(actieveDropItem); startNieuweDrop(); } else { document.getElementById('drop-input').value = ''; } } function stopKanaDrop() { clearInterval(dropInterval); switchScreen('screen-menu'); } function koopDropFreeze() { if(ecoStatus.ants >= 5 && !dropFrozen) { ecoStatus.ants -= 5; slaEcoSysteemOp(); document.getElementById('btn-drop-freeze').disabled = true; dropFrozen = true; document.getElementById('drop-item').style.color = "var(--primary)"; setTimeout(()=>{ dropFrozen = false; document.getElementById('drop-item').style.color = "var(--dark)"; document.getElementById('btn-drop-freeze').disabled = (ecoStatus.ants < 5); }, 5000); } }
-    let galgjeItem=null, galgjeLetters=[], galgjeMistakes=0; function startGalgjeInit() { switchScreen('screen-galgje'); document.getElementById('galgje-input').style.display = 'inline-block'; document.getElementById('galgje-next-btn').style.display = 'none'; document.getElementById('btn-galgje-hint').style.display = 'inline-block'; document.getElementById('btn-galgje-hint').disabled = ((ecoStatus.ants||0) < 5); galgjeMistakes = 0; document.getElementById('galgje-feedback').innerText = `Fouten: 0 / 6`; document.getElementById('galgje-feedback').style.color = "var(--text)"; document.getElementById('galgje-input').value = ''; const galgjePool = [...woordenData, ...kanjiData]; galgjeItem = galgjePool[Math.floor(Math.random() * galgjePool.length)]; galgjeLetters = []; document.getElementById('galgje-kana-display').innerText = `${galgjeItem.kana} (${galgjeItem.betekenis})`; updateGalgjeDisplay(); } function updateGalgjeDisplay() { let displayStr = ''; let allFound = true; for(let char of galgjeItem.romaji) { if(galgjeLetters.includes(char)) { displayStr += char + ' '; } else { displayStr += '_ '; allFound = false; } } document.getElementById('galgje-word-display').innerText = displayStr.trim(); if(allFound) { speelGeluid('goed'); document.getElementById('galgje-feedback').innerText = "Gewonnen! 🎉"; document.getElementById('galgje-feedback').style.color = "var(--success)"; document.getElementById('galgje-input').style.display = 'none'; document.getElementById('galgje-next-btn').style.display = 'inline-block'; document.getElementById('btn-galgje-hint').style.display = 'none'; verhoogScore(galgjeItem); spreekJapansUit(galgjeItem.kana); } } function checkGalgjeAnswer() { const inp = document.getElementById('galgje-input').value.trim().toLowerCase(); document.getElementById('galgje-input').value = ''; laatsteActiviteit = Date.now(); if(!inp) return; if(galgjeItem.romaji.includes(inp)) { if(!galgjeLetters.includes(inp)) galgjeLetters.push(inp); } else { speelGeluid('fout'); galgjeMistakes++; document.getElementById('galgje-feedback').innerText = `Fouten: ${galgjeMistakes} / 6`; if(galgjeMistakes >= 6) { document.getElementById('galgje-feedback').innerText = `Verloren! Het was: ${galgjeItem.romaji}`; document.getElementById('galgje-feedback').style.color = "var(--danger)"; document.getElementById('galgje-word-display').innerText = galgjeItem.romaji.split('').join(' '); document.getElementById('galgje-input').style.display = 'none'; document.getElementById('galgje-next-btn').style.display = 'inline-block'; document.getElementById('btn-galgje-hint').style.display = 'none'; } } updateGalgjeDisplay(); } function koopGalgjeHint() { if(ecoStatus.ants >= 5) { ecoStatus.ants -= 5; slaEcoSysteemOp(); document.getElementById('btn-galgje-hint').disabled = (ecoStatus.ants < 5); let onbekend = galgjeItem.romaji.split('').filter(c => !galgjeLetters.includes(c)); if(onbekend.length > 0) { galgjeLetters.push(onbekend[Math.floor(Math.random() * onbekend.length)]); updateGalgjeDisplay(); } } }
+    let dropInterval, dropY=-50, dropSpeed=1.5, dropLives=3, dropScore=0, actieveDropItem=null, dropFrozen=false; function startKanaDropInit() { switchScreen('screen-drop'); dropLives = 3; dropScore = 0; dropSpeed = 1.5; document.getElementById('drop-score').innerText = dropScore; document.getElementById('drop-lives').innerText = '❤️'.repeat(dropLives); document.getElementById('btn-drop-freeze').disabled = ((ecoStatus.ants||0) < 5); startNieuweDrop(); } function startNieuweDrop() { clearInterval(dropInterval); document.getElementById('drop-input').value = ''; const allItems = [...kanaData, ...woordenData, ...kanjiData]; actieveDropItem = allItems[Math.floor(Math.random() * allItems.length)]; dropY = -50; document.getElementById('drop-item').innerText = actieveDropItem.kana; document.getElementById('drop-item').style.top = dropY + 'px'; dropInterval = setInterval(() => { if(!dropFrozen) { dropY += dropSpeed; document.getElementById('drop-item').style.top = dropY + 'px'; } if(dropY > 230) { clearInterval(dropInterval); speelGeluid('fout'); dropLives--; document.getElementById('drop-lives').innerText = '❤️'.repeat(dropLives); if(dropLives <= 0) { alert(`Game Over! Score: ${dropScore}`); stopKanaDrop(); } else { startNieuweDrop(); } } }, 20); } function checkDropAnswer() { const inp = document.getElementById('drop-input').value.trim().toLowerCase(); laatsteActiviteit = Date.now(); if(isRomajiGoed(inp, actieveDropItem)) { speelGeluid('goed'); dropScore++; document.getElementById('drop-score').innerText = dropScore; dropSpeed += 0.1; spreekJapansUit(actieveDropItem.kana); verhoogScore(actieveDropItem); startNieuweDrop(); } else { document.getElementById('drop-input').value = ''; } } function stopKanaDrop() { clearInterval(dropInterval); switchScreen('screen-menu'); } function koopDropFreeze() { if(ecoStatus.ants >= 5 && !dropFrozen) { ecoStatus.ants -= 5; slaEcoSysteemOp(); document.getElementById('btn-drop-freeze').disabled = true; dropFrozen = true; document.getElementById('drop-item').style.color = "var(--primary)"; setTimeout(()=>{ dropFrozen = false; document.getElementById('drop-item').style.color = "var(--dark)"; document.getElementById('btn-drop-freeze').disabled = (ecoStatus.ants < 5); }, 5000); } }
+    let galgjeItem=null, galgjeLetters=[], galgjeMistakes=0; function startGalgjeInit() { switchScreen('screen-galgje'); document.getElementById('galgje-input').style.display = 'inline-block'; document.getElementById('galgje-next-btn').style.display = 'none'; document.getElementById('btn-galgje-hint').style.display = 'inline-block'; document.getElementById('btn-galgje-hint').disabled = ((ecoStatus.ants||0) < 5); galgjeMistakes = 0; document.getElementById('galgje-feedback').innerText = `Fouten: 0 / 6`; document.getElementById('galgje-feedback').style.color = "var(--text)"; document.getElementById('galgje-input').value = ''; const galgjePool = [...woordenData, ...kanjiData]; const galgjeBron = galgjePool[Math.floor(Math.random() * galgjePool.length)]; galgjeItem = Object.assign({}, galgjeBron, { romaji: romajiVarianten(galgjeBron)[0] || '' }); galgjeLetters = []; document.getElementById('galgje-kana-display').innerText = `${galgjeItem.kana} (${galgjeItem.betekenis})`; updateGalgjeDisplay(); } function updateGalgjeDisplay() { let displayStr = ''; let allFound = true; for(let char of galgjeItem.romaji) { if(galgjeLetters.includes(char)) { displayStr += char + ' '; } else { displayStr += '_ '; allFound = false; } } document.getElementById('galgje-word-display').innerText = displayStr.trim(); if(allFound) { speelGeluid('goed'); document.getElementById('galgje-feedback').innerText = "Gewonnen! 🎉"; document.getElementById('galgje-feedback').style.color = "var(--success)"; document.getElementById('galgje-input').style.display = 'none'; document.getElementById('galgje-next-btn').style.display = 'inline-block'; document.getElementById('btn-galgje-hint').style.display = 'none'; verhoogScore(galgjeItem); spreekJapansUit(galgjeItem.kana); } } function checkGalgjeAnswer() { const inp = document.getElementById('galgje-input').value.trim().toLowerCase(); document.getElementById('galgje-input').value = ''; laatsteActiviteit = Date.now(); if(!inp) return; if(galgjeItem.romaji.includes(inp)) { if(!galgjeLetters.includes(inp)) galgjeLetters.push(inp); } else { speelGeluid('fout'); galgjeMistakes++; document.getElementById('galgje-feedback').innerText = `Fouten: ${galgjeMistakes} / 6`; if(galgjeMistakes >= 6) { document.getElementById('galgje-feedback').innerText = `Verloren! Het was: ${galgjeItem.romaji}`; document.getElementById('galgje-feedback').style.color = "var(--danger)"; document.getElementById('galgje-word-display').innerText = galgjeItem.romaji.split('').join(' '); document.getElementById('galgje-input').style.display = 'none'; document.getElementById('galgje-next-btn').style.display = 'inline-block'; document.getElementById('btn-galgje-hint').style.display = 'none'; } } updateGalgjeDisplay(); } function koopGalgjeHint() { if(ecoStatus.ants >= 5) { ecoStatus.ants -= 5; slaEcoSysteemOp(); document.getElementById('btn-galgje-hint').disabled = (ecoStatus.ants < 5); let onbekend = galgjeItem.romaji.split('').filter(c => !galgjeLetters.includes(c)); if(onbekend.length > 0) { galgjeLetters.push(onbekend[Math.floor(Math.random() * onbekend.length)]); updateGalgjeDisplay(); } } }
 
     let bossTime=60, bossStreak=0, bossInterval, bossItem=null;
     function startBossBattle() { if(ecoStatus.majors < 100) return; ecoStatus.majors -= 100; slaEcoSysteemOp(); switchScreen('screen-boss'); bossTime=60; bossStreak=0; document.getElementById('boss-streak').innerText = '0/20'; document.getElementById('boss-timer').innerText = bossTime; bossInterval = setInterval(()=>{ bossTime--; document.getElementById('boss-timer').innerText=bossTime; if(bossTime<=0) failBoss(); },1000); nextBossWord(); }
@@ -1075,7 +1167,7 @@
     }
 
     function nextBossWord() { bossItem = woordenData[Math.floor(Math.random()*woordenData.length)]; document.getElementById('boss-word').innerText = bossItem.kana; document.getElementById('boss-input').value = ''; document.getElementById('boss-input').focus(); }
-    function checkBossAnswer() { const inp = document.getElementById('boss-input').value.trim().toLowerCase(); laatsteActiviteit = Date.now(); if(inp === bossItem.romaji) { speelGeluid('goed'); bossStreak++; document.getElementById('boss-streak').innerText = bossStreak+'/20'; if(bossStreak >= 20) { winBoss(); } else { nextBossWord(); } } else { speelGeluid('fout'); failBoss(); } }
+    function checkBossAnswer() { const inp = document.getElementById('boss-input').value.trim().toLowerCase(); laatsteActiviteit = Date.now(); if(isRomajiGoed(inp, bossItem)) { speelGeluid('goed'); bossStreak++; document.getElementById('boss-streak').innerText = bossStreak+'/20'; if(bossStreak >= 20) { winBoss(); } else { nextBossWord(); } } else { speelGeluid('fout'); failBoss(); } }
     function failBoss() { clearInterval(bossInterval); alert("Mislukt! De bruidsvlucht is gecrasht. Je verliest 50 Majors."); ecoStatus.majors = Math.max(0, ecoStatus.majors - 50); slaEcoSysteemOp(); switchScreen('screen-menu'); }
     function winBoss() { clearInterval(bossInterval); alert("BRUIDSVLUCHT VOLTOOID! 👑 Je hebt een permanente 2x water multiplier!"); ecoStatus.bossBeaten = true; slaEcoSysteemOp(); switchScreen('screen-menu'); }
 
@@ -1279,7 +1371,14 @@
     window.onload = function() { initVoorkeuren(); bouwGroepenSelectie(); };
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-            navigator.serviceWorker.register('sw.js').catch((e) => console.warn('Service worker registratie mislukt (werkt alleen via https of localhost):', e));
+            navigator.serviceWorker.register('sw.js')
+                .then((registratie) => { registratie.update(); }) // check bij elke start op een nieuwe SW-versie
+                .catch((e) => console.warn('Service worker registratie mislukt (werkt alleen via https of localhost):', e));
+            // Zodra een nieuwe service worker de controle overneemt: pagina één keer herladen zodat je meteen de nieuwste versie ziet.
+            let alHerladen = false;
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+                if (alHerladen) return; alHerladen = true; window.location.reload();
+            });
         });
     }
 </script>

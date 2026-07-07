@@ -1,4 +1,5 @@
 // data.js
+const DATA_VERSION = '2026-07-07a'; // Bump dit bij elke wijziging: zo zie je meteen of je de nieuwste data draait
 
 const kanaData = [
     // ==========================================
