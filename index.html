@@ -82,7 +82,7 @@
         }
         .play-audio-btn { background: var(--background); border: 1px solid var(--border); border-radius: 20px; cursor: pointer; padding: 6px 15px; font-size: 14px; color: var(--text); margin: 0 auto 10px auto; display: block; font-family: var(--font-body); }
         .meaning-hint { font-size: 15px; color: var(--muted); margin-bottom: 10px; min-height: 20px; font-weight: 600; }
-        .input-container { display: flex; justify-content: center; gap: 10px; margin-bottom: 15px; }
+        .input-container { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-bottom: 15px; }
         input[type="text"] {
             font-size: 20px; padding: 10px; width: 100%; max-width: 180px; text-align: center; border: 2px solid var(--border);
             border-radius: 8px; background: var(--input-bg); color: var(--text); font-family: var(--font-body);
@@ -289,6 +289,19 @@
         @media (prefers-reduced-motion: reduce) {
             *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
         }
+
+        /* ===== Schermtoetsenbord (mobiel oefenen zonder dat het systeemtoetsenbord de pagina opduwt) ===== */
+        #osk { flex-basis: 100%; margin-top: 10px; user-select: none; -webkit-user-select: none; }
+        .osk-rij { display: flex; justify-content: center; gap: 5px; margin-bottom: 5px; }
+        .osk-toets {
+            flex: 1; max-width: 42px; min-width: 0; padding: 11px 0; font-size: 16px; font-family: inherit;
+            background: var(--card-bg); color: var(--dark); border: 1px solid var(--border); border-radius: 8px;
+            box-shadow: 0 1px 0 rgba(0,0,0,0.08); cursor: pointer; touch-action: manipulation;
+        }
+        .osk-toets:active { background: color-mix(in srgb, var(--kincha) 22%, var(--card-bg)); transform: translateY(1px); box-shadow: none; }
+        .osk-toets.osk-breed { max-width: 64px; font-size: 14px; }
+        .osk-toets.osk-spatie { max-width: 180px; }
+        .osk-toets.osk-ok { background: var(--primary); color: #fff; border-color: var(--primary); font-weight: bold; }
     </style>
 
 </head>
@@ -396,6 +409,8 @@
         <div class="input-container" id="quiz-text-input-container">
             <input type="text" id="quiz-input" placeholder="romaji" autocomplete="off" style="text-transform: lowercase;">
             <button class="quiz-btn" onclick="checkTextAnswer()">Vink</button>
+            <button type="button" class="control-btn" id="osk-toggle" title="Schermtoetsenbord aan/uit" onclick="toggleOsk()" style="font-size:16px; padding:8px 10px;">⌨️</button>
+            <div id="osk" style="display:none;"></div>
         </div>
         <div class="choices-grid" id="quiz-choices-container" style="display: none;">
             <button class="choice-btn" onclick="checkChoiceAnswer(0)"><span class="key-hint">1</span><span class="choice-text">-</span></button>
@@ -573,6 +588,51 @@
 
     let huidigeGebruiker = null; 
     let progressieKana = {}; let progressieWoorden = {}; let progressieZinnen = {}; let progressieKanji = {}; 
+    // ===== Schermtoetsenbord =====
+    // Op mobiel duwt het systeemtoetsenbord de pagina omhoog; dit ingebouwde toetsenbord voorkomt dat.
+    // Standaard aan op touch-apparaten, altijd te schakelen met de ⌨️-knop (voorkeur wordt onthouden).
+    let oskAan = (localStorage.getItem('kana_osk') !== null)
+        ? localStorage.getItem('kana_osk') === '1'
+        : window.matchMedia('(pointer: coarse)').matches;
+    function bouwOsk() {
+        const osk = document.getElementById('osk'); if (!osk || osk.childElementCount) return;
+        const rijen = [
+            ['q','w','e','r','t','y','u','i','o','p'],
+            ['a','s','d','f','g','h','j','k','l'],
+            ['z','x','c','v','b','n','m','⌫'],
+            ['-','spatie','OK']
+        ];
+        rijen.forEach(rij => {
+            const div = document.createElement('div'); div.className = 'osk-rij';
+            rij.forEach(t => {
+                const b = document.createElement('button'); b.type = 'button';
+                b.className = 'osk-toets' + (t === '⌫' || t === 'OK' || t === '-' ? ' osk-breed' : '') + (t === 'spatie' ? ' osk-spatie' : '') + (t === 'OK' ? ' osk-ok' : '');
+                b.textContent = t;
+                b.addEventListener('pointerdown', (e) => e.preventDefault()); // focus niet stelen van het invoerveld
+                b.addEventListener('click', () => oskToets(t));
+                div.appendChild(b);
+            });
+            osk.appendChild(div);
+        });
+    }
+    function oskToets(t) {
+        const input = document.getElementById('quiz-input');
+        if (t === 'OK') { checkTextAnswer(); return; }
+        if (t === '⌫') { input.value = input.value.slice(0, -1); return; }
+        input.value += (t === 'spatie') ? ' ' : t;
+    }
+    function updateOsk() {
+        const osk = document.getElementById('osk'); const input = document.getElementById('quiz-input'); const knop = document.getElementById('osk-toggle');
+        if (!osk || !input) return;
+        bouwOsk();
+        osk.style.display = oskAan ? 'block' : 'none';
+        knop.style.opacity = oskAan ? '1' : '0.55';
+        if (oskAan) { input.setAttribute('inputmode', 'none'); input.setAttribute('readonly', 'readonly'); }
+        else { input.removeAttribute('inputmode'); input.removeAttribute('readonly'); }
+    }
+    function toggleOsk() { oskAan = !oskAan; localStorage.setItem('kana_osk', oskAan ? '1' : '0'); updateOsk(); }
+    document.addEventListener('DOMContentLoaded', updateOsk);
+
     // ===== Homoniem-sleutels =====
     // Woorden met identieke kana maar verschillende betekenis (くも = spin/wolk, はち = bij/acht, ...)
     // deelden één voortgangsscore. Alleen déze woorden krijgen een samengestelde sleutel 'kana|thema';
