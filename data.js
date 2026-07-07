@@ -1,5 +1,5 @@
 // data.js
-const DATA_VERSION = '2026-07-07a'; // Bump dit bij elke wijziging: zo zie je meteen of je de nieuwste data draait
+const DATA_VERSION = '2026-07-07b'; // Bump dit bij elke wijziging: zo zie je meteen of je de nieuwste data draait
 
 const kanaData = [
     // ==========================================
@@ -701,7 +701,6 @@ const kanjiData = [
     { kana: '飲', romaji: 'nomu/in', betekenis: 'drinken', thema: 'Dagelijks' },
     { kana: '見', romaji: 'miru/ken', betekenis: 'zien / kijken', thema: 'Dagelijks' },
     { kana: '行', romaji: 'iku/kou', betekenis: 'gaan', thema: 'Dagelijks' },
-    { kana: '来', romaji: 'kuru/rai', betekenis: 'komen', thema: 'Dagelijks' },
     { kana: '大', romaji: 'ookii/dai', betekenis: 'groot', thema: 'Dagelijks' },
     { kana: '小', romaji: 'chiisai/shou', betekenis: 'klein', thema: 'Dagelijks' },
     { kana: '高', romaji: 'takai/kou', betekenis: 'hoog / duur', thema: 'Dagelijks' },
