@@ -519,19 +519,27 @@
 <script src="data.js"></script>
 <script>
     // ===== Data-zelfcheck & robuustheidsguard =====
-    // Ontbrekende datasets crashen de app niet meer, maar geven een duidelijke melding.
+    // Let op: 'const' op topniveau wordt GEEN window-property, dus we testen de variabelen direct via typeof.
     (function controleerData() {
-        const verwacht = ['kanaData', 'woordenData', 'zinnenData', 'kanjiData', 'kanaMnemonics'];
+        const datasets = {
+            kanaData:      (typeof kanaData      !== 'undefined') ? kanaData      : undefined,
+            woordenData:   (typeof woordenData   !== 'undefined') ? woordenData   : undefined,
+            zinnenData:    (typeof zinnenData    !== 'undefined') ? zinnenData    : undefined,
+            kanjiData:     (typeof kanjiData     !== 'undefined') ? kanjiData     : undefined,
+            kanaMnemonics: (typeof kanaMnemonics !== 'undefined') ? kanaMnemonics : undefined,
+        };
         const ontbrekend = [];
-        verwacht.forEach(naam => {
-            if (typeof window[naam] === 'undefined') {
-                window[naam] = naam === 'kanaMnemonics' ? {} : [];
+        for (const [naam, waarde] of Object.entries(datasets)) {
+            if (waarde === undefined) {
+                // Fallback als window-property: bare verwijzingen in de app vallen hierop terug.
+                window[naam] = (naam === 'kanaMnemonics') ? {} : [];
                 ontbrekend.push(naam);
             }
-        });
+        }
         const versie = (typeof DATA_VERSION !== 'undefined') ? DATA_VERSION : 'onbekend (oude data.js!)';
+        const tel = (n) => (datasets[n] ? datasets[n].length : 0);
         console.info(`Kana Master data-versie: ${versie}`,
-            { kana: kanaData.length, woorden: woordenData.length, zinnen: zinnenData.length, kanji: kanjiData.length });
+            { kana: tel('kanaData'), woorden: tel('woordenData'), zinnen: tel('zinnenData'), kanji: tel('kanjiData') });
         if (ontbrekend.length) {
             console.warn('Ontbrekende datasets (lege fallback actief):', ontbrekend);
             document.addEventListener('DOMContentLoaded', () => {
