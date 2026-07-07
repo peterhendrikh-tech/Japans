@@ -357,9 +357,9 @@ const woordenData = [
     { kana: 'みそ', romaji: 'miso', betekenis: 'Miso', type: 'Woord', thema: 'Eten & Drinken' },
     { kana: 'しお', romaji: 'shio', betekenis: 'Zout', type: 'Woord', thema: 'Eten & Drinken' },
     { kana: 'さとう', romaji: 'satou', betekenis: 'Suiker', type: 'Woord', thema: 'Eten & Drinken' },
-    { kana: 'やきとり', romaji: 'yakitori', betekenis: 'Gegrilde kip aan spies', type: 'Woord', thema: 'Eten & Drinken' },
-    { kana: 'うどん', romaji: 'udon', betekenis: 'Udon (dikke noedels)', type: 'Woord', thema: 'Eten & Drinken' },
-    { kana: 'そば', romaji: 'soba', betekenis: 'Soba (boekweit noedels)', type: 'Woord', thema: 'Eten & Drinken' },
+    { kana: 'やきとり', romaji: 'yakitori', betekenis: 'Yakitori', type: 'Woord', thema: 'Eten & Drinken' },
+    { kana: 'うどん', romaji: 'udon', betekenis: 'Udon', type: 'Woord', thema: 'Eten & Drinken' },
+    { kana: 'そば', romaji: 'soba', betekenis: 'Soba', type: 'Woord', thema: 'Eten & Drinken' },
 
     // --- Natuur (uitgebreid) ---
     { kana: 'くも', romaji: 'kumo', betekenis: 'Wolk', type: 'Woord', thema: 'Natuur' },
@@ -378,7 +378,7 @@ const woordenData = [
     { kana: 'じてんしゃ', romaji: 'jitensha', betekenis: 'Fiets', type: 'Woord', thema: 'Objecten' },
     { kana: 'くるま', romaji: 'kuruma', betekenis: 'Auto', type: 'Woord', thema: 'Objecten' },
     { kana: 'でんしゃ', romaji: 'densha', betekenis: 'Trein', type: 'Woord', thema: 'Objecten' },
-    { kana: 'とけい', romaji: 'tokei', betekenis: 'Klok / Horloge', type: 'Woord', thema: 'Objecten' },
+    { kana: 'とけい', romaji: 'tokei', betekenis: 'Klok', type: 'Woord', thema: 'Objecten' },
     { kana: 'めがね', romaji: 'megane', betekenis: 'Bril', type: 'Woord', thema: 'Objecten' },
     { kana: 'ふとん', romaji: 'futon', betekenis: 'Futon / Slaapmat', type: 'Woord', thema: 'Objecten' },
     { kana: 'はさみ', romaji: 'hasami', betekenis: 'Schaar', type: 'Woord', thema: 'Objecten' },
@@ -387,7 +387,7 @@ const woordenData = [
     // --- Lichaamsdelen (uitgebreid) ---
     { kana: 'せなか', romaji: 'senaka', betekenis: 'Rug', type: 'Woord', thema: 'Lichaamsdelen' },
     { kana: 'おなか', romaji: 'onaka', betekenis: 'Buik', type: 'Woord', thema: 'Lichaamsdelen' },
-    { kana: 'くび', romaji: 'kubi', betekenis: 'Nek / Hals', type: 'Woord', thema: 'Lichaamsdelen' },
+    { kana: 'くび', romaji: 'kubi', betekenis: 'Nek', type: 'Woord', thema: 'Lichaamsdelen' },
     { kana: 'かた', romaji: 'kata', betekenis: 'Schouder', type: 'Woord', thema: 'Lichaamsdelen' },
     { kana: 'むね', romaji: 'mune', betekenis: 'Borst', type: 'Woord', thema: 'Lichaamsdelen' },
     { kana: 'まゆ', romaji: 'mayu', betekenis: 'Wenkbrauw', type: 'Woord', thema: 'Lichaamsdelen' },
