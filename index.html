@@ -1519,13 +1519,16 @@
 </script>
 <script id="patches-engine">
 /* ============================================================
-   Kana Master · Patches — 3 dagelijkse ruimtelijke logicapuzzels
+   Kana Master · Patches — 6 dagelijkse ruimtelijke logicapuzzels
+   Formaten 5×5 t/m 10×10. Munten per opgeloste puzzel (1..6),
+   toegekend via het bestaande muntsysteem (wijsGachaMuntToe).
    Zelfstandige module. Geen externe libs. Muis + touch.
    Blootgesteld: window.startPatchesInit(), window.KanaPatches
    ============================================================ */
 (function () {
-  const SIZES = [5, 6, 20];          // 3 puzzels per dag, oplopend formaat
+  const SIZES = [5, 6, 7, 8, 9, 10];   // 6 puzzels per dag, oplopend formaat
   const COUNT = SIZES.length;
+  const coinsFor = i => i + 1;         // 5×5→1, 6×6→2, … 10×10→6
 
   function hashStr(s){let h=2166136261>>>0;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0;}
   function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
@@ -1555,36 +1558,38 @@
         if(ok)out.push({x,y,w,h});}}
     return out;
   }
-  function countSolutions(N,clues,cap){
+  // Telt oplossingen (gecapt op 'cap'); stopt met -1 als het rekenbudget op is.
+  function countSolutions(N,clues,cap,budget){
     const clueKey=new Set(clues.map(c=>c.cy*N+c.cx));
     const cands=clues.map(c=>candidatesForClue(N,c,clueKey));
-    const cov=Array(N*N).fill(false),placed=Array(clues.length).fill(false);let count=0;
+    const cov=Array(N*N).fill(false),placed=Array(clues.length).fill(false);let count=0,steps=0,over=false;
     const firstUnc=()=>{for(let i=0;i<N*N;i++)if(!cov[i])return i;return -1;};
     const mark=(r,v)=>{for(let dy=0;dy<r.h;dy++)for(let dx=0;dx<r.w;dx++)cov[(r.y+dy)*N+(r.x+dx)]=v;};
     const fits=r=>{for(let dy=0;dy<r.h;dy++)for(let dx=0;dx<r.w;dx++)if(cov[(r.y+dy)*N+(r.x+dx)])return false;return true;};
     (function bt(){
-      if(count>=cap)return;const c=firstUnc();if(c<0){count++;return;}
+      if(over||count>=cap)return;if(++steps>budget){over=true;return;}
+      const c=firstUnc();if(c<0){count++;return;}
       const cy=(c/N|0),cx=c%N;
       for(let k=0;k<clues.length;k++){if(placed[k])continue;
         for(const r of cands[k]){if(!(r.y<=cy&&cy<r.y+r.h&&r.x<=cx&&cx<r.x+r.w))continue;if(!fits(r))continue;
-          mark(r,true);placed[k]=true;bt();placed[k]=false;mark(r,false);if(count>=cap)return;}}
+          mark(r,true);placed[k]=true;bt();placed[k]=false;mark(r,false);if(over||count>=cap)return;}}
     })();
-    return count;
+    return over?-1:count;
   }
   function buildPuzzle(dateStr,idx){
     const N=SIZES[idx];let fallback=null;
-    for(let salt=0;salt<80;salt++){
+    for(let salt=0;salt<60;salt++){
       const rng=mulberry32(hashStr(dateStr+'#p'+idx+'#'+salt));
       const sol=generateSolution(N,rng);if(sol.length<3){continue;}
-      const clues=deriveClues(sol,rng);if(!fallback)fallback={N,sol,clues};
-      if(countSolutions(N,clues,2)===1)return{N,sol,clues,unique:true};
+      const clues=deriveClues(sol,rng);if(!fallback)fallback={N,sol,clues,unique:false};
+      if(countSolutions(N,clues,2,60000)===1)return{N,sol,clues,unique:true};
     }
-    return{...fallback,unique:false};
+    return fallback;
   }
 
   const HUES=['--ai','--shu','--matsuba','--kincha','--budou','--special'];
   const colorFor=i=>`var(${HUES[i%HUES.length]})`;
-  const CIRC=['①','②','③','④','⑤'];
+  const CIRC=['①','②','③','④','⑤','⑥'];
   const pad=n=>String(n).padStart(2,'0');
   const fmt=s=>`${Math.floor(s/60)}:${pad(s%60)}`;
   function todayStr(){const d=new Date();return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;}
@@ -1595,9 +1600,11 @@
 
   function start(container){root=container;date=todayStr();cache=Array(COUNT).fill(null);idx=firstUnsolved();renderShell();loadPuzzle(idx);}
   const doneKey=i=>`kp-patches-${date}-${i}`;
-  const isSolved=i=>!!LS.get(doneKey(i),null);
-  const solvedTime=i=>{const d=LS.get(doneKey(i),null);return d?d.time:null;};
+  const solvedData=i=>LS.get(doneKey(i),null);
+  const isSolved=i=>!!solvedData(i);
+  const solvedTime=i=>{const d=solvedData(i);return d?d.time:null;};
   const solvedCount=()=>{let n=0;for(let i=0;i<COUNT;i++)if(isSolved(i))n++;return n;};
+  const coinsToday=()=>{let n=0;for(let i=0;i<COUNT;i++){const d=solvedData(i);if(d)n+=(d.coins||0);}return n;};
   function firstUnsolved(){for(let i=0;i<COUNT;i++)if(!isSolved(i))return i;return 0;}
   function firstUnsolvedAfter(i){for(let j=1;j<=COUNT;j++){const k=(i+j)%COUNT;if(!isSolved(k))return k;}return null;}
 
@@ -1608,6 +1615,7 @@
           <div><div class="pt-title">◧ Patches</div><div class="pt-date">${nlDate(date)}</div></div>
           <div class="pt-meta">
             <span class="pt-chip">🔥 <span id="pt-streak">${LS.get('kp-patches-streak',0)}</span></span>
+            <span class="pt-chip">🪙 <span id="pt-coins">${coinsToday()}</span></span>
             <span class="pt-chip">📅 <span id="pt-prog">${solvedCount()}</span>/${COUNT}</span>
           </div>
         </div>
@@ -1624,7 +1632,7 @@
     for(let i=0;i<COUNT;i++){
       const b=document.createElement('button');
       b.className='pt-tab'+(i===idx?' pt-tab-on':'')+(isSolved(i)?' pt-tab-done':'');
-      b.innerHTML=`<span class="pt-tab-n">${CIRC[i]}</span><span class="pt-tab-sz">${SIZES[i]}×${SIZES[i]}</span>${isSolved(i)?'<span class="pt-tab-chk">✓</span>':''}`;
+      b.innerHTML=`<span class="pt-tab-n">${CIRC[i]}</span><span class="pt-tab-sz">${SIZES[i]}×${SIZES[i]}</span><span class="pt-tab-coin">${isSolved(i)?'✓':'🪙'+coinsFor(i)}</span>`;
       b.onclick=()=>{if(i!==idx){idx=i;loadPuzzle(i);drawPicker();}};
       p.appendChild(b);
     }
@@ -1639,7 +1647,7 @@
   }
   function renderPlayBody(){
     root.querySelector('#pt-body').innerHTML=`
-      <p class="pt-uitleg">Vul het hele raster met rechthoeken. Elk cijfer = aantal vakjes van zijn rechthoek; icoon = vorm (◼ vierkant · ▭ liggend · ▯ staand). Sleep vanaf een cijfer; tik een rechthoek aan om te wissen.</p>
+      <p class="pt-uitleg">Vul het hele raster met rechthoeken. Elk cijfer = aantal vakjes van zijn rechthoek; icoon = vorm (◼ vierkant · ▭ liggend · ▯ staand). Sleep vanaf een cijfer; tik een rechthoek aan om te wissen. Oplossen levert <b>🪙 ${coinsFor(idx)}</b> op.</p>
       <div class="pt-timerbar">⏱️ <span id="pt-timer">0:00</span></div>
       <div id="pt-grid" class="pt-grid" style="--n:${curN}"></div>
       <div class="pt-status" id="pt-status"></div>
@@ -1652,16 +1660,17 @@
     draw();updateStatus();
   }
   function renderSolvedBody(i){
-    const allDone=solvedCount()===COUNT,next=firstUnsolvedAfter(i);
+    const allDone=solvedCount()===COUNT,next=firstUnsolvedAfter(i),d=solvedData(i)||{};
     root.querySelector('#pt-body').innerHTML=`
       <div class="pt-solved">
         <div class="pt-big">${allDone?'⛩️':'✅'}</div>
-        <h3>Puzzel ${CIRC[i]} opgelost</h3>
-        <div class="pt-res-row"><span>Tijd</span><b>${fmt(solvedTime(i))}</b></div>
+        <h3>Puzzel ${CIRC[i]} (${SIZES[i]}×${SIZES[i]}) opgelost</h3>
+        <div class="pt-res-row"><span>Tijd</span><b>${fmt(d.time||0)}</b></div>
+        <div class="pt-res-row"><span>Verdiend</span><b>🪙 ${d.coins||coinsFor(i)}</b></div>
         ${allDone
-          ? `<div class="pt-daydone">Alle 3 vandaag gehaald! 🔥 Streak ${LS.get('kp-patches-streak',0)}</div>
+          ? `<div class="pt-daydone">Alle ${COUNT} vandaag gehaald! 🔥 Streak ${LS.get('kp-patches-streak',0)} · 🪙 ${coinsToday()} totaal</div>
              <div class="pt-count">Nieuwe puzzels over <b id="pt-cd">–</b></div>`
-          : (next!==null?`<button class="btn" id="pt-next">Volgende: ${CIRC[next]} ${SIZES[next]}×${SIZES[next]} →</button>`:'')}
+          : (next!==null?`<button class="btn" id="pt-next">Volgende: ${CIRC[next]} ${SIZES[next]}×${SIZES[next]} (🪙 ${coinsFor(next)}) →</button>`:'')}
         <button class="btn pt-btn-2" id="pt-share">📋 Deel dag</button>
       </div>`;
     const nb=root.querySelector('#pt-next');if(nb)nb.onclick=()=>{idx=next;loadPuzzle(next);drawPicker();};
@@ -1709,54 +1718,65 @@
   function stopTimers(){clearInterval(timerId);clearInterval(cdId);}
   function updateStatus(){const filled=cellPatch.flat().filter(v=>v>=0).length,sat=puzzle.clues.filter((_,i)=>patchSatisfiesClue(i)).length,el=root.querySelector('#pt-status');if(el)el.textContent=`${filled}/${curN*curN} vakjes · ${sat}/${puzzle.clues.length} vormen kloppen`;}
   function checkWin(){updateStatus();if(cellPatch.flat().every(v=>v>=0)&&puzzle.clues.every((_,i)=>patchSatisfiesClue(i)))win();}
+
   function win(){
-    stopTimers();locked=true;const time=elapsed;LS.set(doneKey(idx),{time});
+    stopTimers();locked=true;
+    const reward=coinsFor(idx);
+    LS.set(doneKey(idx),{time:elapsed,coins:reward});
+    // munten toekennen via het bestaande systeem (lokaal saldo + cloud + badge)
+    try{ if(typeof window.wijsGachaMuntToe==='function') window.wijsGachaMuntToe(reward); }catch(e){ console.warn('Munttoekenning Patches mislukt:',e); }
     if(solvedCount()===COUNT){
       const last=LS.get('kp-patches-last',null);
       if(last!==date){const y=new Date();y.setDate(y.getDate()-1);const yStr=`${y.getFullYear()}-${pad(y.getMonth()+1)}-${pad(y.getDate())}`;let st=LS.get('kp-patches-streak',0);st=(last===yStr)?st+1:1;LS.set('kp-patches-streak',st);LS.set('kp-patches-last',date);}
     }
     const sc=root.querySelector('#pt-streak');if(sc)sc.textContent=LS.get('kp-patches-streak',0);
+    const cc=root.querySelector('#pt-coins');if(cc)cc.textContent=coinsToday();
     const pc=root.querySelector('#pt-prog');if(pc)pc.textContent=solvedCount();
-    celebrate();drawPicker();setTimeout(()=>renderSolvedBody(idx),700);
+    celebrate(reward);drawPicker();setTimeout(()=>renderSolvedBody(idx),750);
   }
   function doShare(){
     const parts=[];for(let i=0;i<COUNT;i++){const t=solvedTime(i);parts.push(`${CIRC[i]} ${t!=null?fmt(t):'–'}`);}
-    const txt=`⛩️ Kana Master · Patches\n${nlDate(date)}\n${parts.join('  ')}\n🔥 Streak ${LS.get('kp-patches-streak',0)}`;
+    const txt=`⛩️ Kana Master · Patches\n${nlDate(date)}\n${parts.join('  ')}\n🪙 ${coinsToday()} · 🔥 Streak ${LS.get('kp-patches-streak',0)}`;
     if(navigator.clipboard)navigator.clipboard.writeText(txt);
     const b=root.querySelector('#pt-share');if(b){const o=b.textContent;b.textContent='✓ Gekopieerd!';setTimeout(()=>b.textContent=o,1500);}
   }
   function tickCountdown(){const el=root.querySelector('#pt-cd');if(!el)return;const upd=()=>{const now=new Date(),mid=new Date(now);mid.setHours(24,0,0,0);let s=Math.floor((mid-now)/1000);const h=s/3600|0;s%=3600;el.textContent=`${pad(h)}:${pad(s/60|0)}:${pad(s%60)}`;};upd();clearInterval(cdId);cdId=setInterval(upd,1000);}
-  function celebrate(){const g=root.querySelector('#pt-grid');if(g)g.classList.add('pt-win');const em=['⛩️','🌸','✨','🎉','🏮'];for(let i=0;i<16;i++){const s=document.createElement('div');s.className='pt-confetti';s.textContent=em[i%em.length];s.style.left=(Math.random()*100)+'%';s.style.animationDelay=(Math.random()*0.3)+'s';root.appendChild(s);setTimeout(()=>s.remove(),1600);}}
+  function celebrate(reward){
+    const g=root.querySelector('#pt-grid');if(g)g.classList.add('pt-win');
+    const c=document.createElement('div');c.className='pt-coinpop';c.textContent=`+🪙${reward}`;root.appendChild(c);setTimeout(()=>c.remove(),1400);
+    const em=['⛩️','🌸','✨','🎉','🏮'];for(let i=0;i<16;i++){const s=document.createElement('div');s.className='pt-confetti';s.textContent=em[i%em.length];s.style.left=(Math.random()*100)+'%';s.style.animationDelay=(Math.random()*0.3)+'s';root.appendChild(s);setTimeout(()=>s.remove(),1600);}
+  }
 
   function injectStyle(){
     if(document.getElementById('pt-style'))return;
     const s=document.createElement('style');s.id='pt-style';s.textContent=`
       .pt-wrap{position:relative}
-      .pt-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px}
+      .pt-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:8px}
       .pt-title{font-family:var(--font-display);font-size:24px;font-weight:800;color:var(--dark)}
       .pt-date{font-size:13px;color:var(--muted)}
-      .pt-meta{display:flex;gap:8px}
-      .pt-chip{background:var(--input-bg);border:1px solid var(--border);border-radius:20px;padding:4px 10px;font-size:14px;font-weight:700}
-      .pt-picker{display:grid;grid-template-columns:repeat(${COUNT},1fr);gap:8px;margin-bottom:12px}
-      .pt-tab{position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 4px;background:var(--input-bg);border:1px solid var(--border);border-radius:10px;cursor:pointer;font-family:var(--font-body);color:var(--text)}
+      .pt-meta{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+      .pt-chip{background:var(--input-bg);border:1px solid var(--border);border-radius:20px;padding:4px 10px;font-size:14px;font-weight:700;white-space:nowrap}
+      .pt-picker{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+      .pt-tab{position:relative;display:flex;flex-direction:column;align-items:center;gap:1px;padding:7px 4px;background:var(--input-bg);border:1px solid var(--border);border-radius:10px;cursor:pointer;font-family:var(--font-body);color:var(--text)}
       .pt-tab-on{border-color:var(--primary);box-shadow:0 0 0 2px var(--primary) inset}
       .pt-tab-done{background:color-mix(in srgb,var(--success) 15%,var(--input-bg))}
-      .pt-tab-n{font-size:20px;line-height:1}
+      .pt-tab-n{font-size:18px;line-height:1}
       .pt-tab-sz{font-size:11px;color:var(--muted);font-weight:700}
-      .pt-tab-chk{position:absolute;top:3px;right:6px;color:var(--success);font-weight:900;font-size:12px}
+      .pt-tab-coin{font-size:11px;font-weight:700;color:var(--accent)}
+      .pt-tab-done .pt-tab-coin{color:var(--success)}
       .pt-uitleg{font-size:12.5px;color:var(--muted);line-height:1.5;margin:0 0 10px}
       .pt-timerbar{text-align:center;font-size:14px;font-weight:700;color:var(--muted);margin-bottom:8px}
-      .pt-grid{display:grid;grid-template-columns:repeat(var(--n),1fr);gap:0;width:100%;max-width:360px;margin:0 auto;aspect-ratio:1;touch-action:none;background:var(--border);border:3px solid var(--sumi);border-radius:8px;overflow:hidden;user-select:none}
+      .pt-grid{display:grid;grid-template-columns:repeat(var(--n),1fr);gap:0;width:100%;max-width:380px;margin:0 auto;aspect-ratio:1;touch-action:none;background:var(--border);border:3px solid var(--sumi);border-radius:8px;overflow:hidden;user-select:none}
       .pt-cell{position:relative;display:flex;align-items:center;justify-content:center;background:var(--input-bg);border:1px solid color-mix(in srgb,var(--sumi) 18%,transparent);aspect-ratio:1;cursor:pointer}
       .pt-filled{border-color:var(--sumi)!important}
-      .pt-clue .pt-num{position:relative;z-index:2;font-weight:900;font-size:15px;color:var(--dark);text-shadow:0 1px 2px rgba(255,255,255,.6)}
+      .pt-clue .pt-num{position:relative;z-index:2;font-weight:900;font-size:clamp(10px,3.2vw,15px);color:var(--dark);text-shadow:0 1px 2px rgba(255,255,255,.6)}
       .pt-filled.pt-clue .pt-num{color:#fff8ee;text-shadow:0 1px 3px rgba(0,0,0,.5)}
-      .pt-shape{position:absolute;top:3px;right:3px;z-index:2;opacity:.85}
-      .pt-sq{width:7px;height:7px;background:currentColor;color:var(--muted)}
-      .pt-wide{width:10px;height:5px;background:currentColor;color:var(--muted)}
-      .pt-tall{width:5px;height:10px;background:currentColor;color:var(--muted)}
+      .pt-shape{position:absolute;top:2px;right:2px;z-index:2;opacity:.85}
+      .pt-sq{width:6px;height:6px;background:currentColor;color:var(--muted)}
+      .pt-wide{width:9px;height:4px;background:currentColor;color:var(--muted)}
+      .pt-tall{width:4px;height:9px;background:currentColor;color:var(--muted)}
       .pt-filled .pt-shape{color:#fff8ee}
-      .pt-clue.pt-ok::after{content:"✓";position:absolute;bottom:1px;left:3px;font-size:10px;font-weight:900;color:var(--success);z-index:2}
+      .pt-clue.pt-ok::after{content:"✓";position:absolute;bottom:0;left:2px;font-size:9px;font-weight:900;color:var(--success);z-index:2}
       .pt-filled.pt-ok::after{color:#eafff0}
       .pt-prev-ok{outline:3px solid var(--success);outline-offset:-3px;z-index:3}
       .pt-prev-bad{outline:3px solid var(--danger);outline-offset:-3px;z-index:3}
@@ -1767,9 +1787,11 @@
       .pt-win{animation:pt-pop .5s}@keyframes pt-pop{0%{transform:scale(1)}40%{transform:scale(1.04)}100%{transform:scale(1)}}
       .pt-confetti{position:absolute;top:-10px;font-size:22px;pointer-events:none;animation:pt-fall 1.5s ease-in forwards;z-index:50}
       @keyframes pt-fall{to{transform:translateY(420px) rotate(220deg);opacity:0}}
+      .pt-coinpop{position:absolute;top:40%;left:50%;transform:translateX(-50%);font-size:34px;font-weight:900;color:var(--accent);text-shadow:0 2px 6px rgba(0,0,0,.3);pointer-events:none;animation:pt-coin 1.4s ease-out forwards;z-index:60}
+      @keyframes pt-coin{0%{opacity:0;transform:translate(-50%,10px) scale(.6)}20%{opacity:1;transform:translate(-50%,0) scale(1.1)}70%{opacity:1;transform:translate(-50%,-30px) scale(1)}100%{opacity:0;transform:translate(-50%,-60px) scale(.9)}}
       .pt-solved{text-align:center;padding:14px 6px}
       .pt-big{font-size:52px;animation:pt-pop .6s}
-      .pt-res-row{display:flex;justify-content:space-between;max-width:220px;margin:8px auto;padding:8px 14px;background:var(--input-bg);border:1px solid var(--border);border-radius:10px;font-size:15px}
+      .pt-res-row{display:flex;justify-content:space-between;max-width:240px;margin:8px auto;padding:8px 14px;background:var(--input-bg);border:1px solid var(--border);border-radius:10px;font-size:15px}
       .pt-daydone{margin:10px 0;font-weight:700;color:var(--success)}
       .pt-count{font-size:13px;color:var(--muted);margin:10px 0}
     `;
