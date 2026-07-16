@@ -2385,5 +2385,111 @@
 })();
 
 </script>
+<script id="gacha-extra">
+/* ============================================================
+   Kana Master · Gacha-uitbreiding (capsule-skins)
+   ADDITIEF: raakt de bestaande gacha-code niet aan, maar breidt
+   'm uit via wrappers. Voegt een nieuw uitrustbaar type 'capsule'
+   toe (skin voor #gacha-capsule) met eigen collectie-tab.
+   Vereist: SQL uit gacha_uitbreiding.sql (kolom equipped_capsule
+   + capsule-items). ============================================================ */
+(function () {
+  const ICON = '🎁'; // standaard capsule als er niets is uitgerust
+  window.huidigeEquippedCapsule = window.huidigeEquippedCapsule; // laat undefined toe
+
+  const g = id => document.getElementById(id);
+  function cap(){ return g('gacha-capsule'); }
+  function items(){ return (typeof gachaItemsCache!=='undefined' && gachaItemsCache) ? gachaItemsCache : []; }
+  function inv(){ return (typeof gachaInventory!=='undefined' && gachaInventory) ? gachaInventory : new Set(); }
+  function user(){ return (typeof huidigeGebruiker!=='undefined') ? huidigeGebruiker : null; }
+
+  function equippedEmoji(){
+    const id = window.huidigeEquippedCapsule;
+    if(!id) return ICON;
+    const it = items().find(i=>i.id===id);
+    return (it && it.payload && it.payload.emoji) ? it.payload.emoji : ICON;
+  }
+  function applyCapsuleSkin(){
+    const c = cap(); if(!c) return;
+    // niet ingrijpen tijdens de shake/reveal-animatie
+    if(c.classList.contains('is-shaking')) return;
+    c.innerText = equippedEmoji();
+  }
+
+  async function laadEquipped(){
+    if(window.huidigeEquippedCapsule!==undefined) return;
+    window.huidigeEquippedCapsule = null;
+    try{
+      if(typeof supabaseClient==='undefined' || !user()) return;
+      const { data } = await supabaseClient.from('kana_users').select('equipped_capsule').eq('username', user()).maybeSingle();
+      if(data) window.huidigeEquippedCapsule = data.equipped_capsule || null;
+    }catch(e){ console.warn('equipped_capsule laden mislukt:', e); }
+  }
+
+  function ensureTab(){
+    const bar = document.querySelector('#screen-gacha .gacha-tabs');
+    if(!bar || g('gacha-tab-capsule')) return;
+    const shop = g('gacha-tab-shop');
+    const b = document.createElement('button');
+    b.className='tab-btn'; b.id='gacha-tab-capsule'; b.innerText='🎁 Capsules';
+    b.onclick=toonCapsules;
+    bar.insertBefore(b, shop || null);
+  }
+  function setActief(){
+    document.querySelectorAll('#screen-gacha .gacha-tabs .tab-btn').forEach(x=>x.classList.remove('active'));
+    const t=g('gacha-tab-capsule'); if(t)t.classList.add('active');
+  }
+
+  function toonCapsules(){
+    setActief();
+    const box = g('gacha-collectie-container'); if(!box) return;
+    const lijst = items().filter(i=>i.item_type==='capsule');
+    if(!lijst.length){ box.innerHTML='<p style="font-size:13px;color:var(--muted);">Nog geen capsule-skins in de pool. Draai eerst de SQL-uitbreiding.</p>'; return; }
+    const orde={common:1,rare:2,epic:3,legendary:4};
+    lijst.sort((a,b)=>(orde[a.rarity]||9)-(orde[b.rarity]||9));
+    const grid=document.createElement('div'); grid.className='gacha-grid';
+    lijst.forEach(item=>{
+      const owned=inv().has(item.id);
+      const equipped=window.huidigeEquippedCapsule===item.id;
+      const slot=document.createElement('div');
+      slot.className='gacha-slot'+(owned?' owned':' locked')+(equipped?' equipped':'');
+      slot.title=owned?item.name:'??? (nog niet ontgrendeld)';
+      slot.innerText=owned?((item.payload&&item.payload.emoji)||ICON):'❓';
+      if(owned) slot.onclick=()=>equip(item);
+      grid.appendChild(slot);
+    });
+    box.innerHTML=''; box.appendChild(grid);
+    const hint=document.createElement('p');
+    hint.style.cssText='font-size:12px;color:var(--muted);margin-top:8px;';
+    const aantal=lijst.filter(i=>inv().has(i.id)).length;
+    hint.innerText=`${aantal}/${lijst.length} capsule-skins · tik om uit te rusten`;
+    box.appendChild(hint);
+  }
+
+  async function equip(item){
+    if(!user()){ if(typeof toonMelding==='function') toonMelding('Log in om uit te rusten.','error'); return; }
+    try{
+      const { error } = await supabaseClient.from('kana_users').update({ equipped_capsule: item.id }).eq('username', user());
+      if(error) throw error;
+      window.huidigeEquippedCapsule=item.id; applyCapsuleSkin(); toonCapsules();
+      if(typeof toonMelding==='function') toonMelding('✅ Capsule uitgerust!','success');
+    }catch(e){ console.warn('Capsule uitrusten mislukt:',e); if(typeof toonMelding==='function') toonMelding('⚠️ Kon dit niet instellen.','error'); }
+  }
+
+  // ---- wrappers om de skin toe te passen + tab actief te houden ----
+  function wrap(naam, na){
+    const orig=window[naam]; if(typeof orig!=='function') return;
+    window[naam]=async function(){ const r=await orig.apply(this,arguments); try{ await na(); }catch(e){} return r; };
+  }
+  wrap('openGachaScreen', async()=>{ ensureTab(); await laadEquipped(); applyCapsuleSkin(); });
+  wrap('trekGachapon',    async()=>{ setTimeout(applyCapsuleSkin, 2600); }); // na de reveal-animatie
+
+  // als de speler een andere tab kiest, onze capsule-tab niet actief laten
+  ['toonGachaCollectie','toonGachaShop'].forEach(n=>{
+    const o=window[n]; if(typeof o==='function') window[n]=function(){ const t=g('gacha-tab-capsule'); if(t)t.classList.remove('active'); return o.apply(this,arguments); };
+  });
+})();
+
+</script>
 </body>
 </html>
