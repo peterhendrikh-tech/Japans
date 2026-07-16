@@ -346,6 +346,7 @@
             <button class="btn btn-collector" onclick="openEcosysteem()">🐜 Imperium</button>
             <button class="btn" style="background:var(--budou);" onclick="startPatchesInit()">◧ Dagelijkse Patches</button>
             <button class="btn" style="background:var(--kincha);" onclick="startWoordzoekerInit()">🔤 Woordzoeker (Japans)</button>
+            <button class="btn" style="background:var(--ai);" onclick="startBuizenInit()">🚰 Buizenpuzzel</button>
         </div>
     </div>
 
@@ -464,6 +465,10 @@
 
     <div id="screen-woordzoeker" class="screen">
         <div id="woordzoeker-root"></div>
+    </div>
+
+    <div id="screen-buizen" class="screen">
+        <div id="buizen-root"></div>
     </div>
 
     <div id="screen-draw" class="screen">
@@ -2014,6 +2019,169 @@
 
   window.KanaWoordzoeker={start};
   window.startWoordzoekerInit=function(){(window.switchScreen||function(){})('screen-woordzoeker');const el=document.getElementById('woordzoeker-root');if(el)start(el);};
+})();
+
+</script>
+<script id="buizen-engine">
+/* ============================================================
+   Kana Master · Buizenpuzzel (Net/Pipes) — dagelijkse puzzel
+   Draai de tegels tot alle buizen op de bron (⛩️) zijn
+   aangesloten, zonder lekken. 10×10. Levert munten op (1×/dag).
+   Blootgesteld: window.startBuizenInit(), window.KanaBuizen
+   ============================================================ */
+(function () {
+  const N = 10;
+  const REWARD = 15;   // munten bij oplossen (pas naar wens aan)
+
+  function hashStr(s){let h=2166136261>>>0;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0;}
+  function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+  const pad=n=>String(n).padStart(2,'0');
+  const fmt=s=>`${Math.floor(s/60)}:${pad(s%60)}`;
+  function todayStr(){const d=new Date();return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;}
+  const nlDate=s=>{const[y,m,d]=s.split('-');return `${d}-${m}-${y}`;};
+  const LS={get:(k,f)=>{try{const v=localStorage.getItem(k);return v==null?f:JSON.parse(v);}catch(e){return f;}},set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}};
+
+  const U=1,R=2,D=4,L=8;
+  const DV={1:[0,-1],2:[1,0],4:[0,1],8:[-1,0]};
+  const OPP={1:4,4:1,2:8,8:2};
+  const rotCW=m=>((m<<1)|(m>>3))&15;
+
+  function buildSolved(rng){
+    const mask=Array.from({length:N},()=>Array(N).fill(0));
+    const inTree=Array.from({length:N},()=>Array(N).fill(false));
+    const sx=2+Math.floor(rng()*(N-4)),sy=2+Math.floor(rng()*(N-4));
+    inTree[sy][sx]=true;const frontier=[];
+    const pushN=(x,y)=>{for(const d of [U,R,D,L]){const[dx,dy]=DV[d];const nx=x+dx,ny=y+dy;if(nx>=0&&nx<N&&ny>=0&&ny<N&&!inTree[ny][nx])frontier.push({x:nx,y:ny,px:x,py:y,dir:d});}};
+    pushN(sx,sy);
+    while(frontier.length){const i=Math.floor(rng()*frontier.length),e=frontier.splice(i,1)[0];if(inTree[e.y][e.x])continue;inTree[e.y][e.x]=true;mask[e.py][e.px]|=e.dir;mask[e.y][e.x]|=OPP[e.dir];pushN(e.x,e.y);}
+    return {mask,source:{x:sx,y:sy}};
+  }
+  function buildDaily(dateStr){
+    const rng=mulberry32(hashStr(dateStr+'#buizen'));
+    const {mask,source}=buildSolved(rng);
+    // schud: elke cel 0-3× draaien; zorg dat het niet al opgelost is
+    const cur=mask.map(r=>r.slice());let changed=0;
+    for(let y=0;y<N;y++)for(let x=0;x<N;x++){const r=Math.floor(rng()*4);for(let i=0;i<r;i++)cur[y][x]=rotCW(cur[y][x]);if(cur[y][x]!==mask[y][x])changed++;}
+    if(changed===0)cur[source.y][source.x]=rotCW(cur[source.y][source.x]);
+    return {cur,source,dateStr};
+  }
+  function analyse(mask,source){
+    let leaks=0;
+    for(let y=0;y<N;y++)for(let x=0;x<N;x++)for(const d of [U,R,D,L]){if(mask[y][x]&d){const[dx,dy]=DV[d];const nx=x+dx,ny=y+dy;if(nx<0||nx>=N||ny<0||ny>=N)leaks++;else if(!(mask[ny][nx]&OPP[d]))leaks++;}}
+    const lit=Array.from({length:N},()=>Array(N).fill(false));const st=[source];lit[source.y][source.x]=true;let cnt=1;
+    while(st.length){const c=st.pop();for(const d of [U,R,D,L]){if(mask[c.y][c.x]&d){const[dx,dy]=DV[d];const nx=c.x+dx,ny=c.y+dy;if(nx<0||nx>=N||ny<0||ny>=N)continue;if((mask[ny][nx]&OPP[d])&&!lit[ny][nx]){lit[ny][nx]=true;cnt++;st.push({x:nx,y:ny});}}}}
+    return {leaks,litCount:cnt,lit};
+  }
+
+  // ---- status ----
+  let root,puzzle,cur,source,moves,startTime,clockId,elapsed,locked;
+
+  function start(container){
+    root=container;const date=todayStr();puzzle=buildDaily(date);cur=puzzle.cur;source=puzzle.source;moves=0;elapsed=0;
+    const done=LS.get('kp-buizen-'+date,null);render();
+    if(done){locked=true;showDone(done.time||0,false);}else{locked=false;startTime=Date.now();startClock();refresh();}
+  }
+  function startClock(){clearInterval(clockId);clockId=setInterval(()=>{elapsed=Math.floor((Date.now()-startTime)/1000);const t=root.querySelector('#pl-timer');if(t)t.textContent=fmt(elapsed);},1000);}
+
+  // ---- buis-SVG ----
+  function pipeSVG(mask,lit,isSource){
+    const col=lit?'var(--shu)':'color-mix(in srgb,var(--sumi) 45%,transparent)';
+    const ends={1:'50,8',2:'92,50',4:'50,92',8:'8,50'};
+    let lines='';
+    for(const d of [U,R,D,L])if(mask&d)lines+=`<line x1="50" y1="50" x2="${ends[d].split(',')[0]}" y2="${ends[d].split(',')[1]}" stroke="${col}" stroke-width="15" stroke-linecap="round"/>`;
+    const hub=isSource
+      ? `<circle cx="50" cy="50" r="17" fill="var(--kincha)"/><circle cx="50" cy="50" r="17" fill="none" stroke="var(--shu)" stroke-width="3"/>`
+      : `<circle cx="50" cy="50" r="11" fill="${lit?'var(--shu)':'color-mix(in srgb,var(--sumi) 55%,transparent)'}"/>`;
+    return `<svg viewBox="0 0 100 100" width="100%" height="100%">${lines}${hub}</svg>`;
+  }
+
+  function render(){
+    root.innerHTML=`
+      <div class="pl-wrap">
+        <div class="pl-head">
+          <div><div class="pl-title">🚰 Buizen</div><div class="pl-date">${nlDate(puzzle.dateStr)}</div></div>
+          <div class="pl-meta"><span class="pl-chip">🪙 ${REWARD}</span><span class="pl-chip">⏱️ <span id="pl-timer">0:00</span></span></div>
+        </div>
+        <p class="pl-uitleg">Tik op een tegel om hem te draaien. Verbind alle buizen met de bron (⛩️) zodat het hele netwerk oplicht en er geen lek naar de rand wijst.</p>
+        <div id="pl-grid" class="pl-grid" style="--n:${N}"></div>
+        <div class="pl-status" id="pl-status"></div>
+        <button class="btn" id="pl-back" style="background:var(--muted);margin-top:12px;">← Menu</button>
+      </div>`;
+    injectStyle();
+    root.querySelector('#pl-back').onclick=()=>{clearInterval(clockId);(window.switchScreen||function(){})('screen-menu');};
+    drawGrid();
+  }
+  function drawGrid(){
+    const g=root.querySelector('#pl-grid');if(!g)return;
+    const {lit}=analyse(cur,source);g.innerHTML='';
+    for(let y=0;y<N;y++)for(let x=0;x<N;x++){
+      const cell=document.createElement('div');cell.className='pl-cell'+(lit[y][x]?' pl-lit':'');cell.dataset.x=x;cell.dataset.y=y;
+      const isSrc=(x===source.x&&y===source.y);
+      cell.innerHTML=pipeSVG(cur[y][x],lit[y][x],isSrc);
+      if(isSrc){const t=document.createElement('span');t.className='pl-torii';t.textContent='⛩️';cell.appendChild(t);}
+      if(!locked)cell.onclick=()=>rotate(x,y,cell);
+      g.appendChild(cell);
+    }
+  }
+  function rotate(x,y,cell){
+    if(locked)return;
+    cur[y][x]=rotCW(cur[y][x]);moves++;
+    cell.classList.remove('pl-spin');void cell.offsetWidth;cell.classList.add('pl-spin');
+    refresh();
+  }
+  function refresh(){
+    const {leaks,litCount,lit}=analyse(cur,source);
+    root.querySelectorAll('.pl-cell').forEach(c=>{const x=+c.dataset.x,y=+c.dataset.y;const on=lit[y][x];c.classList.toggle('pl-lit',on);
+      const isSrc=(x===source.x&&y===source.y);c.querySelector('svg').outerHTML=pipeSVG(cur[y][x],on,isSrc);});
+    const st=root.querySelector('#pl-status');if(st)st.textContent=`💡 ${litCount}/${N*N} verlicht · 💧 ${leaks} lek${leaks===1?'':'ken'}`;
+    if(leaks===0&&litCount===N*N)win();
+  }
+  function win(){
+    clearInterval(clockId);locked=true;const date=todayStr();const time=elapsed;
+    LS.set('kp-buizen-'+date,{time,coins:REWARD,moves});
+    try{ if(typeof window.wijsGachaMuntToe==='function') window.wijsGachaMuntToe(REWARD); }catch(e){console.warn('Munttoekenning buizen mislukt:',e);}
+    celebrate();root.querySelectorAll('.pl-cell').forEach(c=>{c.onclick=null;});
+    setTimeout(()=>showDone(time,true),700);
+  }
+  function showDone(time,fresh){
+    const st=root.querySelector('#pl-status');
+    if(st)st.innerHTML=`<div class="pl-done">🎉 ${fresh?`Netwerk verbonden! +🪙 ${REWARD}`:'Vandaag al opgelost'} · ⏱️ ${fmt(time)}
+      <div class="pl-count">Nieuwe puzzel over <b id="pl-cd">–</b></div></div>`;
+    const el=root.querySelector('#pl-cd');if(!el)return;const upd=()=>{const now=new Date(),mid=new Date(now);mid.setHours(24,0,0,0);let s=Math.floor((mid-now)/1000);const h=s/3600|0;s%=3600;el.textContent=`${pad(h)}:${pad(s/60|0)}:${pad(s%60)}`;};upd();clearInterval(clockId);clockId=setInterval(upd,1000);
+  }
+  function celebrate(){const c=document.createElement('div');c.className='pl-coinpop';c.textContent=`+🪙${REWARD}`;root.appendChild(c);setTimeout(()=>c.remove(),1500);
+    const em=['🎉','✨','🏮','💧'];for(let i=0;i<14;i++){const s=document.createElement('div');s.className='pl-confetti';s.textContent=em[i%em.length];s.style.left=(Math.random()*100)+'%';s.style.animationDelay=(Math.random()*0.3)+'s';root.appendChild(s);setTimeout(()=>s.remove(),1600);}}
+
+  function injectStyle(){
+    if(document.getElementById('pl-style'))return;
+    const s=document.createElement('style');s.id='pl-style';s.textContent=`
+      .pl-wrap{position:relative}
+      .pl-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:8px}
+      .pl-title{font-family:var(--font-display);font-size:24px;font-weight:800;color:var(--dark)}
+      .pl-date{font-size:13px;color:var(--muted)}
+      .pl-meta{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+      .pl-chip{background:var(--input-bg);border:1px solid var(--border);border-radius:20px;padding:4px 10px;font-size:14px;font-weight:700;white-space:nowrap}
+      .pl-uitleg{font-size:12.5px;color:var(--muted);line-height:1.5;margin:0 0 10px}
+      .pl-grid{display:grid;grid-template-columns:repeat(var(--n),1fr);gap:0;width:100%;max-width:420px;margin:0 auto;aspect-ratio:1;background:var(--input-bg);border:3px solid var(--sumi);border-radius:8px;overflow:hidden;user-select:none;touch-action:manipulation}
+      .pl-cell{position:relative;aspect-ratio:1;background:color-mix(in srgb,var(--sumi) 6%,var(--input-bg));border:1px solid color-mix(in srgb,var(--sumi) 12%,transparent);cursor:pointer;transition:background .2s}
+      .pl-cell svg{display:block}
+      .pl-lit{background:color-mix(in srgb,var(--shu) 12%,var(--input-bg))}
+      .pl-torii{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:clamp(11px,3.4vw,18px);pointer-events:none}
+      .pl-spin{animation:pl-spin .18s ease-out}
+      @keyframes pl-spin{from{transform:rotate(-70deg)}to{transform:rotate(0)}}
+      .pl-status{text-align:center;font-size:13px;color:var(--muted);margin:12px 0 4px;min-height:18px;font-weight:700}
+      .pl-done{text-align:center;font-weight:700;color:var(--success);background:color-mix(in srgb,var(--matsuba) 12%,var(--input-bg));border:1px solid var(--success);border-radius:10px;padding:10px}
+      .pl-count{font-size:12.5px;color:var(--muted);font-weight:400;margin-top:6px}
+      .pl-coinpop{position:absolute;top:38%;left:50%;transform:translateX(-50%);font-size:34px;font-weight:900;color:var(--accent);text-shadow:0 2px 6px rgba(0,0,0,.3);pointer-events:none;animation:pl-coin 1.5s ease-out forwards;z-index:60}
+      @keyframes pl-coin{0%{opacity:0;transform:translate(-50%,10px) scale(.6)}20%{opacity:1;transform:translate(-50%,0) scale(1.1)}70%{opacity:1;transform:translate(-50%,-30px) scale(1)}100%{opacity:0;transform:translate(-50%,-60px) scale(.9)}}
+      .pl-confetti{position:absolute;top:-10px;font-size:22px;pointer-events:none;animation:pl-fall 1.5s ease-in forwards;z-index:50}
+      @keyframes pl-fall{to{transform:translateY(460px) rotate(220deg);opacity:0}}
+    `;
+    document.head.appendChild(s);
+  }
+
+  window.KanaBuizen={start};
+  window.startBuizenInit=function(){(window.switchScreen||function(){})('screen-buizen');const el=document.getElementById('buizen-root');if(el)start(el);};
 })();
 
 </script>
