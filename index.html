@@ -347,6 +347,7 @@
             <button class="btn" style="background:var(--budou);" onclick="startPatchesInit()">◧ Dagelijkse Patches</button>
             <button class="btn" style="background:var(--kincha);" onclick="startWoordzoekerInit()">🔤 Woordzoeker (Japans)</button>
             <button class="btn" style="background:var(--ai);" onclick="startBuizenInit()">🚰 Buizenpuzzel</button>
+            <button class="btn" style="background:var(--sumi);" onclick="startNonogramInit()">🖼️ Nonogram (Picross)</button>
         </div>
     </div>
 
@@ -469,6 +470,10 @@
 
     <div id="screen-buizen" class="screen">
         <div id="buizen-root"></div>
+    </div>
+
+    <div id="screen-nonogram" class="screen">
+        <div id="nonogram-root"></div>
     </div>
 
     <div id="screen-draw" class="screen">
@@ -2182,6 +2187,201 @@
 
   window.KanaBuizen={start};
   window.startBuizenInit=function(){(window.switchScreen||function(){})('screen-buizen');const el=document.getElementById('buizen-root');if(el)start(el);};
+})();
+
+</script>
+<script id="nonogram-engine">
+/* ============================================================
+   Kana Master · Nonogram (Picross) — dagelijkse Japanse puzzel
+   Vul vakjes op basis van de cijferaanwijzingen tot het plaatje
+   klopt. Sumi-inkt op washi. Levert munten op (1×/dag).
+   Blootgesteld: window.startNonogramInit(), window.KanaNonogram
+   ============================================================ */
+(function () {
+  const N = 10;
+  const REWARD = 20;   // munten bij oplossen (pas naar wens aan)
+
+  // ---- plaatjesbibliotheek (10×10, '#'=gevuld) ----
+  const PICS = [
+    {naam:'Torii', rows:['.########.','.########.','.##....##.','##########','##########','.##....##.','.##....##.','.##....##.','.##....##.','.##....##.']},
+    {naam:'Berg Fuji', rows:['..........','....##....','...####...','...#..#...','..#....#..','..#....#..','.#......#.','.#......#.','##########','##########']},
+    {naam:'Kat', rows:['#........#','##......##','#.#....#.#','#..####..#','#.######.#','#.#.##.#.#','#.######.#','#..####..#','.#......#.','..######..']},
+    {naam:'Koi (vis)', rows:['..........','..####....','.#....#..#','#..#...###','#......###','#..#...###','.#....#..#','..####....','..........','..........']},
+    {naam:'Onigiri', rows:['....##....','...####...','..######..','..######..','.########.','.########.','##########','##########','.######...','..####....']},
+    {naam:'Paraplu', rows:['....##....','..######..','.########.','##########','....##....','....##....','....##....','....##....','....##.#..','.....###..']},
+    {naam:'Lantaarn', rows:['....##....','...####...','.########.','.#.####.#.','.########.','.########.','.########.','.#.####.#.','.########.','...####...']},
+    {naam:'Bloem', rows:['...#..#...','..######..','.########.','.########.','.###..###.','..######..','...####...','....##....','...#.#....','..#...#...']},
+    {naam:'Zeilboot', rows:['....#.....','....##....','....###...','....####..','....#####.','....######','..........','#........#','.########.','..######..']},
+    {naam:'Ster', rows:['....##....','....##....','...####...','.########.','##########','.########.','..######..','..#....#..','.#......#.','#........#']},
+    {naam:'Hart', rows:['..........','.##....##.','##########','##########','##########','.########.','.########.','..######..','...####...','....##....']},
+    {naam:'Theekopje', rows:['..........','..#.#.#...','...#.#....','..######.#','..######.#','..######.#','..######..','.########.','..........','..........']}
+  ];
+
+  function hashStr(s){let h=2166136261>>>0;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0;}
+  function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+  const pad=n=>String(n).padStart(2,'0');
+  const fmt=s=>`${Math.floor(s/60)}:${pad(s%60)}`;
+  function todayStr(){const d=new Date();return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;}
+  const nlDate=s=>{const[y,m,d]=s.split('-');return `${d}-${m}-${y}`;};
+  const LS={get:(k,f)=>{try{const v=localStorage.getItem(k);return v==null?f:JSON.parse(v);}catch(e){return f;}},set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}};
+
+  const runs=arr=>{const r=[];let c=0;for(const v of arr){if(v){c++;}else if(c){r.push(c);c=0;}}if(c)r.push(c);return r.length?r:[0];};
+  function cluesFor(sol){
+    const rowC=[],colC=[];
+    for(let y=0;y<N;y++)rowC.push(runs(sol[y]));
+    for(let x=0;x<N;x++){const col=[];for(let y=0;y<N;y++)col.push(sol[y][x]);colC.push(runs(col));}
+    return {rowC,colC};
+  }
+
+  // ---- status ----
+  let root,pic,sol,clues,state,mode,painting,paintVal,startTime,clockId,elapsed,locked;
+
+  function start(container){
+    root=container;const date=todayStr();
+    const rng=mulberry32(hashStr(date+'#nono'));
+    pic=PICS[Math.floor(rng()*PICS.length)];
+    sol=pic.rows.map(r=>Array.from(r).map(c=>c==='#'?1:0));
+    clues=cluesFor(sol);
+    state=Array.from({length:N},()=>Array(N).fill(0)); // 0 leeg,1 gevuld,2 kruis
+    mode='fill';elapsed=0;
+    const done=LS.get('kp-nono-'+date,null);
+    render();
+    if(done){locked=true;state=sol.map(r=>r.map(v=>v?1:0));drawCells();markClues();showDone(done.time||0,false);}
+    else{locked=false;startTime=Date.now();startClock();}
+  }
+  function startClock(){clearInterval(clockId);clockId=setInterval(()=>{elapsed=Math.floor((Date.now()-startTime)/1000);const t=root.querySelector('#ng-timer');if(t)t.textContent=fmt(elapsed);},1000);}
+
+  function render(){
+    root.innerHTML=`
+      <div class="ng-wrap">
+        <div class="ng-head">
+          <div><div class="ng-title">🖼️ Nonogram</div><div class="ng-date">${nlDate(todayStr())}</div></div>
+          <div class="ng-meta"><span class="ng-chip">🪙 ${REWARD}</span><span class="ng-chip">⏱️ <span id="ng-timer">0:00</span></span></div>
+        </div>
+        <p class="ng-uitleg">De cijfers geven aaneengesloten gevulde vakjes per rij/kolom. Vul de juiste vakjes tot het plaatje klopt. Wissel met de knop tussen vullen en kruisjes (om zeker-leeg te markeren).</p>
+        <div class="ng-boardwrap"><div class="ng-board" id="ng-board" style="--n:${N}"></div></div>
+        <div class="ng-status" id="ng-status"></div>
+        <div class="ng-btns">
+          <button class="btn ng-btn-2" id="ng-mode">✏️ Vullen</button>
+          <button class="btn ng-btn-2" id="ng-clear">✕ Wissen</button>
+        </div>
+        <button class="btn" id="ng-back" style="background:var(--muted);margin-top:10px;">← Menu</button>
+      </div>`;
+    injectStyle();buildBoard();sizeBoard();
+    root.querySelector('#ng-mode').onclick=()=>{if(locked)return;mode=mode==='fill'?'cross':'fill';root.querySelector('#ng-mode').textContent=mode==='fill'?'✏️ Vullen':'✕ Kruis';};
+    root.querySelector('#ng-clear').onclick=()=>{if(locked)return;state=Array.from({length:N},()=>Array(N).fill(0));drawCells();markClues();updateStatus();};
+    root.querySelector('#ng-back').onclick=()=>{clearInterval(clockId);(window.switchScreen||function(){})('screen-menu');};
+    window.addEventListener('resize',sizeBoard);
+  }
+
+  function buildBoard(){
+    const b=root.querySelector('#ng-board');
+    let cols='<div class="ng-cols">';
+    for(let x=0;x<N;x++){cols+=`<div class="ng-cclue" data-cx="${x}">${clues.colC[x].map(n=>`<span>${n}</span>`).join('')}</div>`;}
+    cols+='</div>';
+    let rows='<div class="ng-rows">';
+    for(let y=0;y<N;y++){rows+=`<div class="ng-rclue" data-ry="${y}">${clues.rowC[y].map(n=>`<span>${n}</span>`).join('')}</div>`;}
+    rows+='</div>';
+    let grid='<div class="ng-grid" id="ng-grid">';
+    for(let y=0;y<N;y++)for(let x=0;x<N;x++)grid+=`<div class="ng-cell" data-x="${x}" data-y="${y}"></div>`;
+    grid+='</div>';
+    b.innerHTML='<div class="ng-corner"></div>'+cols+rows+grid;
+    drawCells();markClues();bindPointer();
+  }
+  function sizeBoard(){
+    const wrap=root.querySelector('.ng-boardwrap');if(!wrap)return;
+    const avail=Math.min(wrap.clientWidth||360,440);
+    const cell=Math.max(16,Math.min(32,Math.floor((avail-64)/N)));
+    root.querySelector('#ng-board').style.setProperty('--cell',cell+'px');
+  }
+  function drawCells(){
+    root.querySelectorAll('.ng-cell').forEach(c=>{const x=+c.dataset.x,y=+c.dataset.y,v=state[y][x];
+      c.classList.toggle('ng-fill',v===1);c.classList.toggle('ng-cross',v===2);});
+  }
+  function markClues(){
+    for(let y=0;y<N;y++){const ok=eqRuns(runs(state[y].map(v=>v===1?1:0)),clues.rowC[y]);const el=root.querySelector(`.ng-rclue[data-ry="${y}"]`);if(el)el.classList.toggle('ng-done',ok);}
+    for(let x=0;x<N;x++){const col=[];for(let y=0;y<N;y++)col.push(state[y][x]===1?1:0);const ok=eqRuns(runs(col),clues.colC[x]);const el=root.querySelector(`.ng-cclue[data-cx="${x}"]`);if(el)el.classList.toggle('ng-done',ok);}
+  }
+  const eqRuns=(a,b)=>a.length===b.length&&a.every((v,i)=>v===b[i]);
+
+  function bindPointer(){
+    const grid=root.querySelector('#ng-grid');
+    const cellAt=(cx,cy)=>{const el=document.elementFromPoint(cx,cy);return el&&el.classList&&el.classList.contains('ng-cell')?el:null;};
+    grid.onpointerdown=e=>{if(locked)return;const el=cellAt(e.clientX,e.clientY);if(!el)return;e.preventDefault();
+      const x=+el.dataset.x,y=+el.dataset.y,v=state[y][x];
+      if(mode==='fill')paintVal=(v===1)?0:1; else paintVal=(v===2)?0:2;
+      painting=true;apply(x,y);grid.setPointerCapture&&grid.setPointerCapture(e.pointerId);};
+    grid.onpointermove=e=>{if(!painting)return;const el=cellAt(e.clientX,e.clientY);if(!el)return;apply(+el.dataset.x,+el.dataset.y);};
+    const end=()=>{if(!painting)return;painting=false;markClues();updateStatus();checkWin();};
+    grid.onpointerup=end;grid.onpointercancel=end;
+  }
+  function apply(x,y){if(state[y][x]===paintVal)return;state[y][x]=paintVal;const c=root.querySelector(`.ng-cell[data-x="${x}"][data-y="${y}"]`);if(c){c.classList.toggle('ng-fill',paintVal===1);c.classList.toggle('ng-cross',paintVal===2);}}
+
+  function solvedNu(){
+    for(let y=0;y<N;y++)if(!eqRuns(runs(state[y].map(v=>v===1?1:0)),clues.rowC[y]))return false;
+    for(let x=0;x<N;x++){const col=[];for(let y=0;y<N;y++)col.push(state[y][x]===1?1:0);if(!eqRuns(runs(col),clues.colC[x]))return false;}
+    return true;
+  }
+  function updateStatus(){const filled=state.flat().filter(v=>v===1).length;const doel=sol.flat().filter(v=>v).length;const el=root.querySelector('#ng-status');if(el)el.textContent=`Gevuld: ${filled} · doel: ${doel}`;}
+  function checkWin(){if(solvedNu())win();}
+
+  function win(){
+    clearInterval(clockId);locked=true;const date=todayStr();const time=elapsed;
+    LS.set('kp-nono-'+date,{time,coins:REWARD});
+    try{ if(typeof window.wijsGachaMuntToe==='function') window.wijsGachaMuntToe(REWARD); }catch(e){console.warn('Munttoekenning nonogram mislukt:',e);}
+    // kruisjes weg, plaatje tonen
+    for(let y=0;y<N;y++)for(let x=0;x<N;x++)if(state[y][x]===2)state[y][x]=0;
+    drawCells();celebrate();setTimeout(()=>showDone(time,true),700);
+  }
+  function showDone(time,fresh){
+    const el=root.querySelector('#ng-status');
+    if(el)el.innerHTML=`<div class="ng-done-box">🎉 ${fresh?`Opgelost! +🪙 ${REWARD}`:'Vandaag al opgelost'} · Plaatje: <b>${pic.naam}</b> · ⏱️ ${fmt(time)}
+      <div class="ng-count">Nieuwe puzzel over <b id="ng-cd">–</b></div></div>`;
+    const cd=root.querySelector('#ng-cd');if(!cd)return;const upd=()=>{const now=new Date(),mid=new Date(now);mid.setHours(24,0,0,0);let s=Math.floor((mid-now)/1000);const h=s/3600|0;s%=3600;cd.textContent=`${pad(h)}:${pad(s/60|0)}:${pad(s%60)}`;};upd();clearInterval(clockId);clockId=setInterval(upd,1000);
+  }
+  function celebrate(){const c=document.createElement('div');c.className='ng-coinpop';c.textContent=`+🪙${REWARD}`;root.appendChild(c);setTimeout(()=>c.remove(),1500);
+    const em=['🎉','✨','🏮','🖌️'];for(let i=0;i<14;i++){const s=document.createElement('div');s.className='ng-confetti';s.textContent=em[i%em.length];s.style.left=(Math.random()*100)+'%';s.style.animationDelay=(Math.random()*0.3)+'s';root.appendChild(s);setTimeout(()=>s.remove(),1600);}}
+
+  function injectStyle(){
+    if(document.getElementById('ng-style'))return;
+    const s=document.createElement('style');s.id='ng-style';s.textContent=`
+      .ng-wrap{position:relative}
+      .ng-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:8px}
+      .ng-title{font-family:var(--font-display);font-size:24px;font-weight:800;color:var(--dark)}
+      .ng-date{font-size:13px;color:var(--muted)}
+      .ng-meta{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+      .ng-chip{background:var(--input-bg);border:1px solid var(--border);border-radius:20px;padding:4px 10px;font-size:14px;font-weight:700;white-space:nowrap}
+      .ng-uitleg{font-size:12.5px;color:var(--muted);line-height:1.5;margin:0 0 10px}
+      .ng-boardwrap{display:flex;justify-content:center}
+      .ng-board{--cell:28px;display:grid;grid-template-columns:max-content calc(var(--cell)*var(--n));grid-template-rows:max-content calc(var(--cell)*var(--n));background:var(--card-bg)}
+      .ng-corner{grid-column:1;grid-row:1}
+      .ng-cols{grid-column:2;grid-row:1;display:grid;grid-template-columns:repeat(var(--n),var(--cell))}
+      .ng-cclue{display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:0;padding-bottom:3px;font-size:11px;font-weight:700;color:var(--dark);border-left:1px solid transparent}
+      .ng-cclue span{line-height:1.15}
+      .ng-rows{grid-column:1;grid-row:2;display:grid;grid-template-rows:repeat(var(--n),var(--cell))}
+      .ng-rclue{display:flex;flex-direction:row;justify-content:flex-end;align-items:center;gap:5px;padding-right:6px;font-size:11px;font-weight:700;color:var(--dark)}
+      .ng-done{color:var(--muted);opacity:.45}
+      .ng-grid{grid-column:2;grid-row:2;display:grid;grid-template-columns:repeat(var(--n),var(--cell));grid-template-rows:repeat(var(--n),var(--cell));border:2px solid var(--sumi);touch-action:none;user-select:none}
+      .ng-cell{border:1px solid color-mix(in srgb,var(--sumi) 18%,transparent);background:var(--input-bg);cursor:pointer;position:relative}
+      .ng-cell:nth-child(5n){}
+      .ng-grid>.ng-cell:nth-child(10n+6){border-left:1px solid color-mix(in srgb,var(--sumi) 45%,transparent)}
+      .ng-fill{background:var(--sumi)!important}
+      .ng-cross::after{content:"×";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:color-mix(in srgb,var(--sumi) 50%,transparent);font-weight:700;font-size:calc(var(--cell)*.7)}
+      .ng-status{text-align:center;font-size:13px;color:var(--muted);margin:12px 0 8px;min-height:18px;font-weight:700}
+      .ng-btns{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+      .ng-btn-2{background:var(--input-bg)!important;color:var(--text)!important;border:1px solid var(--border)!important;box-shadow:none!important}
+      .ng-done-box{text-align:center;font-weight:700;color:var(--success);background:color-mix(in srgb,var(--matsuba) 12%,var(--input-bg));border:1px solid var(--success);border-radius:10px;padding:10px}
+      .ng-count{font-size:12.5px;color:var(--muted);font-weight:400;margin-top:6px}
+      .ng-coinpop{position:absolute;top:40%;left:50%;transform:translateX(-50%);font-size:34px;font-weight:900;color:var(--accent);text-shadow:0 2px 6px rgba(0,0,0,.3);pointer-events:none;animation:ng-coin 1.5s ease-out forwards;z-index:60}
+      @keyframes ng-coin{0%{opacity:0;transform:translate(-50%,10px) scale(.6)}20%{opacity:1;transform:translate(-50%,0) scale(1.1)}70%{opacity:1;transform:translate(-50%,-30px) scale(1)}100%{opacity:0;transform:translate(-50%,-60px) scale(.9)}}
+      .ng-confetti{position:absolute;top:-10px;font-size:22px;pointer-events:none;animation:ng-fall 1.5s ease-in forwards;z-index:50}
+      @keyframes ng-fall{to{transform:translateY(460px) rotate(220deg);opacity:0}}
+    `;
+    document.head.appendChild(s);
+  }
+
+  window.KanaNonogram={start};
+  window.startNonogramInit=function(){(window.switchScreen||function(){})('screen-nonogram');const el=document.getElementById('nonogram-root');if(el)start(el);};
 })();
 
 </script>
