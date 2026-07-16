@@ -345,6 +345,7 @@
             <button class="btn" style="background:var(--kincha); color:#3a2a00;" onclick="openGachaScreen()">🎰 Gachapon</button>
             <button class="btn btn-collector" onclick="openEcosysteem()">🐜 Imperium</button>
             <button class="btn" style="background:var(--budou);" onclick="startPatchesInit()">◧ Dagelijkse Patches</button>
+            <button class="btn" style="background:var(--kincha);" onclick="startWoordzoekerInit()">🔤 Woordzoeker (Japans)</button>
         </div>
     </div>
 
@@ -459,6 +460,10 @@
 
     <div id="screen-patches" class="screen">
         <div id="patches-root"></div>
+    </div>
+
+    <div id="screen-woordzoeker" class="screen">
+        <div id="woordzoeker-root"></div>
     </div>
 
     <div id="screen-draw" class="screen">
@@ -1800,6 +1805,215 @@
 
   window.KanaPatches={start};
   window.startPatchesInit=function(){(window.switchScreen||function(){})('screen-patches');const el=document.getElementById('patches-root');if(el)start(el);};
+})();
+
+</script>
+<script id="woordzoeker-engine">
+/* ============================================================
+   Kana Master · Woordzoeker (Japans) — dagelijkse puzzel
+   Verstopt woorden uit je eigen woordenData in een kana-rooster.
+   Levert 25 munten op bij voltooiing (max. 1× per dag), via het
+   bestaande muntsysteem (wijsGachaMuntToe).
+   Blootgesteld: window.startWoordzoekerInit(), window.KanaWoordzoeker
+   ============================================================ */
+(function () {
+  const REWARD = 25;
+  const GRID = 10;          // 10×10 rooster
+  const AANTAL = 8;         // te verstoppen woorden
+  const MIN_GEPLAATST = 6;  // minimaal aantal om een dag geldig te noemen
+
+  function hashStr(s){let h=2166136261>>>0;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0;}
+  function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+  const pad=n=>String(n).padStart(2,'0');
+  function todayStr(){const d=new Date();return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;}
+  const nlDate=s=>{const[y,m,d]=s.split('-');return `${d}-${m}-${y}`;};
+  const LS={get:(k,f)=>{try{const v=localStorage.getItem(k);return v==null?f:JSON.parse(v);}catch(e){return f;}},set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}};
+  const chars=s=>Array.from(s);
+  const isKana=s=>chars(s).every(ch=>{const c=ch.codePointAt(0);return (c>=0x3040&&c<=0x30FF)||c===0x30FC;});
+
+  // Fallback-woordenlijst voor de losse preview (in de echte app wordt woordenData gebruikt).
+  const FALLBACK=[
+    {kana:'いぬ',betekenis:'Hond',thema:'Dieren'},{kana:'ねこ',betekenis:'Kat',thema:'Dieren'},
+    {kana:'とり',betekenis:'Vogel',thema:'Dieren'},{kana:'うま',betekenis:'Paard',thema:'Dieren'},
+    {kana:'さる',betekenis:'Aap',thema:'Dieren'},{kana:'くま',betekenis:'Beer',thema:'Dieren'},
+    {kana:'かめ',betekenis:'Schildpad',thema:'Dieren'},{kana:'きつね',betekenis:'Vos',thema:'Dieren'},
+    {kana:'とら',betekenis:'Tijger',thema:'Dieren'},{kana:'しか',betekenis:'Hert',thema:'Dieren'},
+    {kana:'ぶた',betekenis:'Varken',thema:'Dieren'},{kana:'へび',betekenis:'Slang',thema:'Dieren'}
+  ];
+  function bron(){ try{ if(typeof woordenData!=='undefined'&&Array.isArray(woordenData)&&woordenData.length) return woordenData; }catch(e){} return FALLBACK; }
+
+  // ---- puzzel bouwen (deterministisch per datum) ----
+  function bouwPuzzel(dateStr){
+    // geschikte woorden: pure kana, lengte 2..8, ontdubbeld
+    const seen=new Set(),pool=[];
+    for(const w of bron()){ if(!w.kana||!w.betekenis)continue; const len=chars(w.kana).length;
+      if(len<2||len>8)continue; if(!isKana(w.kana))continue; if(seen.has(w.kana))continue; seen.add(w.kana); pool.push(w); }
+    // groepeer op thema
+    const themas={}; pool.forEach(w=>{(themas[w.thema||'Overig']=themas[w.thema||'Overig']||[]).push(w);});
+    const bruikbaar=Object.keys(themas).filter(t=>themas[t].length>=AANTAL).sort();
+
+    for(let salt=0;salt<40;salt++){
+      const rng=mulberry32(hashStr(dateStr+'#wz#'+salt));
+      let thema,lijst;
+      if(bruikbaar.length){ thema=bruikbaar[Math.floor(rng()*bruikbaar.length)]; lijst=themas[thema].slice(); }
+      else { thema='Gemengd'; lijst=pool.slice(); }
+      // seeded shuffle + kies AANTAL
+      for(let i=lijst.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[lijst[i],lijst[j]]=[lijst[j],lijst[i]];}
+      const kandidaten=lijst.slice(0,Math.min(AANTAL,lijst.length))
+        .sort((a,b)=>chars(b.kana).length-chars(a.kana).length); // langste eerst plaatsen
+      const res=plaats(kandidaten,rng);
+      if(res&&res.woorden.length>=MIN_GEPLAATST) return {...res,thema,date:dateStr};
+    }
+    // laatste redmiddel: neem wat er is
+    const rng=mulberry32(hashStr(dateStr+'#wz#last'));
+    const res=plaats(pool.slice(0,AANTAL).sort((a,b)=>chars(b.kana).length-chars(a.kana).length),rng)||{grid:leeg(),woorden:[]};
+    return {...res,thema:'Gemengd',date:dateStr};
+  }
+  const leeg=()=>Array.from({length:GRID},()=>Array(GRID).fill(null));
+  const DIRS=[[1,0],[0,1],[1,1],[1,-1],[-1,0],[0,-1],[-1,-1],[-1,1]];
+
+  function plaats(kandidaten,rng){
+    const grid=leeg(); const woorden=[];
+    for(const w of kandidaten){
+      const cs=chars(w.kana),L=cs.length; let gezet=false;
+      for(let poging=0;poging<160&&!gezet;poging++){
+        const [dx,dy]=DIRS[Math.floor(rng()*DIRS.length)];
+        const xs=dx>=0?0:L-1, xe=dx<=0?GRID-1:GRID-L; // grofweg; we checken hieronder exact
+        const sx=Math.floor(rng()*GRID), sy=Math.floor(rng()*GRID);
+        const ex=sx+dx*(L-1), ey=sy+dy*(L-1);
+        if(ex<0||ex>=GRID||ey<0||ey>=GRID)continue;
+        let ok=true;
+        for(let i=0;i<L;i++){const cx=sx+dx*i,cy=sy+dy*i,g=grid[cy][cx];if(g!==null&&g!==cs[i]){ok=false;break;}}
+        if(!ok)continue;
+        const pad=[];
+        for(let i=0;i<L;i++){const cx=sx+dx*i,cy=sy+dy*i;grid[cy][cx]=cs[i];pad.push([cx,cy]);}
+        woorden.push({kana:w.kana,betekenis:w.betekenis,cs,pad}); gezet=true;
+      }
+    }
+    if(!woorden.length)return null;
+    // vul de rest met kana uit de gebruikte woorden (consistente look)
+    const alfabet=[...new Set(woorden.flatMap(w=>w.cs))];
+    for(let y=0;y<GRID;y++)for(let x=0;x<GRID;x++)if(grid[y][x]===null)grid[y][x]=alfabet[Math.floor(rng()*alfabet.length)];
+    return {grid,woorden};
+  }
+
+  // ---- status ----
+  let root,puzzle,found,selStart,selecting,selPath;
+
+  function start(container){root=container;const date=todayStr();puzzle=bouwPuzzel(date);found=new Set();
+    const done=LS.get('kp-wz-'+date,null); render(); if(done){markAllFound();showDone(done.time||0,false);} else {startTime=Date.now();startClock();}}
+
+  let startTime,clockId,elapsed=0;
+  const fmt=s=>`${Math.floor(s/60)}:${pad(s%60)}`;
+  function startClock(){clearInterval(clockId);clockId=setInterval(()=>{elapsed=Math.floor((Date.now()-startTime)/1000);const t=root.querySelector('#wz-timer');if(t)t.textContent=fmt(elapsed);},1000);}
+
+  function render(){
+    root.innerHTML=`
+      <div class="wz-wrap">
+        <div class="wz-head">
+          <div><div class="wz-title">🔤 Woordzoeker</div><div class="wz-date">${nlDate(puzzle.date)} · thema: ${puzzle.thema}</div></div>
+          <div class="wz-meta"><span class="wz-chip">🪙 ${REWARD}</span><span class="wz-chip">⏱️ <span id="wz-timer">0:00</span></span></div>
+        </div>
+        <p class="wz-uitleg">Vind alle Japanse woorden in het rooster. Ze staan horizontaal, verticaal of diagonaal — vooruit én achteruit. Sleep over een rij letters om een woord te markeren.</p>
+        <div id="wz-grid" class="wz-grid" style="--n:${GRID}"></div>
+        <div id="wz-list" class="wz-list"></div>
+        <button class="btn" id="wz-back" style="background:var(--muted);margin-top:12px;">← Menu</button>
+      </div>`;
+    injectStyle(); drawGrid(); drawList();
+    root.querySelector('#wz-back').onclick=()=>{clearInterval(clockId);(window.switchScreen||function(){})('screen-menu');};
+  }
+  function drawGrid(){
+    const g=root.querySelector('#wz-grid');g.innerHTML='';
+    for(let y=0;y<GRID;y++)for(let x=0;x<GRID;x++){
+      const c=document.createElement('div');c.className='wz-cell';c.dataset.x=x;c.dataset.y=y;c.textContent=puzzle.grid[y][x];
+      if(found.has(x+','+y))c.classList.add('wz-found');
+      g.appendChild(c);
+    }
+    bindPointer(g);
+  }
+  function drawList(){
+    const l=root.querySelector('#wz-list');l.innerHTML='';
+    puzzle.woorden.forEach(w=>{const d=document.createElement('div');d.className='wz-word'+(w._done?' wz-word-done':'');
+      d.innerHTML=`<span class="wz-jp">${w.kana}</span><span class="wz-nl">${w.betekenis}</span>`;l.appendChild(d);});
+  }
+
+  function cellFromPoint(cx,cy){const el=document.elementFromPoint(cx,cy);if(el&&el.dataset&&el.dataset.x!==undefined)return[+el.dataset.x,+el.dataset.y];const c=el&&el.closest?el.closest('.wz-cell'):null;return c?[+c.dataset.x,+c.dataset.y]:null;}
+  function lijnPad(a,b){ // geef celpad terug als a→b op 8-richting ligt, anders null
+    const dx=b[0]-a[0],dy=b[1]-a[1];
+    if(!(dx===0||dy===0||Math.abs(dx)===Math.abs(dy)))return null;
+    const L=Math.max(Math.abs(dx),Math.abs(dy))+1,sx=Math.sign(dx),sy=Math.sign(dy),p=[];
+    for(let i=0;i<L;i++)p.push([a[0]+sx*i,a[1]+sy*i]);return p;
+  }
+  function bindPointer(g){
+    g.onpointerdown=e=>{const c=cellFromPoint(e.clientX,e.clientY);if(!c)return;e.preventDefault();selStart=c;selecting=true;selPath=[c];g.setPointerCapture&&g.setPointerCapture(e.pointerId);paint();};
+    g.onpointermove=e=>{if(!selecting)return;const c=cellFromPoint(e.clientX,e.clientY);if(!c)return;const p=lijnPad(selStart,c);if(p){selPath=p;paint();}};
+    const end=()=>{if(!selecting)return;selecting=false;check();clearPaint();selPath=[];selStart=null;};
+    g.onpointerup=end;g.onpointercancel=end;
+  }
+  const key=(x,y)=>x+','+y;
+  function paint(){const set=new Set(selPath.map(([x,y])=>key(x,y)));root.querySelectorAll('.wz-cell').forEach(c=>c.classList.toggle('wz-sel',set.has(key(+c.dataset.x,+c.dataset.y))));}
+  function clearPaint(){root.querySelectorAll('.wz-cell').forEach(c=>c.classList.remove('wz-sel'));}
+
+  function check(){
+    if(!selPath||selPath.length<2)return;
+    const str=selPath.map(([x,y])=>puzzle.grid[y][x]).join('');
+    const rev=selPath.slice().reverse().map(([x,y])=>puzzle.grid[y][x]).join('');
+    const w=puzzle.woorden.find(w=>!w._done&&(w.kana===str||w.kana===rev));
+    if(!w)return;
+    w._done=true; selPath.forEach(([x,y])=>found.add(key(x,y)));
+    drawGrid(); drawList();
+    if(puzzle.woorden.every(w=>w._done))win();
+  }
+  function markAllFound(){puzzle.woorden.forEach(w=>{w._done=true;w.pad.forEach(([x,y])=>found.add(key(x,y)));});drawGrid();drawList();}
+
+  function win(){
+    clearInterval(clockId);const date=todayStr();const time=elapsed;
+    LS.set('kp-wz-'+date,{time,coins:REWARD});
+    try{ if(typeof window.wijsGachaMuntToe==='function') window.wijsGachaMuntToe(REWARD); }catch(e){console.warn('Munttoekenning woordzoeker mislukt:',e);}
+    celebrate();setTimeout(()=>showDone(time,true),700);
+  }
+  function showDone(time,fresh){
+    const wrap=root.querySelector('.wz-wrap');
+    wrap.querySelector('#wz-list').insertAdjacentHTML('beforebegin',
+      `<div class="wz-done">🎉 ${fresh?`Alle woorden gevonden! +🪙 ${REWARD}`:'Vandaag al voltooid'} · ⏱️ ${fmt(time)}
+        <div class="wz-count">Nieuwe woordzoeker over <b id="wz-cd">–</b></div></div>`);
+    const el=root.querySelector('#wz-cd');const upd=()=>{const now=new Date(),mid=new Date(now);mid.setHours(24,0,0,0);let s=Math.floor((mid-now)/1000);const h=s/3600|0;s%=3600;el.textContent=`${pad(h)}:${pad(s/60|0)}:${pad(s%60)}`;};upd();clearInterval(clockId);clockId=setInterval(upd,1000);
+  }
+  function celebrate(){const c=document.createElement('div');c.className='wz-coinpop';c.textContent=`+🪙${REWARD}`;root.appendChild(c);setTimeout(()=>c.remove(),1500);
+    const em=['🎉','✨','🏮','🌸'];for(let i=0;i<14;i++){const s=document.createElement('div');s.className='wz-confetti';s.textContent=em[i%em.length];s.style.left=(Math.random()*100)+'%';s.style.animationDelay=(Math.random()*0.3)+'s';root.appendChild(s);setTimeout(()=>s.remove(),1600);}}
+
+  function injectStyle(){
+    if(document.getElementById('wz-style'))return;
+    const s=document.createElement('style');s.id='wz-style';s.textContent=`
+      .wz-wrap{position:relative}
+      .wz-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:8px}
+      .wz-title{font-family:var(--font-display);font-size:24px;font-weight:800;color:var(--dark)}
+      .wz-date{font-size:13px;color:var(--muted)}
+      .wz-meta{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+      .wz-chip{background:var(--input-bg);border:1px solid var(--border);border-radius:20px;padding:4px 10px;font-size:14px;font-weight:700;white-space:nowrap}
+      .wz-uitleg{font-size:12.5px;color:var(--muted);line-height:1.5;margin:0 0 10px}
+      .wz-grid{display:grid;grid-template-columns:repeat(var(--n),1fr);gap:2px;width:100%;max-width:400px;margin:0 auto;aspect-ratio:1;touch-action:none;user-select:none;background:var(--border);border:3px solid var(--sumi);border-radius:8px;padding:2px}
+      .wz-cell{display:flex;align-items:center;justify-content:center;background:var(--input-bg);border-radius:4px;aspect-ratio:1;font-family:var(--font-display);font-weight:700;font-size:clamp(12px,4vw,20px);color:var(--dark);cursor:pointer;transition:background .1s}
+      .wz-sel{background:var(--kincha)!important;color:#fff8ee!important}
+      .wz-found{background:color-mix(in srgb,var(--matsuba) 30%,var(--input-bg))!important;color:var(--dark)}
+      .wz-list{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:14px}
+      .wz-word{display:flex;justify-content:space-between;align-items:center;gap:6px;padding:7px 10px;background:var(--input-bg);border:1px solid var(--border);border-radius:8px;font-size:14px}
+      .wz-jp{font-family:var(--font-display);font-weight:700;font-size:16px;color:var(--dark)}
+      .wz-nl{color:var(--muted);font-size:12.5px}
+      .wz-word-done{background:color-mix(in srgb,var(--matsuba) 18%,var(--input-bg));border-color:var(--success)}
+      .wz-word-done .wz-jp,.wz-word-done .wz-nl{text-decoration:line-through;opacity:.7}
+      .wz-done{text-align:center;font-weight:700;color:var(--success);background:color-mix(in srgb,var(--matsuba) 12%,var(--input-bg));border:1px solid var(--success);border-radius:10px;padding:10px;margin-top:14px}
+      .wz-count{font-size:12.5px;color:var(--muted);font-weight:400;margin-top:6px}
+      .wz-coinpop{position:absolute;top:38%;left:50%;transform:translateX(-50%);font-size:34px;font-weight:900;color:var(--accent);text-shadow:0 2px 6px rgba(0,0,0,.3);pointer-events:none;animation:wz-coin 1.5s ease-out forwards;z-index:60}
+      @keyframes wz-coin{0%{opacity:0;transform:translate(-50%,10px) scale(.6)}20%{opacity:1;transform:translate(-50%,0) scale(1.1)}70%{opacity:1;transform:translate(-50%,-30px) scale(1)}100%{opacity:0;transform:translate(-50%,-60px) scale(.9)}}
+      .wz-confetti{position:absolute;top:-10px;font-size:22px;pointer-events:none;animation:wz-fall 1.5s ease-in forwards;z-index:50}
+      @keyframes wz-fall{to{transform:translateY(440px) rotate(220deg);opacity:0}}
+    `;
+    document.head.appendChild(s);
+  }
+
+  window.KanaWoordzoeker={start};
+  window.startWoordzoekerInit=function(){(window.switchScreen||function(){})('screen-woordzoeker');const el=document.getElementById('woordzoeker-root');if(el)start(el);};
 })();
 
 </script>
