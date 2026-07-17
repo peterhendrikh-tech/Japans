@@ -348,6 +348,7 @@
             <button class="btn" style="background:var(--kincha);" onclick="startWoordzoekerInit()">🔤 Woordzoeker (Japans)</button>
             <button class="btn" style="background:var(--ai);" onclick="startBuizenInit()">🚰 Buizenpuzzel</button>
             <button class="btn" style="background:var(--sumi);" onclick="startNonogramInit()">🖼️ Nonogram (Picross)</button>
+            <button class="btn" style="background:var(--shu);" onclick="startZipInit()">🔗 Zip</button>
         </div>
     </div>
 
@@ -474,6 +475,10 @@
 
     <div id="screen-nonogram" class="screen">
         <div id="nonogram-root"></div>
+    </div>
+
+    <div id="screen-zip" class="screen">
+        <div id="zip-root"></div>
     </div>
 
     <div id="screen-draw" class="screen">
@@ -2382,6 +2387,251 @@
 
   window.KanaNonogram={start};
   window.startNonogramInit=function(){(window.switchScreen||function(){})('screen-nonogram');const el=document.getElementById('nonogram-root');if(el)start(el);};
+})();
+
+</script>
+<script id="zip-engine">
+/* ============================================================
+   Kana Master · Zip — teken één doorlopende lijn die elk vakje
+   precies één keer vult en de nummers in volgorde (1→2→3…) aandoet.
+   Drie formaten: 6×6, 10×10, 20×20. Munten per formaat (1×/dag).
+   Blootgesteld: window.startZipInit(), window.KanaZip
+   ============================================================ */
+(function () {
+  const SIZES = [6, 10, 20];
+  const COUNT = SIZES.length;
+  const COINS = {6:2, 10:5, 20:15};   // munten per formaat
+  const KPER  = {6:6, 10:8, 20:14};   // aantal genummerde punten
+
+  function hashStr(s){let h=2166136261>>>0;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0;}
+  function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+  const pad=n=>String(n).padStart(2,'0');
+  const fmt=s=>`${Math.floor(s/60)}:${pad(s%60)}`;
+  function todayStr(){const d=new Date();return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;}
+  const nlDate=s=>{const[y,m,d]=s.split('-');return `${d}-${m}-${y}`;};
+  const LS={get:(k,f)=>{try{const v=localStorage.getItem(k);return v==null?f:JSON.parse(v);}catch(e){return f;}},set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}};
+  const CIRC=['①','②','③'];
+  const kkey=(x,y)=>y*100+x;
+
+  // ---- Hamiltoniaans pad (backbite) ----
+  function snake(N){const p=[];for(let y=0;y<N;y++){if(y%2===0)for(let x=0;x<N;x++)p.push([x,y]);else for(let x=N-1;x>=0;x--)p.push([x,y]);}return p;}
+  function neighborsOf(x,y,N){const r=[];if(x>0)r.push([x-1,y]);if(x<N-1)r.push([x+1,y]);if(y>0)r.push([x,y-1]);if(y<N-1)r.push([x,y+1]);return r;}
+  function backbite(N,rng,iters){
+    let p=snake(N);const m=p.length;let pos=new Map();p.forEach((c,i)=>pos.set(kkey(c[0],c[1]),i));
+    const step=(head)=>{const e=head?p[0]:p[m-1];const nb=neighborsOf(e[0],e[1],N);const u=nb[Math.floor(rng()*nb.length)];const j=pos.get(kkey(u[0],u[1]));
+      if(head){if(j<=1)return;p=p.slice(0,j).reverse().concat(p.slice(j));}
+      else{if(j>=m-2)return;p=p.slice(0,j+1).concat(p.slice(j+1).reverse());}
+      pos=new Map();p.forEach((c,i)=>pos.set(kkey(c[0],c[1]),i));};
+    for(let i=0;i<iters;i++)step(rng()<0.5);
+    return p;
+  }
+  function buildDaily(dateStr,N){
+    const rng=mulberry32(hashStr(dateStr+'#zip#'+N));
+    const path=backbite(N,rng,N*N*6);const m=path.length;const K=KPER[N];
+    const idx=[0];const span=(m-1)/(K-1);
+    for(let i=1;i<K-1;i++){let t=Math.round(i*span+(rng()*2-1)*span*0.25);t=Math.max(idx[idx.length-1]+1,Math.min(m-2,t));idx.push(t);}
+    idx.push(m-1);
+    const numberAt=new Map();idx.forEach((ix,i)=>numberAt.set(kkey(path[ix][0],path[ix][1]),i+1));
+    return {N,K,numberAt,dateStr};
+  }
+
+  // ---- status ----
+  let root,date,cache,gi,puz,curN,numberAt,K,pathArr,visited,maxNum,dragging,startT,clockId,cdId,elapsed,locked;
+
+  function start(container){root=container;date=todayStr();cache=Array(COUNT).fill(null);gi=firstUnsolved();renderShell();loadPuzzle(gi);}
+  const doneKey=i=>`kp-zip-${date}-${SIZES[i]}`;
+  const dat=i=>LS.get(doneKey(i),null);
+  const isSolved=i=>!!dat(i);
+  const solvedCount=()=>{let n=0;for(let i=0;i<COUNT;i++)if(isSolved(i))n++;return n;};
+  function firstUnsolved(){for(let i=0;i<COUNT;i++)if(!isSolved(i))return i;return 0;}
+  function firstUnsolvedAfter(i){for(let j=1;j<=COUNT;j++){const k=(i+j)%COUNT;if(!isSolved(k))return k;}return null;}
+
+  function renderShell(){
+    root.innerHTML=`
+      <div class="zp-wrap">
+        <div class="zp-head">
+          <div><div class="zp-title">🔗 Zip</div><div class="zp-date">${nlDate(date)}</div></div>
+          <div class="zp-meta"><span class="zp-chip">🔥 <span id="zp-streak">${LS.get('kp-zip-streak',0)}</span></span><span class="zp-chip">📅 <span id="zp-prog">${solvedCount()}</span>/${COUNT}</span></div>
+        </div>
+        <div class="zp-picker" id="zp-picker"></div>
+        <div id="zp-body"></div>
+        <button class="btn" id="zp-back" style="background:var(--muted);margin-top:12px;">← Menu</button>
+      </div>`;
+    injectStyle();
+    root.querySelector('#zp-back').onclick=()=>{stop();(window.switchScreen||function(){})('screen-menu');};
+    drawPicker();
+  }
+  function drawPicker(){
+    const p=root.querySelector('#zp-picker');p.innerHTML='';
+    for(let i=0;i<COUNT;i++){const b=document.createElement('button');
+      b.className='zp-tab'+(i===gi?' zp-tab-on':'')+(isSolved(i)?' zp-tab-done':'');
+      b.innerHTML=`<span class="zp-tab-n">${CIRC[i]}</span><span class="zp-tab-sz">${SIZES[i]}×${SIZES[i]}</span><span class="zp-tab-coin">${isSolved(i)?'✓':'🪙'+COINS[SIZES[i]]}</span>`;
+      b.onclick=()=>{if(i!==gi){gi=i;loadPuzzle(i);drawPicker();}};p.appendChild(b);}
+  }
+
+  function loadPuzzle(i){
+    stop();
+    if(!cache[i])cache[i]=buildDaily(date,SIZES[i]);
+    puz=cache[i];curN=puz.N;numberAt=puz.numberAt;K=puz.K;
+    if(isSolved(i)){locked=true;renderSolved(i);}
+    else{locked=false;resetPath();renderPlay();startClock();}
+  }
+  function resetPath(){pathArr=[];visited=new Set();maxNum=0;}
+
+  function renderPlay(){
+    root.querySelector('#zp-body').innerHTML=`
+      <p class="zp-uitleg">Sleep vanaf de <b>1</b> één doorlopende lijn die élk vakje precies één keer vult en onderweg de cijfers in volgorde (1→2→3…) aandoet. Sleep terug om te wissen; tik een bezocht vakje om tot daar terug te gaan.</p>
+      <div class="zp-timerbar">⏱️ <span id="zp-timer">0:00</span></div>
+      <div class="zp-boardwrap"><div id="zp-grid" class="zp-grid" style="--n:${curN}"><svg id="zp-line" class="zp-line" viewBox="0 0 ${curN} ${curN}" preserveAspectRatio="none"><polyline points=""/></svg></div></div>
+      <div class="zp-status" id="zp-status"></div>
+      <div class="zp-btns"><button class="btn zp-btn-2" id="zp-reset">✕ Opnieuw</button></div>`;
+    buildGrid();sizeBoard();
+    root.querySelector('#zp-reset').onclick=()=>{if(!locked){resetPath();redraw();updateStatus();}};
+  }
+  function renderSolved(i){
+    const allDone=solvedCount()===COUNT,next=firstUnsolvedAfter(i),d=dat(i)||{};
+    root.querySelector('#zp-body').innerHTML=`
+      <div class="zp-solved">
+        <div class="zp-big">${allDone?'⛩️':'✅'}</div>
+        <h3>Zip ${SIZES[i]}×${SIZES[i]} opgelost</h3>
+        <div class="zp-res-row"><span>Tijd</span><b>${fmt(d.time||0)}</b></div>
+        <div class="zp-res-row"><span>Verdiend</span><b>🪙 ${d.coins||COINS[SIZES[i]]}</b></div>
+        ${allDone?`<div class="zp-daydone">Alle 3 vandaag gehaald! 🔥 Streak ${LS.get('kp-zip-streak',0)}</div><div class="zp-count">Nieuwe puzzels over <b id="zp-cd">–</b></div>`
+          :(next!==null?`<button class="btn" id="zp-next">Volgende: ${SIZES[next]}×${SIZES[next]} (🪙 ${COINS[SIZES[next]]}) →</button>`:'')}
+        <button class="btn zp-btn-2" id="zp-share">📋 Deel dag</button>
+      </div>`;
+    const nb=root.querySelector('#zp-next');if(nb)nb.onclick=()=>{gi=next;loadPuzzle(next);drawPicker();};
+    root.querySelector('#zp-share').onclick=doShare;
+    if(allDone)tickCd();
+  }
+
+  function buildGrid(){
+    const g=root.querySelector('#zp-grid');
+    // cellen vóór de svg invoegen zodat de lijn erboven ligt
+    const frag=document.createDocumentFragment();
+    for(let y=0;y<curN;y++)for(let x=0;x<curN;x++){
+      const c=document.createElement('div');c.className='zp-cell';c.dataset.x=x;c.dataset.y=y;
+      const num=numberAt.get(kkey(x,y));
+      if(num){c.classList.add('zp-num');if(num===1)c.classList.add('zp-num-start');if(num===K)c.classList.add('zp-num-end');c.innerHTML=`<span>${num}</span>`;}
+      frag.appendChild(c);
+    }
+    g.insertBefore(frag,g.firstChild);
+    bindPointer(g);redraw();updateStatus();
+  }
+  function sizeBoard(){
+    const wrap=root.querySelector('.zp-boardwrap');if(!wrap)return;
+    const avail=Math.min(wrap.clientWidth||360,440);
+    const maxCell=curN<=6?52:(curN<=10?36:22);
+    const cell=Math.max(15,Math.min(maxCell,Math.floor((avail-6)/curN)));
+    const g=root.querySelector('#zp-grid');if(g)g.style.setProperty('--cell',cell+'px');
+  }
+
+  // ---- interactie ----
+  function cellFromPoint(cx,cy){const el=document.elementFromPoint(cx,cy);const c=el&&el.closest?el.closest('.zp-cell'):null;return c?[+c.dataset.x,+c.dataset.y]:null;}
+  const last=()=>pathArr[pathArr.length-1];
+  const adj=(a,b)=>Math.abs(a[0]-b[0])+Math.abs(a[1]-b[1])===1;
+  const numOK=(x,y)=>{const n=numberAt.get(kkey(x,y));return n===undefined||n===maxNum+1;};
+
+  function bindPointer(g){
+    g.onpointerdown=e=>{if(locked)return;const c=cellFromPoint(e.clientX,e.clientY);if(!c)return;e.preventDefault();
+      g.setPointerCapture&&g.setPointerCapture(e.pointerId);dragging=true;
+      if(pathArr.length===0){ if(numberAt.get(kkey(c[0],c[1]))===1){push(c);} else flash(); return; }
+      const li=last();
+      if(c[0]===li[0]&&c[1]===li[1])return;
+      if(visited.has(kkey(c[0],c[1]))){truncateTo(c);return;}
+      tryExtend(c);
+    };
+    g.onpointermove=e=>{if(!dragging||locked)return;const c=cellFromPoint(e.clientX,e.clientY);if(!c)return;
+      if(pathArr.length===0)return;
+      const li=last();if(c[0]===li[0]&&c[1]===li[1])return;
+      if(pathArr.length>=2){const prev=pathArr[pathArr.length-2];if(c[0]===prev[0]&&c[1]===prev[1]){pop();return;}}
+      if(visited.has(kkey(c[0],c[1])))return; // niet dwars door bezochte cel slepen
+      tryExtend(c);
+    };
+    const end=()=>{if(!dragging)return;dragging=false;checkWin();};
+    g.onpointerup=end;g.onpointercancel=end;
+  }
+  function tryExtend(c){const li=last();if(li&&adj(li,c)&&!visited.has(kkey(c[0],c[1]))&&numOK(c[0],c[1]))push(c);}
+  function push(c){pathArr.push(c);visited.add(kkey(c[0],c[1]));const n=numberAt.get(kkey(c[0],c[1]));if(n)maxNum=n;setCell(c,true);redrawLine();updateStatus();}
+  function pop(){const c=pathArr.pop();visited.delete(kkey(c[0],c[1]));const n=numberAt.get(kkey(c[0],c[1]));if(n)maxNum=n-1;setCell(c,false);redrawLine();updateStatus();}
+  function truncateTo(c){const ix=pathArr.findIndex(p=>p[0]===c[0]&&p[1]===c[1]);if(ix<0)return;
+    for(let i=pathArr.length-1;i>ix;i--){const cc=pathArr[i];visited.delete(kkey(cc[0],cc[1]));setCell(cc,false);}
+    pathArr=pathArr.slice(0,ix+1);maxNum=0;pathArr.forEach(p=>{const n=numberAt.get(kkey(p[0],p[1]));if(n)maxNum=n;});redrawLine();updateStatus();}
+
+  function setCell(c,on){const el=root.querySelector(`.zp-cell[data-x="${c[0]}"][data-y="${c[1]}"]`);if(el)el.classList.toggle('zp-on',on);}
+  function redraw(){root.querySelectorAll('.zp-cell').forEach(el=>{const x=+el.dataset.x,y=+el.dataset.y;el.classList.toggle('zp-on',visited.has(kkey(x,y)));});redrawLine();}
+  function redrawLine(){const pl=root.querySelector('#zp-line polyline');if(!pl)return;pl.setAttribute('points',pathArr.map(([x,y])=>`${x+0.5},${y+0.5}`).join(' '));
+    // markeer huidige kop
+    root.querySelectorAll('.zp-head-cell').forEach(el=>el.classList.remove('zp-head-cell'));
+    if(pathArr.length){const li=last();const el=root.querySelector(`.zp-cell[data-x="${li[0]}"][data-y="${li[1]}"]`);if(el)el.classList.add('zp-head-cell');}}
+  function flash(){const g=root.querySelector('#zp-grid');if(!g)return;g.classList.add('zp-shake');setTimeout(()=>g.classList.remove('zp-shake'),300);}
+
+  function updateStatus(){const el=root.querySelector('#zp-status');if(el)el.textContent=`${pathArr.length}/${curN*curN} vakjes · nummer ${maxNum}/${K}`;}
+  function checkWin(){if(pathArr.length===curN*curN&&maxNum===K)win();}
+
+  function startClock(){startT=Date.now();elapsed=0;clearInterval(clockId);clockId=setInterval(()=>{elapsed=Math.floor((Date.now()-startT)/1000);const t=root.querySelector('#zp-timer');if(t)t.textContent=fmt(elapsed);},1000);}
+  function stop(){clearInterval(clockId);clearInterval(cdId);}
+
+  function win(){
+    stop();locked=true;const reward=COINS[curN];LS.set(doneKey(gi),{time:elapsed,coins:reward});
+    try{ if(typeof window.wijsGachaMuntToe==='function') window.wijsGachaMuntToe(reward); }catch(e){console.warn('Munttoekenning zip mislukt:',e);}
+    if(solvedCount()===COUNT){const lastD=LS.get('kp-zip-last',null);if(lastD!==date){const y=new Date();y.setDate(y.getDate()-1);const yStr=`${y.getFullYear()}-${pad(y.getMonth()+1)}-${pad(y.getDate())}`;let st=LS.get('kp-zip-streak',0);st=(lastD===yStr)?st+1:1;LS.set('kp-zip-streak',st);LS.set('kp-zip-last',date);}}
+    const sc=root.querySelector('#zp-streak');if(sc)sc.textContent=LS.get('kp-zip-streak',0);
+    const pc=root.querySelector('#zp-prog');if(pc)pc.textContent=solvedCount();
+    celebrate(reward);drawPicker();setTimeout(()=>renderSolved(gi),750);
+  }
+  function doShare(){const parts=[];for(let i=0;i<COUNT;i++){const d=dat(i);parts.push(`${SIZES[i]}² ${d?fmt(d.time):'–'}`);}
+    const txt=`🔗 Kana Master · Zip\n${nlDate(date)}\n${parts.join('  ')}\n🔥 Streak ${LS.get('kp-zip-streak',0)}`;
+    if(navigator.clipboard)navigator.clipboard.writeText(txt);const b=root.querySelector('#zp-share');if(b){const o=b.textContent;b.textContent='✓ Gekopieerd!';setTimeout(()=>b.textContent=o,1500);}}
+  function tickCd(){const el=root.querySelector('#zp-cd');if(!el)return;const upd=()=>{const now=new Date(),mid=new Date(now);mid.setHours(24,0,0,0);let s=Math.floor((mid-now)/1000);const h=s/3600|0;s%=3600;el.textContent=`${pad(h)}:${pad(s/60|0)}:${pad(s%60)}`;};upd();clearInterval(cdId);cdId=setInterval(upd,1000);}
+  function celebrate(reward){const c=document.createElement('div');c.className='zp-coinpop';c.textContent=`+🪙${reward}`;root.appendChild(c);setTimeout(()=>c.remove(),1400);
+    const em=['⛩️','🌸','✨','🎉'];for(let i=0;i<14;i++){const s=document.createElement('div');s.className='zp-confetti';s.textContent=em[i%em.length];s.style.left=(Math.random()*100)+'%';s.style.animationDelay=(Math.random()*0.3)+'s';root.appendChild(s);setTimeout(()=>s.remove(),1600);}}
+
+  function injectStyle(){
+    if(document.getElementById('zp-style'))return;
+    const s=document.createElement('style');s.id='zp-style';s.textContent=`
+      .zp-wrap{position:relative}
+      .zp-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:8px}
+      .zp-title{font-family:var(--font-display);font-size:24px;font-weight:800;color:var(--dark)}
+      .zp-date{font-size:13px;color:var(--muted)}
+      .zp-meta{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+      .zp-chip{background:var(--input-bg);border:1px solid var(--border);border-radius:20px;padding:4px 10px;font-size:14px;font-weight:700;white-space:nowrap}
+      .zp-picker{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+      .zp-tab{position:relative;display:flex;flex-direction:column;align-items:center;gap:1px;padding:7px 4px;background:var(--input-bg);border:1px solid var(--border);border-radius:10px;cursor:pointer;font-family:var(--font-body);color:var(--text)}
+      .zp-tab-on{border-color:var(--primary);box-shadow:0 0 0 2px var(--primary) inset}
+      .zp-tab-done{background:color-mix(in srgb,var(--success) 15%,var(--input-bg))}
+      .zp-tab-n{font-size:18px;line-height:1}.zp-tab-sz{font-size:11px;color:var(--muted);font-weight:700}
+      .zp-tab-coin{font-size:11px;font-weight:700;color:var(--accent)}.zp-tab-done .zp-tab-coin{color:var(--success)}
+      .zp-uitleg{font-size:12.5px;color:var(--muted);line-height:1.5;margin:0 0 10px}
+      .zp-timerbar{text-align:center;font-size:14px;font-weight:700;color:var(--muted);margin-bottom:8px}
+      .zp-boardwrap{display:flex;justify-content:center}
+      .zp-grid{--cell:28px;position:relative;display:grid;grid-template-columns:repeat(var(--n),var(--cell));grid-template-rows:repeat(var(--n),var(--cell));background:var(--input-bg);border:3px solid var(--sumi);border-radius:8px;overflow:hidden;touch-action:none;user-select:none}
+      .zp-cell{position:relative;width:var(--cell);height:var(--cell);border:1px solid color-mix(in srgb,var(--sumi) 12%,transparent);display:flex;align-items:center;justify-content:center;cursor:pointer}
+      .zp-on{background:color-mix(in srgb,var(--shu) 16%,var(--input-bg))}
+      .zp-head-cell{box-shadow:0 0 0 2px var(--shu) inset}
+      .zp-num span{position:relative;z-index:3;display:flex;align-items:center;justify-content:center;width:78%;height:78%;border-radius:50%;background:var(--ai);color:#fff8ee;font-weight:800;font-size:calc(var(--cell)*.5)}
+      .zp-num-start span{background:var(--matsuba)}
+      .zp-num-end span{background:var(--shu)}
+      .zp-line{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:2}
+      .zp-line polyline{fill:none;stroke:var(--shu);stroke-width:.42;stroke-linejoin:round;stroke-linecap:round;opacity:.85}
+      .zp-shake{animation:zp-shk .3s}@keyframes zp-shk{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+      .zp-status{text-align:center;font-size:13px;color:var(--muted);margin:12px 0 6px;min-height:18px;font-weight:700}
+      .zp-btns{display:grid;grid-template-columns:1fr;gap:10px}
+      .zp-btn-2{background:var(--input-bg)!important;color:var(--text)!important;border:1px solid var(--border)!important;box-shadow:none!important}
+      .zp-solved{text-align:center;padding:14px 6px}.zp-big{font-size:52px;animation:zp-pop .6s}
+      @keyframes zp-pop{0%{transform:scale(1)}40%{transform:scale(1.04)}100%{transform:scale(1)}}
+      .zp-res-row{display:flex;justify-content:space-between;max-width:240px;margin:8px auto;padding:8px 14px;background:var(--input-bg);border:1px solid var(--border);border-radius:10px;font-size:15px}
+      .zp-daydone{margin:10px 0;font-weight:700;color:var(--success)}.zp-count{font-size:13px;color:var(--muted);margin:10px 0}
+      .zp-coinpop{position:absolute;top:40%;left:50%;transform:translateX(-50%);font-size:34px;font-weight:900;color:var(--accent);text-shadow:0 2px 6px rgba(0,0,0,.3);pointer-events:none;animation:zp-coin 1.4s ease-out forwards;z-index:60}
+      @keyframes zp-coin{0%{opacity:0;transform:translate(-50%,10px) scale(.6)}20%{opacity:1;transform:translate(-50%,0) scale(1.1)}70%{opacity:1;transform:translate(-50%,-30px) scale(1)}100%{opacity:0;transform:translate(-50%,-60px) scale(.9)}}
+      .zp-confetti{position:absolute;top:-10px;font-size:22px;pointer-events:none;animation:zp-fall 1.5s ease-in forwards;z-index:50}
+      @keyframes zp-fall{to{transform:translateY(460px) rotate(220deg);opacity:0}}
+    `;
+    document.head.appendChild(s);
+  }
+
+  window.KanaZip={start};
+  window.startZipInit=function(){(window.switchScreen||function(){})('screen-zip');const el=document.getElementById('zip-root');if(el)start(el);window.addEventListener('resize',()=>{try{const g=document.querySelector('#zp-grid');if(g){const wrap=document.querySelector('.zp-boardwrap');const avail=Math.min(wrap.clientWidth||360,440);const n=+g.style.getPropertyValue('--n');const maxCell=n<=6?52:(n<=10?36:22);g.style.setProperty('--cell',Math.max(15,Math.min(maxCell,Math.floor((avail-6)/n)))+'px');}}catch(e){}});};
 })();
 
 </script>
