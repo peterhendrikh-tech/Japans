@@ -2197,17 +2197,17 @@
 </script>
 <script id="nonogram-engine">
 /* ============================================================
-   Kana Master · Nonogram (Picross) — dagelijkse Japanse puzzel
-   Vul vakjes op basis van de cijferaanwijzingen tot het plaatje
-   klopt. Sumi-inkt op washi. Levert munten op (1×/dag).
+   Kana Master · Nonogram (Picross) — 2 dagelijkse formaten
+   Elke dag: 1× 10x10 en 1x 20x20. Sumi-inkt op washi.
+   Munten per formaat (1x/dag), streak als je beide haalt.
    Blootgesteld: window.startNonogramInit(), window.KanaNonogram
    ============================================================ */
 (function () {
-  const N = 10;
-  const REWARD = 20;   // munten bij oplossen (pas naar wens aan)
+  const SIZES = [10, 20];
+  const COUNT = SIZES.length;
+  const COINS = {10:20, 20:40};
 
-  // ---- plaatjesbibliotheek (10×10, '#'=gevuld) ----
-  const PICS = [
+  const PICS10 = [
     {naam:'Torii', rows:['.########.','.########.','.##....##.','##########','##########','.##....##.','.##....##.','.##....##.','.##....##.','.##....##.']},
     {naam:'Berg Fuji', rows:['..........','....##....','...####...','...#..#...','..#....#..','..#....#..','.#......#.','.#......#.','##########','##########']},
     {naam:'Kat', rows:['#........#','##......##','#.#....#.#','#..####..#','#.######.#','#.#.##.#.#','#.######.#','#..####..#','.#......#.','..######..']},
@@ -2221,6 +2221,18 @@
     {naam:'Hart', rows:['..........','.##....##.','##########','##########','##########','.########.','.########.','..######..','...####...','....##....']},
     {naam:'Theekopje', rows:['..........','..#.#.#...','...#.#....','..######.#','..######.#','..######.#','..######..','.########.','..........','..........']}
   ];
+  const PICS20 = [
+  {naam:'Torii', rows:['....................','....................','..################..','..################..','..################..','.....##......##.....','....############....','....############....','.....##......##.....','.....##......##.....','.....##......##.....','.....##......##.....','.....##......##.....','.....##......##.....','.....##......##.....','.....##......##.....','.....##......##.....','...#####....#####...','...#####....#####...','....................']},
+  {naam:'Berg Fuji', rows:['....................','....................','..........#.........','.........###........','........#####.......','.......#######......','......#########.....','.....###########....','....#############...','...###############..','..#################.','.###################','####################','####################','####################','####################','####################','####################','.##################.','.##################.']},
+  {naam:'Kat', rows:['....................','....................','....................','......#...#...#.....','..#################.','####################','####################','####################','......###########...','.....############...','.....############...','.....############...','....#############...','.....###########....','.....###########....','.....###########....','......#########.....','.......#######......','..........#.........','....................']},
+  {naam:'Koi', rows:['....................','....................','....................','....................','....................','.........#..........','......#######.######','.....###############','.....###############','.....##############.','....###############.','.....#############..','.....###############','.....###############','......#######.######','.........#..........','....................','....................','....................','....................']},
+  {naam:'Lantaarn', rows:['....................','....................','....................','.......#######......','......#########.....','.....###########....','.....###########....','.....###########....','....#############...','....#############...','....#############...','....#############...','....#############...','.....###########....','.....###########....','.....###########....','......#########.....','.......#######......','.......#######......','....................']},
+  {naam:'Daruma', rows:['....................','....................','....................','....................','..........#.........','.......#######......','......#########.....','.....###########....','....#############...','....#############...','....#############...','...###############..','....#############...','....#############...','....#############...','.....###########....','......#########.....','.......#######......','..........#.........','....................']},
+  {naam:'Pagode', rows:['....................','....................','....................','..#################.','.###################','.......#######......','.......#######......','.......#######......','...###############..','..#################.','.......#######......','.......#######......','.......#######......','..#################.','.###################','........#####.......','........#####.......','........#####.......','........#####.......','....................']},
+  {naam:'Sakura', rows:['....................','....................','..........#.........','........#####.......','........#####.......','.....#.#######.#....','...###############..','...###############..','..#######.#.#######.','...#####.###.#####..','...###############..','.....#.#.###.#.#....','.....###########....','.....#####.#####....','....#############...','.....#####.#####....','.....#####.#####....','.......#.....#......','....................','....................']},
+  {naam:'Zeilboot', rows:['....................','....................','....................','..........#.........','..........##........','..........###.......','..........####......','..........#####.....','..........######....','..........#######...','..........########..','..........#########.','..........#.........','....................','...###############..','...###############..','...###############..','.....###########....','....................','....................']}
+];
+  const LIB = {10:PICS10, 20:PICS20};
 
   function hashStr(s){let h=2166136261>>>0;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0;}
   function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
@@ -2229,123 +2241,122 @@
   function todayStr(){const d=new Date();return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;}
   const nlDate=s=>{const[y,m,d]=s.split('-');return `${d}-${m}-${y}`;};
   const LS={get:(k,f)=>{try{const v=localStorage.getItem(k);return v==null?f:JSON.parse(v);}catch(e){return f;}},set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}};
+  const CIRC=['\u2460','\u2461'];
 
   const runs=arr=>{const r=[];let c=0;for(const v of arr){if(v){c++;}else if(c){r.push(c);c=0;}}if(c)r.push(c);return r.length?r:[0];};
-  function cluesFor(sol){
-    const rowC=[],colC=[];
-    for(let y=0;y<N;y++)rowC.push(runs(sol[y]));
-    for(let x=0;x<N;x++){const col=[];for(let y=0;y<N;y++)col.push(sol[y][x]);colC.push(runs(col));}
-    return {rowC,colC};
-  }
+  function cluesFor(sol,N){const rowC=[],colC=[];for(let y=0;y<N;y++)rowC.push(runs(sol[y]));for(let x=0;x<N;x++){const col=[];for(let y=0;y<N;y++)col.push(sol[y][x]);colC.push(runs(col));}return {rowC,colC};}
+  const eqRuns=(a,b)=>a.length===b.length&&a.every((v,i)=>v===b[i]);
 
-  // ---- status ----
-  let root,pic,sol,clues,state,mode,painting,paintVal,startTime,clockId,elapsed,locked;
+  let root,date,gi,curN,pic,sol,clues,state,mode,painting,paintVal,startTime,clockId,cdId,elapsed,locked;
 
-  function start(container){
-    root=container;const date=todayStr();
-    const rng=mulberry32(hashStr(date+'#nono'));
-    pic=PICS[Math.floor(rng()*PICS.length)];
-    sol=pic.rows.map(r=>Array.from(r).map(c=>c==='#'?1:0));
-    clues=cluesFor(sol);
-    state=Array.from({length:N},()=>Array(N).fill(0)); // 0 leeg,1 gevuld,2 kruis
-    mode='fill';elapsed=0;
-    const done=LS.get('kp-nono-'+date,null);
-    render();
-    if(done){locked=true;state=sol.map(r=>r.map(v=>v?1:0));drawCells();markClues();showDone(done.time||0,false);}
-    else{locked=false;startTime=Date.now();startClock();}
-  }
-  function startClock(){clearInterval(clockId);clockId=setInterval(()=>{elapsed=Math.floor((Date.now()-startTime)/1000);const t=root.querySelector('#ng-timer');if(t)t.textContent=fmt(elapsed);},1000);}
+  function start(container){root=container;date=todayStr();gi=firstUnsolved();renderShell();loadSize(gi);}
+  const doneKey=i=>`kp-nono-${date}-${SIZES[i]}`;
+  const isSolved=i=>!!LS.get(doneKey(i),null);
+  const solvedCount=()=>{let n=0;for(let i=0;i<COUNT;i++)if(isSolved(i))n++;return n;};
+  function firstUnsolved(){for(let i=0;i<COUNT;i++)if(!isSolved(i))return i;return 0;}
+  function firstUnsolvedAfter(i){for(let j=1;j<=COUNT;j++){const k=(i+j)%COUNT;if(!isSolved(k))return k;}return null;}
 
-  function render(){
+  function renderShell(){
     root.innerHTML=`
       <div class="ng-wrap">
         <div class="ng-head">
-          <div><div class="ng-title">🖼️ Nonogram</div><div class="ng-date">${nlDate(todayStr())}</div></div>
-          <div class="ng-meta"><span class="ng-chip">🪙 ${REWARD}</span><span class="ng-chip">⏱️ <span id="ng-timer">0:00</span></span></div>
+          <div><div class="ng-title">\ud83d\uddbc\ufe0f Nonogram</div><div class="ng-date">${nlDate(date)}</div></div>
+          <div class="ng-meta"><span class="ng-chip">\ud83d\udd25 <span id="ng-streak">${LS.get('kp-nono-streak',0)}</span></span><span class="ng-chip">\ud83d\udcc5 <span id="ng-prog">${solvedCount()}</span>/${COUNT}</span></div>
         </div>
-        <p class="ng-uitleg">De cijfers geven aaneengesloten gevulde vakjes per rij/kolom. Vul de juiste vakjes tot het plaatje klopt. Wissel met de knop tussen vullen en kruisjes (om zeker-leeg te markeren).</p>
-        <div class="ng-boardwrap"><div class="ng-board" id="ng-board" style="--n:${N}"></div></div>
-        <div class="ng-status" id="ng-status"></div>
-        <div class="ng-btns">
-          <button class="btn ng-btn-2" id="ng-mode">✏️ Vullen</button>
-          <button class="btn ng-btn-2" id="ng-clear">✕ Wissen</button>
-        </div>
-        <button class="btn" id="ng-back" style="background:var(--muted);margin-top:10px;">← Menu</button>
+        <div class="ng-picker" id="ng-picker"></div>
+        <div id="ng-body"></div>
+        <button class="btn" id="ng-back" style="background:var(--muted);margin-top:10px;">\u2190 Menu</button>
       </div>`;
-    injectStyle();buildBoard();sizeBoard();
-    root.querySelector('#ng-mode').onclick=()=>{if(locked)return;mode=mode==='fill'?'cross':'fill';root.querySelector('#ng-mode').textContent=mode==='fill'?'✏️ Vullen':'✕ Kruis';};
-    root.querySelector('#ng-clear').onclick=()=>{if(locked)return;state=Array.from({length:N},()=>Array(N).fill(0));drawCells();markClues();updateStatus();};
-    root.querySelector('#ng-back').onclick=()=>{clearInterval(clockId);(window.switchScreen||function(){})('screen-menu');};
+    injectStyle();
+    root.querySelector('#ng-back').onclick=()=>{clearInterval(clockId);clearInterval(cdId);(window.switchScreen||function(){})('screen-menu');};
     window.addEventListener('resize',sizeBoard);
+    drawPicker();
+  }
+  function drawPicker(){
+    const p=root.querySelector('#ng-picker');p.innerHTML='';
+    for(let i=0;i<COUNT;i++){const b=document.createElement('button');
+      b.className='ng-tab'+(i===gi?' ng-tab-on':'')+(isSolved(i)?' ng-tab-done':'');
+      b.innerHTML=`<span class="ng-tab-n">${CIRC[i]}</span><span class="ng-tab-sz">${SIZES[i]}\u00d7${SIZES[i]}</span><span class="ng-tab-coin">${isSolved(i)?'\u2713':'\ud83e\ude99'+COINS[SIZES[i]]}</span>`;
+      b.onclick=()=>{if(i!==gi){gi=i;loadSize(i);drawPicker();}};p.appendChild(b);}
+  }
+
+  function loadSize(i){
+    clearInterval(clockId);clearInterval(cdId);
+    curN=SIZES[i];
+    const rng=mulberry32(hashStr(date+'#nono#'+curN));
+    const libr=LIB[curN];pic=libr[Math.floor(rng()*libr.length)];
+    sol=pic.rows.map(r=>Array.from(r).map(c=>c==='#'?1:0));
+    clues=cluesFor(sol,curN);
+    mode='fill';elapsed=0;
+    if(isSolved(i)){locked=true;state=sol.map(r=>r.map(v=>v?1:0));renderBody();drawCells();markClues();showDone(LS.get(doneKey(i)).time||0,false);}
+    else{locked=false;state=Array.from({length:curN},()=>Array(curN).fill(0));renderBody();startClock();}
+  }
+
+  function renderBody(){
+    root.querySelector('#ng-body').innerHTML=`
+      <p class="ng-uitleg">De cijfers geven aaneengesloten gevulde vakjes per rij/kolom. Vul de juiste vakjes tot het plaatje klopt. Wissel tussen vullen en kruisjes.</p>
+      <div class="ng-timerbar">\u23f1\ufe0f <span id="ng-timer">0:00</span></div>
+      <div class="ng-boardwrap"><div class="ng-board" id="ng-board" style="--n:${curN}"></div></div>
+      <div class="ng-status" id="ng-status"></div>
+      <div class="ng-btns"><button class="btn ng-btn-2" id="ng-mode">\u270f\ufe0f Vullen</button><button class="btn ng-btn-2" id="ng-clear">\u2715 Wissen</button></div>`;
+    buildBoard();sizeBoard();
+    root.querySelector('#ng-mode').onclick=()=>{if(locked)return;mode=mode==='fill'?'cross':'fill';root.querySelector('#ng-mode').textContent=mode==='fill'?'\u270f\ufe0f Vullen':'\u2715 Kruis';};
+    root.querySelector('#ng-clear').onclick=()=>{if(locked)return;state=Array.from({length:curN},()=>Array(curN).fill(0));drawCells();markClues();updateStatus();};
   }
 
   function buildBoard(){
-    const b=root.querySelector('#ng-board');
-    let cols='<div class="ng-cols">';
-    for(let x=0;x<N;x++){cols+=`<div class="ng-cclue" data-cx="${x}">${clues.colC[x].map(n=>`<span>${n}</span>`).join('')}</div>`;}
-    cols+='</div>';
-    let rows='<div class="ng-rows">';
-    for(let y=0;y<N;y++){rows+=`<div class="ng-rclue" data-ry="${y}">${clues.rowC[y].map(n=>`<span>${n}</span>`).join('')}</div>`;}
-    rows+='</div>';
-    let grid='<div class="ng-grid" id="ng-grid">';
-    for(let y=0;y<N;y++)for(let x=0;x<N;x++)grid+=`<div class="ng-cell" data-x="${x}" data-y="${y}"></div>`;
-    grid+='</div>';
+    const N=curN,b=root.querySelector('#ng-board');
+    let cols='<div class="ng-cols">';for(let x=0;x<N;x++)cols+=`<div class="ng-cclue" data-cx="${x}">${clues.colC[x].map(n=>`<span>${n}</span>`).join('')}</div>`;cols+='</div>';
+    let rows='<div class="ng-rows">';for(let y=0;y<N;y++)rows+=`<div class="ng-rclue" data-ry="${y}">${clues.rowC[y].map(n=>`<span>${n}</span>`).join('')}</div>`;rows+='</div>';
+    let grid='<div class="ng-grid" id="ng-grid">';for(let y=0;y<N;y++)for(let x=0;x<N;x++)grid+=`<div class="ng-cell" data-x="${x}" data-y="${y}"></div>`;grid+='</div>';
     b.innerHTML='<div class="ng-corner"></div>'+cols+rows+grid;
+    b.classList.toggle('ng-big',N>=20);
     drawCells();markClues();bindPointer();
   }
   function sizeBoard(){
-    const wrap=root.querySelector('.ng-boardwrap');if(!wrap)return;
-    const avail=Math.min(wrap.clientWidth||360,440);
-    const cell=Math.max(16,Math.min(32,Math.floor((avail-64)/N)));
-    root.querySelector('#ng-board').style.setProperty('--cell',cell+'px');
+    const board=root.querySelector('#ng-board');if(!board)return;const N=curN;
+    const wrap=root.querySelector('.ng-boardwrap');const avail=Math.min(wrap.clientWidth||360,460);
+    const rowsEl=root.querySelector('.ng-rows');const rowW=rowsEl?rowsEl.getBoundingClientRect().width:40;
+    const maxCell=N>=20?18:30, minCell=N>=20?12:16;
+    const cell=Math.max(minCell,Math.min(maxCell,Math.floor((avail-rowW-6)/N)));
+    board.style.setProperty('--cell',cell+'px');
   }
-  function drawCells(){
-    root.querySelectorAll('.ng-cell').forEach(c=>{const x=+c.dataset.x,y=+c.dataset.y,v=state[y][x];
-      c.classList.toggle('ng-fill',v===1);c.classList.toggle('ng-cross',v===2);});
-  }
-  function markClues(){
+  function drawCells(){root.querySelectorAll('.ng-cell').forEach(c=>{const x=+c.dataset.x,y=+c.dataset.y,v=state[y][x];c.classList.toggle('ng-fill',v===1);c.classList.toggle('ng-cross',v===2);});}
+  function markClues(){const N=curN;
     for(let y=0;y<N;y++){const ok=eqRuns(runs(state[y].map(v=>v===1?1:0)),clues.rowC[y]);const el=root.querySelector(`.ng-rclue[data-ry="${y}"]`);if(el)el.classList.toggle('ng-done',ok);}
     for(let x=0;x<N;x++){const col=[];for(let y=0;y<N;y++)col.push(state[y][x]===1?1:0);const ok=eqRuns(runs(col),clues.colC[x]);const el=root.querySelector(`.ng-cclue[data-cx="${x}"]`);if(el)el.classList.toggle('ng-done',ok);}
   }
-  const eqRuns=(a,b)=>a.length===b.length&&a.every((v,i)=>v===b[i]);
-
-  function bindPointer(){
-    const grid=root.querySelector('#ng-grid');
+  function bindPointer(){const grid=root.querySelector('#ng-grid');
     const cellAt=(cx,cy)=>{const el=document.elementFromPoint(cx,cy);return el&&el.classList&&el.classList.contains('ng-cell')?el:null;};
-    grid.onpointerdown=e=>{if(locked)return;const el=cellAt(e.clientX,e.clientY);if(!el)return;e.preventDefault();
-      const x=+el.dataset.x,y=+el.dataset.y,v=state[y][x];
-      if(mode==='fill')paintVal=(v===1)?0:1; else paintVal=(v===2)?0:2;
-      painting=true;apply(x,y);grid.setPointerCapture&&grid.setPointerCapture(e.pointerId);};
+    grid.onpointerdown=e=>{if(locked)return;const el=cellAt(e.clientX,e.clientY);if(!el)return;e.preventDefault();const x=+el.dataset.x,y=+el.dataset.y,v=state[y][x];if(mode==='fill')paintVal=(v===1)?0:1;else paintVal=(v===2)?0:2;painting=true;apply(x,y);grid.setPointerCapture&&grid.setPointerCapture(e.pointerId);};
     grid.onpointermove=e=>{if(!painting)return;const el=cellAt(e.clientX,e.clientY);if(!el)return;apply(+el.dataset.x,+el.dataset.y);};
     const end=()=>{if(!painting)return;painting=false;markClues();updateStatus();checkWin();};
     grid.onpointerup=end;grid.onpointercancel=end;
   }
   function apply(x,y){if(state[y][x]===paintVal)return;state[y][x]=paintVal;const c=root.querySelector(`.ng-cell[data-x="${x}"][data-y="${y}"]`);if(c){c.classList.toggle('ng-fill',paintVal===1);c.classList.toggle('ng-cross',paintVal===2);}}
-
-  function solvedNu(){
-    for(let y=0;y<N;y++)if(!eqRuns(runs(state[y].map(v=>v===1?1:0)),clues.rowC[y]))return false;
-    for(let x=0;x<N;x++){const col=[];for(let y=0;y<N;y++)col.push(state[y][x]===1?1:0);if(!eqRuns(runs(col),clues.colC[x]))return false;}
-    return true;
-  }
-  function updateStatus(){const filled=state.flat().filter(v=>v===1).length;const doel=sol.flat().filter(v=>v).length;const el=root.querySelector('#ng-status');if(el)el.textContent=`Gevuld: ${filled} · doel: ${doel}`;}
+  function solvedNu(){const N=curN;for(let y=0;y<N;y++)if(!eqRuns(runs(state[y].map(v=>v===1?1:0)),clues.rowC[y]))return false;for(let x=0;x<N;x++){const col=[];for(let y=0;y<N;y++)col.push(state[y][x]===1?1:0);if(!eqRuns(runs(col),clues.colC[x]))return false;}return true;}
+  function updateStatus(){const filled=state.flat().filter(v=>v===1).length,doel=sol.flat().filter(v=>v).length,el=root.querySelector('#ng-status');if(el)el.textContent=`Gevuld: ${filled} \u00b7 doel: ${doel}`;}
   function checkWin(){if(solvedNu())win();}
 
+  function startClock(){startTime=Date.now();elapsed=0;clearInterval(clockId);clockId=setInterval(()=>{elapsed=Math.floor((Date.now()-startTime)/1000);const t=root.querySelector('#ng-timer');if(t)t.textContent=fmt(elapsed);},1000);}
+
   function win(){
-    clearInterval(clockId);locked=true;const date=todayStr();const time=elapsed;
-    LS.set('kp-nono-'+date,{time,coins:REWARD});
-    try{ if(typeof window.wijsGachaMuntToe==='function') window.wijsGachaMuntToe(REWARD); }catch(e){console.warn('Munttoekenning nonogram mislukt:',e);}
-    // kruisjes weg, plaatje tonen
-    for(let y=0;y<N;y++)for(let x=0;x<N;x++)if(state[y][x]===2)state[y][x]=0;
-    drawCells();celebrate();setTimeout(()=>showDone(time,true),700);
+    clearInterval(clockId);locked=true;const time=elapsed;const reward=COINS[curN];
+    LS.set(doneKey(gi),{time,coins:reward});
+    try{ if(typeof window.wijsGachaMuntToe==='function') window.wijsGachaMuntToe(reward); }catch(e){console.warn('Munt nonogram mislukt:',e);}
+    if(solvedCount()===COUNT){const last=LS.get('kp-nono-last',null);if(last!==date){const y=new Date();y.setDate(y.getDate()-1);const yStr=`${y.getFullYear()}-${pad(y.getMonth()+1)}-${pad(y.getDate())}`;let st=LS.get('kp-nono-streak',0);st=(last===yStr)?st+1:1;LS.set('kp-nono-streak',st);LS.set('kp-nono-last',date);}}
+    const sc=root.querySelector('#ng-streak');if(sc)sc.textContent=LS.get('kp-nono-streak',0);
+    const pc=root.querySelector('#ng-prog');if(pc)pc.textContent=solvedCount();
+    for(let y=0;y<curN;y++)for(let x=0;x<curN;x++)if(state[y][x]===2)state[y][x]=0;
+    drawCells();celebrate(reward);drawPicker();setTimeout(()=>showDone(time,true),700);
   }
   function showDone(time,fresh){
-    const el=root.querySelector('#ng-status');
-    if(el)el.innerHTML=`<div class="ng-done-box">🎉 ${fresh?`Opgelost! +🪙 ${REWARD}`:'Vandaag al opgelost'} · Plaatje: <b>${pic.naam}</b> · ⏱️ ${fmt(time)}
-      <div class="ng-count">Nieuwe puzzel over <b id="ng-cd">–</b></div></div>`;
-    const cd=root.querySelector('#ng-cd');if(!cd)return;const upd=()=>{const now=new Date(),mid=new Date(now);mid.setHours(24,0,0,0);let s=Math.floor((mid-now)/1000);const h=s/3600|0;s%=3600;cd.textContent=`${pad(h)}:${pad(s/60|0)}:${pad(s%60)}`;};upd();clearInterval(clockId);clockId=setInterval(upd,1000);
+    const el=root.querySelector('#ng-status');const allDone=solvedCount()===COUNT;
+    if(el)el.innerHTML=`<div class="ng-done-box">\ud83c\udf89 ${fresh?`Opgelost! +\ud83e\ude99 ${COINS[curN]}`:'Vandaag al opgelost'} \u00b7 <b>${pic.naam}</b> \u00b7 \u23f1\ufe0f ${fmt(time)}
+      ${allDone?`<div class="ng-count">Beide klaar! \ud83d\udd25 Streak ${LS.get('kp-nono-streak',0)} \u00b7 nieuw over <b id="ng-cd">\u2013</b></div>`:'<div class="ng-count">Wissel bovenin naar het andere formaat.</div>'}</div>`;
+    if(allDone){const cd=root.querySelector('#ng-cd');const upd=()=>{const now=new Date(),mid=new Date(now);mid.setHours(24,0,0,0);let s=Math.floor((mid-now)/1000);const h=s/3600|0;s%=3600;cd.textContent=`${pad(h)}:${pad(s/60|0)}:${pad(s%60)}`;};upd();clearInterval(cdId);cdId=setInterval(upd,1000);}
   }
-  function celebrate(){const c=document.createElement('div');c.className='ng-coinpop';c.textContent=`+🪙${REWARD}`;root.appendChild(c);setTimeout(()=>c.remove(),1500);
-    const em=['🎉','✨','🏮','🖌️'];for(let i=0;i<14;i++){const s=document.createElement('div');s.className='ng-confetti';s.textContent=em[i%em.length];s.style.left=(Math.random()*100)+'%';s.style.animationDelay=(Math.random()*0.3)+'s';root.appendChild(s);setTimeout(()=>s.remove(),1600);}}
+  function celebrate(reward){const c=document.createElement('div');c.className='ng-coinpop';c.textContent=`+\ud83e\ude99${reward}`;root.appendChild(c);setTimeout(()=>c.remove(),1500);}
 
   function injectStyle(){
     if(document.getElementById('ng-style'))return;
@@ -2356,22 +2367,31 @@
       .ng-date{font-size:13px;color:var(--muted)}
       .ng-meta{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
       .ng-chip{background:var(--input-bg);border:1px solid var(--border);border-radius:20px;padding:4px 10px;font-size:14px;font-weight:700;white-space:nowrap}
+      .ng-picker{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:12px}
+      .ng-tab{position:relative;display:flex;flex-direction:column;align-items:center;gap:1px;padding:8px 4px;background:var(--input-bg);border:1px solid var(--border);border-radius:10px;cursor:pointer;font-family:var(--font-body);color:var(--text)}
+      .ng-tab-on{border-color:var(--primary);box-shadow:0 0 0 2px var(--primary) inset}
+      .ng-tab-done{background:color-mix(in srgb,var(--success) 15%,var(--input-bg))}
+      .ng-tab-n{font-size:18px;line-height:1}.ng-tab-sz{font-size:11px;color:var(--muted);font-weight:700}
+      .ng-tab-coin{font-size:11px;font-weight:700;color:var(--accent)}.ng-tab-done .ng-tab-coin{color:var(--success)}
       .ng-uitleg{font-size:12.5px;color:var(--muted);line-height:1.5;margin:0 0 10px}
-      .ng-boardwrap{display:flex;justify-content:center}
-      .ng-board{--cell:28px;display:grid;grid-template-columns:max-content calc(var(--cell)*var(--n));grid-template-rows:max-content calc(var(--cell)*var(--n));background:var(--card-bg)}
+      .ng-timerbar{text-align:center;font-size:14px;font-weight:700;color:var(--muted);margin-bottom:8px}
+      .ng-boardwrap{display:flex;justify-content:center;overflow-x:auto}
+      .ng-board{--cell:26px;display:grid;grid-template-columns:max-content calc(var(--cell)*var(--n));grid-template-rows:max-content calc(var(--cell)*var(--n))}
       .ng-corner{grid-column:1;grid-row:1}
       .ng-cols{grid-column:2;grid-row:1;display:grid;grid-template-columns:repeat(var(--n),var(--cell))}
-      .ng-cclue{display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:0;padding-bottom:3px;font-size:11px;font-weight:700;color:var(--dark);border-left:1px solid transparent}
+      .ng-cclue{display:flex;flex-direction:column;justify-content:flex-end;align-items:center;padding-bottom:3px;font-size:11px;font-weight:700;color:var(--dark)}
       .ng-cclue span{line-height:1.15}
       .ng-rows{grid-column:1;grid-row:2;display:grid;grid-template-rows:repeat(var(--n),var(--cell))}
       .ng-rclue{display:flex;flex-direction:row;justify-content:flex-end;align-items:center;gap:5px;padding-right:6px;font-size:11px;font-weight:700;color:var(--dark)}
-      .ng-done{color:var(--muted);opacity:.45}
+      .ng-big .ng-cclue,.ng-big .ng-rclue{font-size:9px}
+      .ng-big .ng-rclue{gap:3px;padding-right:4px}
+      .ng-done{color:var(--muted);opacity:.4}
       .ng-grid{grid-column:2;grid-row:2;display:grid;grid-template-columns:repeat(var(--n),var(--cell));grid-template-rows:repeat(var(--n),var(--cell));border:2px solid var(--sumi);touch-action:none;user-select:none}
-      .ng-cell{border:1px solid color-mix(in srgb,var(--sumi) 18%,transparent);background:var(--input-bg);cursor:pointer;position:relative}
-      .ng-cell:nth-child(5n){}
-      .ng-grid>.ng-cell:nth-child(10n+6){border-left:1px solid color-mix(in srgb,var(--sumi) 45%,transparent)}
+      .ng-cell{border:1px solid color-mix(in srgb,var(--sumi) 16%,transparent);background:var(--input-bg);cursor:pointer;position:relative}
+      .ng-big .ng-cell{border-color:color-mix(in srgb,var(--sumi) 10%,transparent)}
+      .ng-grid>.ng-cell:nth-child(var(--n)n){}
       .ng-fill{background:var(--sumi)!important}
-      .ng-cross::after{content:"×";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:color-mix(in srgb,var(--sumi) 50%,transparent);font-weight:700;font-size:calc(var(--cell)*.7)}
+      .ng-cross::after{content:"\u00d7";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:color-mix(in srgb,var(--sumi) 50%,transparent);font-weight:700;font-size:calc(var(--cell)*.7)}
       .ng-status{text-align:center;font-size:13px;color:var(--muted);margin:12px 0 8px;min-height:18px;font-weight:700}
       .ng-btns{display:grid;grid-template-columns:1fr 1fr;gap:10px}
       .ng-btn-2{background:var(--input-bg)!important;color:var(--text)!important;border:1px solid var(--border)!important;box-shadow:none!important}
@@ -2379,8 +2399,6 @@
       .ng-count{font-size:12.5px;color:var(--muted);font-weight:400;margin-top:6px}
       .ng-coinpop{position:absolute;top:40%;left:50%;transform:translateX(-50%);font-size:34px;font-weight:900;color:var(--accent);text-shadow:0 2px 6px rgba(0,0,0,.3);pointer-events:none;animation:ng-coin 1.5s ease-out forwards;z-index:60}
       @keyframes ng-coin{0%{opacity:0;transform:translate(-50%,10px) scale(.6)}20%{opacity:1;transform:translate(-50%,0) scale(1.1)}70%{opacity:1;transform:translate(-50%,-30px) scale(1)}100%{opacity:0;transform:translate(-50%,-60px) scale(.9)}}
-      .ng-confetti{position:absolute;top:-10px;font-size:22px;pointer-events:none;animation:ng-fall 1.5s ease-in forwards;z-index:50}
-      @keyframes ng-fall{to{transform:translateY(460px) rotate(220deg);opacity:0}}
     `;
     document.head.appendChild(s);
   }
