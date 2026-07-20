@@ -352,6 +352,7 @@
             <button class="btn" style="background:var(--kincha);" onclick="startAkariInit()">🏮 Akari (Light-up)</button>
             <button class="btn" style="background:var(--matsuba);" onclick="startFlowInit()">🔵 Flow (Numberlink)</button>
             <button class="btn" style="background:var(--special);" onclick="startFloodInit()">🎨 Kleurnet (Flood-It)</button>
+            <button class="btn" style="background:var(--ai);" onclick="startSokobanInit()">📦 Sokoban</button>
         </div>
     </div>
 
@@ -494,6 +495,10 @@
 
     <div id="screen-flood" class="screen">
         <div id="flood-root"></div>
+    </div>
+
+    <div id="screen-sokoban" class="screen">
+        <div id="sokoban-root"></div>
     </div>
 
     <div id="screen-draw" class="screen">
@@ -3077,6 +3082,163 @@
 
   window.KanaFlood={start};
   window.startFloodInit=function(){(window.switchScreen||function(){})('screen-flood');const el=document.getElementById('flood-root');if(el)start(el);};
+})();
+
+</script>
+<script id="sokoban-engine">
+/* ============================================================
+   Kana Master · Sokoban (倉庫番) — dagelijkse duwpuzzel
+   Duw alle dozen 📦 op de doelvakken ◎. Je kunt duwen, niet
+   trekken. Oplosbaar per constructie (omgekeerde-trek-generatie).
+   Blootgesteld: window.startSokobanInit(), window.KanaSokoban
+   ============================================================ */
+(function () {
+  const N = 8, K = 4, REWARD = 15;
+  const DIRS = [[0,-1],[0,1],[-1,0],[1,0]];
+  const kk = (x,y)=>y*N+x;
+
+  function hashStr(s){let h=2166136261>>>0;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0;}
+  function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+  const pad=n=>String(n).padStart(2,'0');const fmt=s=>`${Math.floor(s/60)}:${pad(s%60)}`;
+  function todayStr(){const d=new Date();return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;}
+  const nlDate=s=>{const[y,m,d]=s.split('-');return `${d}-${m}-${y}`;};
+  const LS={get:(k,f)=>{try{const v=localStorage.getItem(k);return v==null?f:JSON.parse(v);}catch(e){return f;}},set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}};
+
+  function genGrid(rng){const wall=Array.from({length:N},()=>Array(N).fill(0));for(let x=0;x<N;x++){wall[0][x]=1;wall[N-1][x]=1;}for(let y=0;y<N;y++){wall[y][0]=1;wall[y][N-1]=1;}let placed=0,tries=0;while(placed<4&&tries<40){tries++;const x=2+Math.floor(rng()*(N-4)),y=2+Math.floor(rng()*(N-4));if(!wall[y][x]){wall[y][x]=1;placed++;}}return wall;}
+  function floorsOf(wall){const f=[];for(let y=1;y<N-1;y++)for(let x=1;x<N-1;x++)if(!wall[y][x])f.push([x,y]);return f;}
+  function reachable(wall,boxes,from){const bs=new Set(boxes.map(b=>kk(b[0],b[1])));const seen=new Set([kk(from[0],from[1])]);const st=[from];while(st.length){const[x,y]=st.pop();for(const[dx,dy]of DIRS){const nx=x+dx,ny=y+dy;if(nx<0||nx>=N||ny<0||ny>=N||wall[ny][nx])continue;const k=kk(nx,ny);if(bs.has(k)||seen.has(k))continue;seen.add(k);st.push([nx,ny]);}}return seen;}
+  function buildDaily(dateStr){
+    const rng=mulberry32(hashStr(dateStr+'#soko'));const wall=genGrid(rng);const fl=floorsOf(wall);
+    const sh=fl.slice();for(let i=sh.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[sh[i],sh[j]]=[sh[j],sh[i]];}
+    const targets=sh.slice(0,K);let boxes=targets.map(t=>t.slice());
+    let player=fl.find(c=>!boxes.some(b=>b[0]===c[0]&&b[1]===c[1])).slice();
+    const states=[{boxes:boxes.map(b=>b.slice()),player:player.slice()}];
+    for(let step=0;step<60;step++){const reach=reachable(wall,boxes,player);const cand=[];
+      boxes.forEach((b,bi)=>{for(const f of DIRS){const pp=[b[0]-f[0],b[1]-f[1]],pd=[b[0]-2*f[0],b[1]-2*f[1]];const inb=p=>p[0]>=0&&p[0]<N&&p[1]>=0&&p[1]<N;
+        if(!inb(pp)||!inb(pd)||wall[pp[1]][pp[0]]||wall[pd[1]][pd[0]])continue;
+        if(boxes.some(bb=>bb[0]===pp[0]&&bb[1]===pp[1]))continue;if(boxes.some(bb=>bb[0]===pd[0]&&bb[1]===pd[1]))continue;
+        if(!reach.has(kk(pp[0],pp[1])))continue;cand.push({bi,newBox:pp,newPlayer:pd});}});
+      if(!cand.length)break;const mv=cand[Math.floor(rng()*cand.length)];boxes=boxes.map((b,i)=>i===mv.bi?mv.newBox:b);player=mv.newPlayer;
+      states.push({boxes:boxes.map(b=>b.slice()),player:player.slice()});}
+    let best=states[states.length-1],bs=-1;
+    for(const s of states){let off=0,disp=0;s.boxes.forEach((b,i)=>{if(!(b[0]===targets[i][0]&&b[1]===targets[i][1]))off++;disp+=Math.abs(b[0]-targets[i][0])+Math.abs(b[1]-targets[i][1]);});const score=off*100+disp;if(off>=Math.min(K,3)&&score>bs){bs=score;best=s;}}
+    return {wall,targets,boxStart:best.boxes,playerStart:best.player,dateStr};
+  }
+
+  let root,puz,walls,targetSet,boxes,player,history,moves,startT,clockId,cdId,elapsed,locked,keyHandler;
+  function start(container){root=container;const date=todayStr();puz=buildDaily(date);walls=puz.wall;targetSet=new Set(puz.targets.map(t=>kk(t[0],t[1])));
+    reset();const done=LS.get('kp-soko-'+date,null);render();
+    if(done){locked=true;boxes=puz.targets.map(t=>t.slice());drawGrid();showDone(done.time||0,done.moves||0,false);}
+    else{locked=false;startT=Date.now();startClock();}}
+  function reset(){boxes=puz.boxStart.map(b=>b.slice());player=puz.playerStart.slice();history=[];moves=0;}
+  function startClock(){clearInterval(clockId);clockId=setInterval(()=>{elapsed=Math.floor((Date.now()-startT)/1000);const t=root.querySelector('#sk-timer');if(t)t.textContent=fmt(elapsed);},1000);}
+
+  const boxAt=(x,y)=>boxes.findIndex(b=>b[0]===x&&b[1]===y);
+  function move(dx,dy){
+    if(locked)return;const tx=player[0]+dx,ty=player[1]+dy;
+    if(tx<0||tx>=N||ty<0||ty>=N||walls[ty][tx])return;
+    const bi=boxAt(tx,ty);
+    if(bi>=0){const bx=tx+dx,by=ty+dy;if(bx<0||bx>=N||by<0||by>=N||walls[by][bx]||boxAt(bx,by)>=0)return;
+      history.push({p:player.slice(),boxes:boxes.map(b=>b.slice())});boxes[bi]=[bx,by];player=[tx,ty];}
+    else{history.push({p:player.slice(),boxes:boxes.map(b=>b.slice())});player=[tx,ty];}
+    moves++;drawGrid();checkWin();
+  }
+  function undo(){if(locked||!history.length)return;const s=history.pop();player=s.p;boxes=s.boxes;moves=Math.max(0,moves-1);drawGrid();}
+
+  function render(){
+    root.innerHTML=`
+      <div class="sk-wrap">
+        <div class="sk-head"><div><div class="sk-title">📦 Sokoban</div><div class="sk-date">${nlDate(puz.dateStr)}</div></div>
+          <div class="sk-meta"><span class="sk-chip">🪙 ${REWARD}</span><span class="sk-chip">⏱️ <span id="sk-timer">0:00</span></span></div></div>
+        <p class="sk-uitleg">Duw alle dozen 📦 op de doelvakken ◎. Je kunt duwen maar niet trekken — denk vooruit! Beweeg met de pijltjes, de pijltjestoetsen, of tik op een aangrenzend vak.</p>
+        <div class="sk-boardwrap"><div id="sk-grid" class="sk-grid" style="--n:${N}"></div></div>
+        <div class="sk-status" id="sk-status"></div>
+        <div class="sk-controls">
+          <div class="sk-dpad">
+            <button class="sk-key sk-up" data-d="0,-1">▲</button>
+            <button class="sk-key sk-left" data-d="-1,0">◀</button>
+            <button class="sk-key sk-down" data-d="0,1">▼</button>
+            <button class="sk-key sk-right" data-d="1,0">▶</button>
+          </div>
+          <div class="sk-side">
+            <button class="btn sk-btn-2" id="sk-undo">↶ Ongedaan</button>
+            <button class="btn sk-btn-2" id="sk-reset">✕ Opnieuw</button>
+          </div>
+        </div>
+        <button class="btn" id="sk-back" style="background:var(--muted);margin-top:10px;">← Menu</button>
+      </div>`;
+    injectStyle();buildGrid();
+    root.querySelectorAll('.sk-key').forEach(b=>b.onclick=()=>{const[dx,dy]=b.dataset.d.split(',').map(Number);move(dx,dy);});
+    root.querySelector('#sk-undo').onclick=undo;
+    root.querySelector('#sk-reset').onclick=()=>{if(locked)return;reset();drawGrid();};
+    root.querySelector('#sk-back').onclick=()=>{cleanup();(window.switchScreen||function(){})('screen-menu');};
+    keyHandler=e=>{const m={ArrowUp:[0,-1],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowRight:[1,0],w:[0,-1],s:[0,1],a:[-1,0],d:[1,0]};if(m[e.key]){e.preventDefault();move(m[e.key][0],m[e.key][1]);}};
+    window.addEventListener('keydown',keyHandler);
+  }
+  function cleanup(){clearInterval(clockId);clearInterval(cdId);if(keyHandler)window.removeEventListener('keydown',keyHandler);}
+
+  function buildGrid(){const g=root.querySelector('#sk-grid');g.innerHTML='';
+    for(let y=0;y<N;y++)for(let x=0;x<N;x++){const c=document.createElement('div');c.className='sk-cell';c.dataset.x=x;c.dataset.y=y;g.appendChild(c);}
+    g.onpointerdown=e=>{if(locked)return;const el=e.target.closest?e.target.closest('.sk-cell'):null;if(!el)return;const x=+el.dataset.x,y=+el.dataset.y;const dx=x-player[0],dy=y-player[1];if(Math.abs(dx)+Math.abs(dy)===1)move(dx,dy);};
+    drawGrid();}
+  function drawGrid(){
+    root.querySelectorAll('.sk-cell').forEach(c=>{const x=+c.dataset.x,y=+c.dataset.y;
+      c.className='sk-cell';let html='';
+      if(walls[y][x])c.classList.add('sk-wall');
+      else{if(targetSet.has(kk(x,y)))c.classList.add('sk-target');
+        const bi=boxAt(x,y);if(bi>=0)html=`<div class="sk-box${targetSet.has(kk(x,y))?' sk-box-on':''}"></div>`;
+        if(player[0]===x&&player[1]===y)html+=`<div class="sk-player"></div>`;}
+      c.innerHTML=html;
+    });
+    const done=boxes.every(b=>targetSet.has(kk(b[0],b[1])));
+    const st=root.querySelector('#sk-status');if(st&&!locked)st.textContent=`Dozen op doel: ${boxes.filter(b=>targetSet.has(kk(b[0],b[1]))).length}/${K} · zetten ${moves}`;
+    return done;
+  }
+  function checkWin(){if(boxes.every(b=>targetSet.has(kk(b[0],b[1]))))win();}
+
+  function win(){cleanup();locked=true;const date=todayStr();const time=elapsed;LS.set('kp-soko-'+date,{time,moves,coins:REWARD});
+    try{if(typeof window.wijsGachaMuntToe==='function')window.wijsGachaMuntToe(REWARD);}catch(e){}
+    celebrate();setTimeout(()=>showDone(time,moves,true),700);}
+  function showDone(time,mv,fresh){const st=root.querySelector('#sk-status');
+    if(st)st.innerHTML=`<div class="sk-done">🎉 ${fresh?`Opgelost in ${mv} zetten! +🪙 ${REWARD}`:'Vandaag al opgelost'} · ⏱️ ${fmt(time)}<div class="sk-count">Nieuwe puzzel over <b id="sk-cd">–</b></div></div>`;
+    const el=root.querySelector('#sk-cd');if(!el)return;const upd=()=>{const now=new Date(),m=new Date(now);m.setHours(24,0,0,0);let s=Math.floor((m-now)/1000);const h=s/3600|0;s%=3600;el.textContent=`${pad(h)}:${pad(s/60|0)}:${pad(s%60)}`;};upd();clearInterval(cdId);cdId=setInterval(upd,1000);}
+  function celebrate(){const c=document.createElement('div');c.className='sk-coinpop';c.textContent=`+🪙${REWARD}`;root.appendChild(c);setTimeout(()=>c.remove(),1500);
+    const em=['📦','✨','🎉','🏮'];for(let i=0;i<14;i++){const s=document.createElement('div');s.className='sk-confetti';s.textContent=em[i%em.length];s.style.left=(Math.random()*100)+'%';s.style.animationDelay=(Math.random()*0.3)+'s';root.appendChild(s);setTimeout(()=>s.remove(),1600);}}
+
+  function injectStyle(){if(document.getElementById('sk-style'))return;const s=document.createElement('style');s.id='sk-style';s.textContent=`
+    .sk-wrap{position:relative}
+    .sk-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:8px}
+    .sk-title{font-family:var(--font-display);font-size:24px;font-weight:800;color:var(--dark)}
+    .sk-date{font-size:13px;color:var(--muted)}
+    .sk-meta{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+    .sk-chip{background:var(--input-bg);border:1px solid var(--border);border-radius:20px;padding:4px 10px;font-size:14px;font-weight:700;white-space:nowrap}
+    .sk-uitleg{font-size:12.5px;color:var(--muted);line-height:1.5;margin:0 0 10px}
+    .sk-boardwrap{display:flex;justify-content:center}
+    .sk-grid{display:grid;grid-template-columns:repeat(var(--n),1fr);gap:0;width:100%;max-width:340px;aspect-ratio:1;background:var(--sumi);border:3px solid var(--sumi);border-radius:8px;overflow:hidden;touch-action:manipulation;user-select:none}
+    .sk-cell{position:relative;aspect-ratio:1;background:color-mix(in srgb,var(--sumi) 5%,var(--input-bg));border:1px solid color-mix(in srgb,var(--sumi) 10%,transparent);display:flex;align-items:center;justify-content:center}
+    .sk-wall{background:var(--sumi)}
+    .sk-target::after{content:"";position:absolute;width:42%;height:42%;border-radius:50%;border:3px solid color-mix(in srgb,var(--shu) 65%,transparent)}
+    .sk-box{position:relative;z-index:2;width:80%;height:80%;border-radius:4px;background:var(--kincha);box-shadow:inset 0 0 0 3px color-mix(in srgb,#000 20%,transparent),inset 0 0 0 6px color-mix(in srgb,var(--kincha) 60%,#fff)}
+    .sk-box-on{background:var(--matsuba);box-shadow:inset 0 0 0 3px color-mix(in srgb,#000 22%,transparent),inset 0 0 0 6px color-mix(in srgb,var(--matsuba) 55%,#fff)}
+    .sk-player{position:relative;z-index:3;width:60%;height:60%;border-radius:50%;background:var(--ai);border:2px solid #fff8ee;box-shadow:0 1px 3px rgba(0,0,0,.4)}
+    .sk-status{text-align:center;font-size:13px;color:var(--muted);margin:12px 0 8px;min-height:18px;font-weight:700}
+    .sk-controls{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+    .sk-dpad{display:grid;grid-template-columns:repeat(3,44px);grid-template-rows:repeat(2,44px);gap:6px}
+    .sk-up{grid-column:2;grid-row:1}.sk-left{grid-column:1;grid-row:2}.sk-down{grid-column:2;grid-row:2}.sk-right{grid-column:3;grid-row:2}
+    .sk-key{background:var(--input-bg);border:1px solid var(--border);border-radius:10px;font-size:18px;font-weight:800;color:var(--dark);cursor:pointer}
+    .sk-key:active{background:var(--kincha);color:#fff8ee}
+    .sk-side{display:flex;flex-direction:column;gap:8px;flex:1;min-width:130px}
+    .sk-btn-2{background:var(--input-bg)!important;color:var(--text)!important;border:1px solid var(--border)!important;box-shadow:none!important;margin:0!important}
+    .sk-done{text-align:center;font-weight:700;color:var(--success);background:color-mix(in srgb,var(--matsuba) 12%,var(--input-bg));border:1px solid var(--success);border-radius:10px;padding:10px}
+    .sk-count{font-size:12.5px;color:var(--muted);font-weight:400;margin-top:6px}
+    .sk-coinpop{position:absolute;top:35%;left:50%;transform:translateX(-50%);font-size:34px;font-weight:900;color:var(--accent);text-shadow:0 2px 6px rgba(0,0,0,.3);pointer-events:none;animation:sk-coin 1.5s ease-out forwards;z-index:60}
+    @keyframes sk-coin{0%{opacity:0;transform:translate(-50%,10px) scale(.6)}20%{opacity:1;transform:translate(-50%,0) scale(1.1)}70%{opacity:1;transform:translate(-50%,-30px) scale(1)}100%{opacity:0;transform:translate(-50%,-60px) scale(.9)}}
+    .sk-confetti{position:absolute;top:-10px;font-size:22px;pointer-events:none;animation:sk-fall 1.5s ease-in forwards;z-index:50}
+    @keyframes sk-fall{to{transform:translateY(440px) rotate(220deg);opacity:0}}
+  `;document.head.appendChild(s);}
+
+  window.KanaSokoban={start};
+  window.startSokobanInit=function(){(window.switchScreen||function(){})('screen-sokoban');const el=document.getElementById('sokoban-root');if(el)start(el);};
 })();
 
 </script>
