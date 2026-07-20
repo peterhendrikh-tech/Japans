@@ -2294,7 +2294,7 @@
 
   function renderBody(){
     root.querySelector('#ng-body').innerHTML=`
-      <p class="ng-uitleg">De cijfers geven aaneengesloten gevulde vakjes per rij/kolom. Vul de juiste vakjes tot het plaatje klopt. Wissel tussen vullen en kruisjes.</p>
+      <p class="ng-uitleg">De cijfers geven aaneengesloten gevulde vakjes per rij/kolom. Vul de juiste vakjes tot het plaatje klopt. Kruisjes markeren zeker-lege vakjes en overschrijven nooit een gevuld vak. De gouden lijnen verdelen het raster in blokken van 5 om te tellen.</p>
       <div class="ng-timerbar">\u23f1\ufe0f <span id="ng-timer">0:00</span></div>
       <div class="ng-boardwrap"><div class="ng-board" id="ng-board" style="--n:${curN}"></div></div>
       <div class="ng-status" id="ng-status"></div>
@@ -2308,7 +2308,7 @@
     const N=curN,b=root.querySelector('#ng-board');
     let cols='<div class="ng-cols">';for(let x=0;x<N;x++)cols+=`<div class="ng-cclue" data-cx="${x}">${clues.colC[x].map(n=>`<span>${n}</span>`).join('')}</div>`;cols+='</div>';
     let rows='<div class="ng-rows">';for(let y=0;y<N;y++)rows+=`<div class="ng-rclue" data-ry="${y}">${clues.rowC[y].map(n=>`<span>${n}</span>`).join('')}</div>`;rows+='</div>';
-    let grid='<div class="ng-grid" id="ng-grid">';for(let y=0;y<N;y++)for(let x=0;x<N;x++)grid+=`<div class="ng-cell" data-x="${x}" data-y="${y}"></div>`;grid+='</div>';
+    let grid='<div class="ng-grid" id="ng-grid">';for(let y=0;y<N;y++)for(let x=0;x<N;x++){const gx=(x%5===0&&x>0)?' ng-gx':'';const gy=(y%5===0&&y>0)?' ng-gy':'';grid+=`<div class="ng-cell${gx}${gy}" data-x="${x}" data-y="${y}"></div>`;}grid+='</div>';
     b.innerHTML='<div class="ng-corner"></div>'+cols+rows+grid;
     b.classList.toggle('ng-big',N>=20);
     drawCells();markClues();bindPointer();
@@ -2333,7 +2333,13 @@
     const end=()=>{if(!painting)return;painting=false;markClues();updateStatus();checkWin();};
     grid.onpointerup=end;grid.onpointercancel=end;
   }
-  function apply(x,y){if(state[y][x]===paintVal)return;state[y][x]=paintVal;const c=root.querySelector(`.ng-cell[data-x="${x}"][data-y="${y}"]`);if(c){c.classList.toggle('ng-fill',paintVal===1);c.classList.toggle('ng-cross',paintVal===2);}}
+  function apply(x,y){
+    const cur=state[y][x];
+    if(mode==='cross'){ if(cur===1)return; if(cur===paintVal)return; state[y][x]=paintVal; }   // X nooit op zwart
+    else { if(cur===paintVal)return; state[y][x]=paintVal; }
+    const c=root.querySelector(`.ng-cell[data-x="${x}"][data-y="${y}"]`);
+    if(c){c.classList.toggle('ng-fill',state[y][x]===1);c.classList.toggle('ng-cross',state[y][x]===2);}
+  }
   function solvedNu(){const N=curN;for(let y=0;y<N;y++)if(!eqRuns(runs(state[y].map(v=>v===1?1:0)),clues.rowC[y]))return false;for(let x=0;x<N;x++){const col=[];for(let y=0;y<N;y++)col.push(state[y][x]===1?1:0);if(!eqRuns(runs(col),clues.colC[x]))return false;}return true;}
   function updateStatus(){const filled=state.flat().filter(v=>v===1).length,doel=sol.flat().filter(v=>v).length,el=root.querySelector('#ng-status');if(el)el.textContent=`Gevuld: ${filled} \u00b7 doel: ${doel}`;}
   function checkWin(){if(solvedNu())win();}
@@ -2390,7 +2396,9 @@
       .ng-cell{border:1px solid color-mix(in srgb,var(--sumi) 16%,transparent);background:var(--input-bg);cursor:pointer;position:relative}
       .ng-big .ng-cell{border-color:color-mix(in srgb,var(--sumi) 10%,transparent)}
       .ng-grid>.ng-cell:nth-child(var(--n)n){}
-      .ng-fill{background:var(--sumi)!important}
+      .ng-fill{background:var(--sumi)!important;border-color:color-mix(in srgb,var(--washi) 34%,transparent)!important}
+      .ng-gx{border-left:2px solid color-mix(in srgb,var(--kincha) 65%,transparent)!important}
+      .ng-gy{border-top:2px solid color-mix(in srgb,var(--kincha) 65%,transparent)!important}
       .ng-cross::after{content:"\u00d7";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:color-mix(in srgb,var(--sumi) 50%,transparent);font-weight:700;font-size:calc(var(--cell)*.7)}
       .ng-status{text-align:center;font-size:13px;color:var(--muted);margin:12px 0 8px;min-height:18px;font-weight:700}
       .ng-btns{display:grid;grid-template-columns:1fr 1fr;gap:10px}
