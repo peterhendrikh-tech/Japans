@@ -3440,7 +3440,9 @@
    ============================================================ */
 (function () {
   const FOK_FEE = 20;
-  const MAX_POND = 40;
+  const PER_POND = 40;      // koi per vijver
+  const MAX_PONDS = 6;
+  const POND_PRIJS = n => n*150;  // prijs voor de volgende vijver
   const KLEUR = {
     wit:'#fbfbf7', rood:'#cf3a2c', zwart:'#242424', blauw:'#5b7a99', goud:'#e3b02a',
     geel:'#ece173', bruin:'#8f6f4a', oranje:'#e07b39', creme:'#efe4c4', zilver:'#e6e8ee',
@@ -3519,30 +3521,43 @@
     return maybeMutate({base,finish,pat});
   }
 
-  let root,pond,coins,tab,cv,ctx,fish,raf,W,H,sel;
+  // ---- rassenboek (dex) ----
+  const KL_N = KL_KEYS.length, PAT_N = PAT_TYPES.length;
+  const DEX_TOTAAL = KL_N + KL_N*PAT_N*KL_N; // effen + (basis x patroontype x patroonkleur)
+  function sig(g){return g.base+'|'+((g.pat&&g.pat.type)||'none')+'|'+((g.pat&&g.pat.color)||'-');}
+  function dexAdd(g){if(!dex)dex=new Set();dex.add(sig(g));LS.set('koi-dex',[...dex]);}
 
-  function start(container){root=container;pond=LS.get('koi-pond',null);coins=readCoinsLocal();tab='pond';sel=[];render();loadCloud();}
+  let root,koi,pondCount,curPond,dex,coins,tab,cv,ctx,fish,raf,W,H,sel;
+
+  function start(container){root=container;koi=null;pondCount=LS.get('koi-ponds',1)||1;curPond=0;dex=new Set(LS.get('koi-dex',[]));coins=readCoinsLocal();tab='pond';sel=[];render();loadCloud();}
   function readCoinsLocal(){if(typeof huidigeCoins==='number')return huidigeCoins;return LS.get('koi-mockcoins',300);}
   async function loadCloud(){
     if(hasCloud()){
       try{const {data}=await supabaseClient.from('kana_users').select('coins_100yen').eq('username',user()).maybeSingle();if(data)coins=data.coins_100yen||0;}catch(e){}
-      try{const {data}=await supabaseClient.rpc('get_pond',{p_username:user()});if(Array.isArray(data))pond=data;else if(data&&Array.isArray(data.pond))pond=data.pond;}catch(e){}
+      try{const {data}=await supabaseClient.rpc('get_pond',{p_username:user()});if(Array.isArray(data))koi=data;}catch(e){}
+      try{const {data}=await supabaseClient.rpc('get_koi_ponds',{p_username:user()});if(typeof data==='number')pondCount=data;}catch(e){}
     }
-    if(!Array.isArray(pond))pond=LS.get('koi-pond',[]);
-    if(pond.length===0){pond=[{id:uid(),g:JSON.parse(JSON.stringify(shopByVar('wit').g))}];savePond(false);}
+    if(!Array.isArray(koi))koi=LS.get('koi-pond',[]);
+    koi.forEach(k=>{if(typeof k.p!=='number')k.p=0;});
+    if(koi.length===0){koi=[{id:uid(),p:0,g:JSON.parse(JSON.stringify(shopByVar('wit').g))}];savePond();}
+    koi.forEach(k=>dexAdd(k.g));
+    if(curPond>=pondCount)curPond=0;
     cachePond();buildFish();refresh();
   }
-  function cachePond(){LS.set('koi-pond',pond);}
+  function cachePond(){LS.set('koi-pond',koi);LS.set('koi-ponds',pondCount);}
+  const inPond=idx=>koi.filter(k=>k.p===idx);
+  const pondVol=idx=>inPond(idx).length>=PER_POND;
 
   function render(){
     root.innerHTML=`
       <div class="ki-wrap">
         <div class="ki-head"><div><div class="ki-title">🎏 Koi-vijver</div><div class="ki-sub">Kweek je eigen koi-variëteiten</div></div>
           <div class="ki-meta"><span class="ki-chip">🪙 <span id="ki-coins">${coins}</span></span></div></div>
-        <div class="ki-tabs">
+        <div class="ki-tabs ki-tabs4">
           <button class="ki-tab" id="ki-tab-pond">🌊 Vijver</button>
           <button class="ki-tab" id="ki-tab-shop">🛒 Winkel</button>
           <button class="ki-tab" id="ki-tab-breed">🧬 Fokken</button>
+          <button class="ki-tab" id="ki-tab-dex">📖 Boek</button>
         </div>
         <div id="ki-body"></div>
         <button class="btn" id="ki-back" style="background:var(--muted);margin-top:12px;">← Menu</button>
@@ -3551,24 +3566,32 @@
     root.querySelector('#ki-tab-pond').onclick=()=>{tab='pond';refresh();};
     root.querySelector('#ki-tab-shop').onclick=()=>{tab='shop';refresh();};
     root.querySelector('#ki-tab-breed').onclick=()=>{tab='breed';sel=[];refresh();};
+    root.querySelector('#ki-tab-dex').onclick=()=>{tab='dex';refresh();};
     root.querySelector('#ki-back').onclick=()=>{stopPond();(window.switchScreen||function(){})('screen-menu');};
   }
   function refresh(){
     const c=root.querySelector('#ki-coins');if(c)c.textContent=coins;
-    ['pond','shop','breed'].forEach(t=>root.querySelector('#ki-tab-'+t).classList.toggle('ki-on',tab===t));
-    if(tab==='pond')renderPond(); else {stopPond(); if(tab==='shop')renderShop(); else renderBreed();}
+    ['pond','shop','breed','dex'].forEach(t=>root.querySelector('#ki-tab-'+t).classList.toggle('ki-on',tab===t));
+    if(tab==='pond')renderPond(); else {stopPond(); if(tab==='shop')renderShop(); else if(tab==='breed')renderBreed(); else renderDex();}
   }
 
   // ---- vijver ----
   function renderPond(){
     root.querySelector('#ki-body').innerHTML=`
+      <div class="ki-pondsel" id="ki-pondsel"></div>
       <div class="ki-pondwrap"><canvas id="ki-canvas"></canvas></div>
-      <p class="ki-hint">${pond.length}/${MAX_POND} koi in je vijver. Kweek nieuwe in het Fokken-tabblad.</p>`;
+      <p class="ki-hint">Vijver ${curPond+1}: ${inPond(curPond).length}/${PER_POND} koi · in totaal ${koi.length} koi in ${pondCount} vijver(s).</p>`;
+    renderPondSel();
     cv=root.querySelector('#ki-canvas');ctx=cv.getContext('2d');sizePond();buildFish();loopPond();
     window.addEventListener('resize',sizePond);
   }
+  function renderPondSel(){
+    const row=root.querySelector('#ki-pondsel');if(!row)return;row.innerHTML='';
+    for(let i=0;i<pondCount;i++){const b=document.createElement('button');b.className='ki-pbtn'+(i===curPond?' ki-pon':'');b.textContent='Vijver '+(i+1);b.onclick=()=>{curPond=i;stopPond();renderPond();};row.appendChild(b);}
+    if(pondCount<MAX_PONDS){const price=POND_PRIJS(pondCount);const nb=document.createElement('button');nb.className='ki-pbtn ki-pnew';nb.innerHTML='＋ nieuwe vijver 🪙'+price;nb.disabled=coins<price;nb.onclick=buyPond;row.appendChild(nb);}
+  }
   function sizePond(){const wrap=root.querySelector('.ki-pondwrap');if(!wrap||!cv)return;W=Math.min(wrap.clientWidth||340,420);H=Math.round(W*0.78);cv.width=W;cv.height=H;cv.style.width=W+'px';cv.style.height=H+'px';}
-  function buildFish(){fish=(pond||[]).map(inst=>({g:inst.g,x:40+Math.random()*220,y:40+Math.random()*160,a:Math.random()*6.28,sp:16+Math.random()*16,turn:0,ph:Math.random()*6.28,size:15+Math.random()*7}));}
+  function buildFish(){fish=inPond(curPond).map(inst=>({g:inst.g,x:40+Math.random()*220,y:40+Math.random()*160,a:Math.random()*6.28,sp:16+Math.random()*16,turn:0,ph:Math.random()*6.28,size:15+Math.random()*7}));}
   function stopPond(){if(raf)cancelAnimationFrame(raf);raf=null;window.removeEventListener('resize',sizePond);}
   let lastT=0;
   function loopPond(){const now=performance.now();const dt=Math.min(0.05,(now-lastT)/1000||0.016);lastT=now;updateFish(dt);drawPond(now);raf=requestAnimationFrame(loopPond);}
@@ -3634,7 +3657,7 @@
   }
   function renderPool(){
     const grid=root.querySelector('#ki-poolgrid');grid.innerHTML='';
-    pond.forEach(inst=>{const rar=rariteit(inst.g);const on=sel.includes(inst.id);
+    koi.forEach(inst=>{const rar=rariteit(inst.g);const on=sel.includes(inst.id);
       const card=document.createElement('div');card.className='ki-card ki-pick'+(on?' ki-picked':'');
       card.innerHTML=`<div class="ki-fishbox"><canvas class="ki-thumb" width="120" height="78"></canvas></div>
         <div class="ki-name" style="font-size:12px">${koiNaam(inst.g)}</div>
@@ -3651,36 +3674,37 @@
   function renderSel(){
     const row=root.querySelector('#ki-selrow');if(!row)return;row.innerHTML='';
     for(let k=0;k<2;k++){const id=sel[k];const slot=document.createElement('div');slot.className='ki-slot';
-      if(id){const inst=pond.find(p=>p.id===id);const cvs=document.createElement('canvas');cvs.width=110;cvs.height=70;slot.appendChild(cvs);thumb(cvs,inst.g);const lbl=document.createElement('div');lbl.className='ki-slotlbl';lbl.textContent=koiNaam(inst.g);slot.appendChild(lbl);}
+      if(id){const inst=koi.find(p=>p.id===id);const cvs=document.createElement('canvas');cvs.width=110;cvs.height=70;slot.appendChild(cvs);thumb(cvs,inst.g);const lbl=document.createElement('div');lbl.className='ki-slotlbl';lbl.textContent=koiNaam(inst.g);slot.appendChild(lbl);}
       else{slot.innerHTML='<div class="ki-slotempty">ouder '+(k+1)+'</div>';}
       row.appendChild(slot);
       if(k===0){const plus=document.createElement('div');plus.className='ki-plus';plus.textContent='+';row.appendChild(plus);}
     }
-    const fb=root.querySelector('#ki-fok');if(fb)fb.disabled=!(sel.length===2&&coins>=FOK_FEE&&pond.length<MAX_POND);
+    const fb=root.querySelector('#ki-fok');if(fb)fb.disabled=!(sel.length===2&&coins>=FOK_FEE&&!pondVol(curPond));
   }
 
   async function buy(v){
     const it=shopByVar(v);if(!it)return;
-    if(pond.length>=MAX_POND){toast('Je vijver is vol — laat eerst een koi los.');return;}
+    if(pondVol(curPond)){toast('Vijver '+(curPond+1)+' is vol — kies een andere vijver of laat een koi los.');return;}
     if(coins<it.prijs){toast('Niet genoeg munten');return;}
-    const inst={id:uid(),g:JSON.parse(JSON.stringify(it.g))};const newPond=[...pond,inst];
+    const inst={id:uid(),p:curPond,g:JSON.parse(JSON.stringify(it.g))};const newPond=[...koi,inst];
     if(hasCloud()){
       try{const {data,error}=await supabaseClient.rpc('buy_koi',{p_username:user(),p_variety:v,p_pond:newPond});if(error)throw error;
-        if(data&&data.ok){pond=newPond;coins=data.coins;syncCoins(coins);cachePond();toast(it.naam+' gekocht! 🎉');refresh();}
+        if(data&&data.ok){koi=newPond;coins=data.coins;syncCoins(coins);dexAdd(inst.g);cachePond();toast(it.naam+' gekocht! 🎉');refresh();}
         else{toast(data&&data.reason==='insufficient'?'Niet genoeg munten':'Kon niet kopen');}
       }catch(e){toast('Netwerkfout');}
-    } else {let bal=LS.get('koi-mockcoins',coins);bal-=it.prijs;LS.set('koi-mockcoins',bal);coins=bal;pond=newPond;cachePond();toast(it.naam+' gekocht! 🎉');refresh();}
+    } else {let bal=LS.get('koi-mockcoins',coins);bal-=it.prijs;LS.set('koi-mockcoins',bal);coins=bal;koi=newPond;dexAdd(inst.g);cachePond();toast(it.naam+' gekocht! 🎉');refresh();}
   }
   async function doFok(){
-    if(sel.length!==2||coins<FOK_FEE||pond.length>=MAX_POND)return;
-    const a=pond.find(p=>p.id===sel[0]).g, b=pond.find(p=>p.id===sel[1]).g;
-    const child={id:uid(),g:breed(a,b)};const newPond=[...pond,child];
+    if(sel.length!==2||coins<FOK_FEE)return;
+    if(pondVol(curPond)){toast('Vijver '+(curPond+1)+' is vol — kies een andere vijver.');return;}
+    const a=koi.find(p=>p.id===sel[0]).g, b=koi.find(p=>p.id===sel[1]).g;
+    const child={id:uid(),p:curPond,g:breed(a,b)};const newPond=[...koi,child];
     if(hasCloud()){
       try{const {data,error}=await supabaseClient.rpc('breed_koi',{p_username:user(),p_pond:newPond});if(error)throw error;
-        if(data&&data.ok){pond=newPond;coins=data.coins;syncCoins(coins);cachePond();revealChild(child);}
+        if(data&&data.ok){koi=newPond;coins=data.coins;syncCoins(coins);dexAdd(child.g);cachePond();revealChild(child);}
         else{toast('Niet genoeg munten');}
       }catch(e){toast('Netwerkfout');}
-    } else {let bal=LS.get('koi-mockcoins',coins);bal-=FOK_FEE;LS.set('koi-mockcoins',bal);coins=bal;pond=newPond;cachePond();revealChild(child);}
+    } else {let bal=LS.get('koi-mockcoins',coins);bal-=FOK_FEE;LS.set('koi-mockcoins',bal);coins=bal;koi=newPond;dexAdd(child.g);cachePond();revealChild(child);}
   }
   function revealChild(child){
     sel=[];const ov=document.createElement('div');ov.className='ki-reveal';
@@ -3691,12 +3715,43 @@
     setTimeout(()=>{ov.remove();refresh();},2600);
   }
   async function release(id){
-    if(pond.length<=1){toast('Je moet minstens 1 koi houden.');return;}
-    const newPond=pond.filter(p=>p.id!==id);sel=sel.filter(s=>s!==id);
+    if(koi.length<=1){toast('Je moet minstens 1 koi houden.');return;}
+    const newPond=koi.filter(p=>p.id!==id);sel=sel.filter(s=>s!==id);
     if(hasCloud()){try{await supabaseClient.rpc('set_pond',{p_username:user(),p_pond:newPond});}catch(e){}}
-    pond=newPond;cachePond();toast('Koi losgelaten 🌊');refresh();
+    koi=newPond;cachePond();toast('Koi losgelaten 🌊');refresh();
   }
-  function savePond(showToast){if(hasCloud()){supabaseClient.rpc('set_pond',{p_username:user(),p_pond:pond}).catch(()=>{});}cachePond();}
+  function savePond(){if(hasCloud()){supabaseClient.rpc('set_pond',{p_username:user(),p_pond:koi}).catch(()=>{});}cachePond();}
+  async function buyPond(){
+    if(pondCount>=MAX_PONDS){toast('Je hebt het maximum aantal vijvers.');return;}
+    const price=POND_PRIJS(pondCount);
+    if(coins<price){toast('Niet genoeg munten voor een nieuwe vijver');return;}
+    if(hasCloud()){
+      try{const {data,error}=await supabaseClient.rpc('buy_pond',{p_username:user()});if(error)throw error;
+        if(data&&data.ok){pondCount=data.ponds;coins=data.coins;syncCoins(coins);curPond=pondCount-1;cachePond();toast('Nieuwe vijver! 🎉');stopPond();renderPond();refresh();}
+        else{toast(data&&data.reason==='max'?'Maximum bereikt':'Niet genoeg munten');}
+      }catch(e){toast('Netwerkfout');}
+    } else {let bal=LS.get('koi-mockcoins',coins);bal-=price;LS.set('koi-mockcoins',bal);coins=bal;pondCount++;LS.set('koi-ponds',pondCount);curPond=pondCount-1;cachePond();toast('Nieuwe vijver! 🎉');stopPond();renderPond();refresh();}
+  }
+  // ---- rassenboek weergave ----
+  function renderDex(){
+    const have=dex?dex.size:0;const pct=Math.round(have/DEX_TOTAAL*100);
+    const basen=new Set(),paten=new Set();(dex||new Set()).forEach(k=>{const[b,pt]=k.split('|');basen.add(b);paten.add(pt);});
+    let html=`<div class="ki-dexhead">
+      <div class="ki-dexbig">${have} <span>/ ${DEX_TOTAAL}</span></div>
+      <div class="ki-dexlbl">variëteiten ontdekt</div>
+      <div class="ki-bar"><div class="ki-barfill" style="width:${Math.max(2,pct)}%"></div></div>
+      <div class="ki-dexstats">Basiskleuren ${basen.size}/${KL_N} · patronen ${Math.min(paten.size,PAT_N+1)}/${PAT_N+1}</div>
+    </div>`;
+    const sigs=[...(dex||new Set())].sort();
+    html+='<div class="ki-grid ki-dexgrid">';
+    if(sigs.length===0)html+='<p class="ki-hint">Nog niets ontdekt — koop of fok koi!</p>';
+    for(const sg of sigs){const[b,pt,pc]=sg.split('|');const g={base:b,finish:'matte',pat:pt==='none'?{type:'none'}:{type:pt,color:pc==='-'?null:pc}};
+      html+=`<div class="ki-card"><div class="ki-fishbox"><canvas class="ki-thumb" width="120" height="70"></canvas></div><div class="ki-name" style="font-size:11.5px">${koiNaam(g)}</div></div>`;}
+    html+='</div>';
+    root.querySelector('#ki-body').innerHTML=html;
+    const cvs=root.querySelectorAll('.ki-dexgrid .ki-thumb');
+    sigs.forEach((sg,i)=>{const[b,pt,pc]=sg.split('|');const g={base:b,finish:'matte',pat:pt==='none'?{type:'none'}:{type:pt,color:pc==='-'?null:pc}};thumb(cvs[i],g);});
+  }
   function syncCoins(v){try{if(typeof huidigeCoins!=='undefined')huidigeCoins=v;if(typeof updateCoinBadge==='function')updateCoinBadge();}catch(e){}}
   function toast(msg){let t=root.querySelector('.ki-toast');if(!t){t=document.createElement('div');t.className='ki-toast';root.appendChild(t);}t.textContent=msg;t.classList.add('ki-show');setTimeout(()=>t.classList.remove('ki-show'),1600);}
 
