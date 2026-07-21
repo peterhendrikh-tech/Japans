@@ -3250,16 +3250,22 @@
 <script id="frogger-engine">
 /* ============================================================
    Kana Master · Frogger (かえる) — dagelijkse arcade-uitdaging
-   Breng de kikker over de weg en de rivier naar de 5 huisjes.
-   Vaste opstelling per dag. Munten als je alle huisjes vult
-   (1×/dag). Besturing: D-pad, pijltjestoetsen, of vegen/tikken.
+   Langer bord (6 rivier- + 6 weglanen). Respawn-genade zodat je
+   na een bloem/dood niet meteen weer sneuvelt. Munten als je alle
+   5 huisjes vult (1x/dag).
    Blootgesteld: window.startFroggerInit(), window.KanaFrogger
    ============================================================ */
 (function () {
-  const COLS = 11, ROWS = 9, REWARD = 12;
-  // rij-indeling: 0 huisjes | 1-3 rivier | 4 berm | 5-7 weg | 8 start
+  const COLS = 11, REWARD = 12;
+  // rijen: 0 huisjes | 1-6 rivier | 7 berm | 8-13 weg | 14 start
+  const RIVER_ROWS = [1,2,3,4,5,6];
+  const MEDIAN = 7;
+  const ROAD_ROWS = [8,9,10,11,12,13];
+  const START_ROW = 14;
+  const ROWS = 15;
   const BAY_COLS = [1,3,5,7,9];
   const CARS = ['🚗','🚕','🚙','🚌','🚚'];
+  const GRACE_MS = 1000;
 
   function hashStr(s){let h=2166136261>>>0;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0;}
   function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
@@ -3268,7 +3274,6 @@
   const nlDate=s=>{const[y,m,d]=s.split('-');return `${d}-${m}-${y}`;};
   const LS={get:(k,f)=>{try{const v=localStorage.getItem(k);return v==null?f:JSON.parse(v);}catch(e){return f;}},set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}};
 
-  // Lane: {kind:'car'|'log', dir:±1, speed, len, period, offset0, emoji}
   function buildLanes(rng){
     const lanes={};
     const mk=(kind,minLen,maxLen,minPer,maxPer,minSp,maxSp)=>{
@@ -3279,45 +3284,32 @@
       const bases=[];for(let x=0;x<L;x+=period)bases.push(x);
       return {kind,dir,speed,len,period,L,bases,offset0:rng()*L,emoji:kind==='car'?CARS[Math.floor(rng()*CARS.length)]:'🪵'};
     };
-    // rivier 1-3 (logs): dichter, zodat oversteken kan
-    lanes[1]=mk('log',2,3,4,5,1.1,1.9);
-    lanes[2]=mk('log',2,4,5,6,1.3,2.1);
-    lanes[3]=mk('log',2,3,4,5,1.0,1.7);
-    // weg 5-7 (auto's): meer ruimte tussen
-    lanes[5]=mk('car',1,2,4,6,1.6,2.6);
-    lanes[6]=mk('car',1,1,3,5,2.0,3.0);
-    lanes[7]=mk('car',1,2,4,6,1.4,2.4);
+    // rivier: onderste lane (dichtst bij berm) makkelijker, bovenste (bij huisjes) rustiger
+    RIVER_ROWS.forEach((r,i)=>{ const slow = (r===1); lanes[r]=mk('log',2,4,4,5, slow?0.8:1.0, slow?1.4:1.9); });
+    // weg
+    ROAD_ROWS.forEach((r,i)=>{ lanes[r]=mk('car',1,2,4,6,1.3,2.4); });
     return lanes;
   }
-  function buildDaily(dateStr){const rng=mulberry32(hashStr(dateStr+'#frog'));return {lanes:buildLanes(rng),dateStr};}
+  function buildDaily(dateStr){const rng=mulberry32(hashStr(dateStr+'#frog2'));return {lanes:buildLanes(rng),dateStr};}
 
-  // tegel-posities van een lane op tijdstip t: lijst intervallen [x,x+len)
-  function laneIntervals(l,t){
-    const shift=l.dir*l.speed*t + l.offset0;const out=[];
-    for(const b of l.bases){let x=((b+shift)%l.L+l.L)%l.L; // 0..L
-      // teken zowel x als x-L om naadloos te wrappen
-      out.push(x); out.push(x-l.L);
-    }
-    return out; // elk is linkerrand; lengte = l.len
-  }
+  function laneIntervals(l,t){const shift=l.dir*l.speed*t + l.offset0;const out=[];for(const b of l.bases){let x=((b+shift)%l.L+l.L)%l.L;out.push(x);out.push(x-l.L);}return out;}
   function overlaps(ax,aw,bx,bw){return ax<bx+bw && bx<ax+aw;}
 
-  let root,puz,lanes,cv,ctx,cell,frogX,frogRow,bays,lives,t0,raf,startWall,elapsed,cdId,locked,keyH,gameOver;
+  let root,puz,lanes,cv,ctx,cell,frogX,frogRow,bays,lives,t0,raf,startWall,cdId,locked,keyH,gameOver,graceUntil;
   function start(container){root=container;const date=todayStr();puz=buildDaily(date);lanes=puz.lanes;
-    bays=[false,false,false,false,false];lives=5;gameOver=false;
-    resetFrog();render();
+    bays=[false,false,false,false,false];lives=5;gameOver=false;resetFrog();render();
     const done=LS.get('kp-frog-'+date,null);
-    if(done){locked=true;bays=[true,true,true,true,true];drawDoneOverlay(done.time||0,false);}
-    else{locked=false;startWall=performance.now();t0=performance.now();loop();}
+    if(done){locked=true;bays=[true,true,true,true,true];updateHud();drawDoneOverlay(done.time||0,false);draw(0);}
+    else{locked=false;startWall=performance.now();t0=performance.now();graceUntil=performance.now()+GRACE_MS;loop();}
   }
-  function resetFrog(){frogX=Math.floor(COLS/2);frogRow=ROWS-1;}
+  function resetFrog(){frogX=Math.floor(COLS/2);frogRow=START_ROW;graceUntil=performance.now()+GRACE_MS;}
 
   function render(){
     root.innerHTML=`
       <div class="fr-wrap">
         <div class="fr-head"><div><div class="fr-title">🐸 Frogger</div><div class="fr-date">${nlDate(puz.dateStr)}</div></div>
           <div class="fr-meta"><span class="fr-chip">🪙 ${REWARD}</span><span class="fr-chip">❤️ <span id="fr-lives">${lives}</span></span><span class="fr-chip">🏠 <span id="fr-bays">0</span>/5</span></div></div>
-        <p class="fr-uitleg">Breng de kikker naar de vijf huisjes bovenaan. Ontwijk de auto's en spring op de boomstammen om de rivier over te steken — in het water zonder stam verdrink je! Beweeg met de pijltjes, de pijltjestoetsen of door te vegen.</p>
+        <p class="fr-uitleg">Breng de kikker naar de vijf huisjes bovenaan. Ontwijk de auto's en spring op de boomstammen om de rivier over te steken — in het water zonder stam verdrink je! Beweeg met de pijltjes, de pijltjestoetsen of door te vegen. Vlak na een respawn ben je even onkwetsbaar (kikker knippert).</p>
         <div class="fr-boardwrap"><canvas id="fr-canvas"></canvas></div>
         <div class="fr-status" id="fr-status"></div>
         <div class="fr-dpad">
@@ -3334,13 +3326,11 @@
     root.querySelector('#fr-back').onclick=()=>{cleanup();(window.switchScreen||function(){})('screen-menu');};
     keyH=e=>{const m={ArrowUp:[0,-1],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowRight:[1,0]};if(m[e.key]){e.preventDefault();hop(m[e.key][0],m[e.key][1]);}};
     window.addEventListener('keydown',keyH);
-    // vegen
     let sx=0,sy=0;cv.addEventListener('pointerdown',e=>{sx=e.clientX;sy=e.clientY;});
     cv.addEventListener('pointerup',e=>{const dx=e.clientX-sx,dy=e.clientY-sy;if(Math.abs(dx)<12&&Math.abs(dy)<12){hop(0,-1);return;}if(Math.abs(dx)>Math.abs(dy))hop(dx>0?1:-1,0);else hop(0,dy>0?1:-1);});
     window.addEventListener('resize',sizeCanvas);
   }
-  function sizeCanvas(){const wrap=root.querySelector('.fr-boardwrap');if(!wrap||!cv)return;const w=Math.min(wrap.clientWidth||340,360);cell=Math.floor(w/COLS);cv.width=cell*COLS;cv.height=cell*ROWS;cv.style.width=cv.width+'px';cv.style.height=cv.height+'px';if(locked||gameOver)draw(( (performance.now()-t0)/1000)||0);}
-
+  function sizeCanvas(){const wrap=root.querySelector('.fr-boardwrap');if(!wrap||!cv)return;const w=Math.min(wrap.clientWidth||340,360);cell=Math.floor(w/COLS);cv.width=cell*COLS;cv.height=cell*ROWS;cv.style.width=cv.width+'px';cv.style.height=cv.height+'px';if(locked||gameOver)draw((performance.now()-t0)/1000||0);}
   function cleanup(){if(raf)cancelAnimationFrame(raf);clearInterval(cdId);if(keyH)window.removeEventListener('keydown',keyH);window.removeEventListener('resize',sizeCanvas);}
 
   function hop(dx,dy){
@@ -3349,71 +3339,56 @@
     if(nr<0)nr=0;if(nr>ROWS-1)nr=ROWS-1;
     nx=Math.max(0,Math.min(COLS-1,nx));
     frogX=Math.round(nx); frogRow=nr;
-    // huisje bereikt?
     if(frogRow===0){
       const col=Math.round(frogX);const bi=BAY_COLS.indexOf(col);
       if(bi>=0&&!bays[bi]){bays[bi]=true;updateHud();if(bays.every(Boolean)){win();return;}resetFrog();}
       else { die(); }
     }
   }
-  function die(){ if(locked)return; lives--; updateHud(); if(lives<=0){gameOver=true;drawGameOver();} else resetFrog(); }
+  function die(){ if(locked)return; if(performance.now()<graceUntil)return; lives--; updateHud(); if(lives<=0){gameOver=true;drawGameOver();} else resetFrog(); }
   function updateHud(){const l=root.querySelector('#fr-lives');if(l)l.textContent=Math.max(0,lives);const b=root.querySelector('#fr-bays');if(b)b.textContent=bays.filter(Boolean).length;}
 
-  function loop(){
-    const now=performance.now();const t=(now-t0)/1000;
-    update(t);draw(t);
-    raf=requestAnimationFrame(loop);
-  }
-  function update(t){
-    if(locked||gameOver)return;
-    const row=frogRow;
-    // rivier: rijden op stam of verdrinken
-    if(row>=1&&row<=3){
-      const l=lanes[row];const ints=laneIntervals(l,t);let onLog=false,rideDx=0;
+  function loop(){const now=performance.now();const t=(now-t0)/1000;update(t,now);draw(t,now);raf=requestAnimationFrame(loop);}
+  function update(t,now){
+    if(locked||gameOver)return;const row=frogRow;const inGrace=now<graceUntil;
+    if(RIVER_ROWS.includes(row)){
+      const l=lanes[row];const ints=laneIntervals(l,t);let onLog=false;
       for(const x of ints){if(overlaps(frogX,1,x,l.len)){onLog=true;break;}}
-      if(onLog){frogX += l.dir*l.speed*(1/60);if(frogX<0||frogX>COLS-1){die();return;}}
-      else { die(); return; }
+      if(onLog){frogX += l.dir*l.speed*(1/60);if(frogX<0||frogX>COLS-1){if(!inGrace){die();return;} else {frogX=Math.max(0,Math.min(COLS-1,frogX));}}}
+      else if(!inGrace){ die(); return; }
     }
-    // weg: aanrijding
-    if(row>=5&&row<=7){
+    if(ROAD_ROWS.includes(row) && !inGrace){
       const l=lanes[row];const ints=laneIntervals(l,t);
       for(const x of ints){if(overlaps(frogX,0.8,x+0.1,l.len-0.2)){die();return;}}
     }
   }
 
-  function draw(t){
+  function draw(t,now){
     if(!ctx)return;const C=cell;
-    // achtergronden per rij
-    for(let r=0;r<ROWS;r++){
-      let col;
-      if(r===0)col='#12303a'; else if(r>=1&&r<=3)col=getVar('--ai'); else if(r===4)col=mix('--matsuba',20); else if(r>=5&&r<=7)col=getVar('--sumi'); else col=mix('--matsuba',20);
+    for(let r=0;r<ROWS;r++){let col;
+      if(r===0)col='#12303a'; else if(RIVER_ROWS.includes(r))col=getVar('--ai'); else if(r===MEDIAN||r===START_ROW)col=mix('--matsuba',22); else col=getVar('--sumi');
       ctx.fillStyle=col;ctx.fillRect(0,r*C,cv.width,C);
     }
-    // huisjes
-    for(let i=0;i<BAY_COLS.length;i++){const cx=BAY_COLS[i]*C;ctx.font=`${Math.floor(C*0.8)}px serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(bays[i]?'🐸':'🪷',cx+C/2,0*C+C/2);}
-    // hindernissen
+    for(let i=0;i<BAY_COLS.length;i++){const cx=BAY_COLS[i]*C;ctx.font=`${Math.floor(C*0.8)}px serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(bays[i]?'🐸':'🪷',cx+C/2,C/2);}
     ctx.textAlign='center';ctx.textBaseline='middle';ctx.font=`${Math.floor(C*0.8)}px serif`;
-    for(const r of [1,2,3,5,6,7]){const l=lanes[r];const ints=laneIntervals(l,t);
-      for(const x of ints){const px=x*C, w=l.len*C, py=r*C;
-        if(px>cv.width||px+w<0)continue;
-        if(l.kind==='log'){ctx.fillStyle=getVar('--kincha');roundRect(px+2,py+C*0.18,w-4,C*0.64,6);ctx.fill();ctx.fillStyle='rgba(0,0,0,.15)';for(let k=1;k<l.len;k++){ctx.fillRect(px+k*C,py+C*0.18,2,C*0.64);} }
-        else { // auto's: emoji per cel
-          for(let k=0;k<l.len;k++)ctx.fillText(l.emoji, px+k*C+C/2, py+C/2);
-        }
-      }
-    }
-    // kikker
-    ctx.font=`${Math.floor(C*0.82)}px serif`;ctx.fillText('🐸', frogX*C+C/2, frogRow*C+C/2);
+    RIVER_ROWS.concat(ROAD_ROWS).forEach(r=>{const l=lanes[r];const ints=laneIntervals(l,t);
+      for(const x of ints){const px=x*C, w=l.len*C, py=r*C;if(px>cv.width||px+w<0)continue;
+        if(l.kind==='log'){ctx.fillStyle=getVar('--kincha');roundRect(px+2,py+C*0.18,w-4,C*0.64,6);ctx.fill();ctx.fillStyle='rgba(0,0,0,.15)';for(let k=1;k<l.len;k++)ctx.fillRect(px+k*C,py+C*0.18,2,C*0.64);}
+        else { for(let k=0;k<l.len;k++)ctx.fillText(l.emoji, px+k*C+C/2, py+C/2); }
+      }});
+    // kikker (knippert tijdens genade)
+    const blink = now && now<graceUntil && (Math.floor(now/120)%2===0);
+    if(!blink){ctx.font=`${Math.floor(C*0.82)}px serif`;ctx.fillText('🐸', frogX*C+C/2, frogRow*C+C/2);}
   }
   function roundRect(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
   function getVar(n){return getComputedStyle(document.body).getPropertyValue(n).trim()||'#333';}
-  function mix(n,pct){const c=getVar(n);return `color-mix(in srgb, ${c} ${pct}%, ${getVar('--input-bg')})`;}
+  function mix(n,pct){return `color-mix(in srgb, ${getVar(n)} ${pct}%, ${getVar('--input-bg')})`;}
 
   function win(){cleanup();locked=true;const date=todayStr();const time=Math.floor((performance.now()-startWall)/1000);LS.set('kp-frog-'+date,{time,coins:REWARD});
     try{if(typeof window.wijsGachaMuntToe==='function')window.wijsGachaMuntToe(REWARD);}catch(e){}
     draw((performance.now()-t0)/1000);celebrate();setTimeout(()=>drawDoneOverlay(time,true),700);}
   function drawGameOver(){const st=root.querySelector('#fr-status');if(st)st.innerHTML=`<div class="fr-over">💥 Game over · <button class="fr-retry" id="fr-retry">Opnieuw proberen</button></div>`;
-    const rb=root.querySelector('#fr-retry');if(rb)rb.onclick=()=>{if(locked)return;bays=[false,false,false,false,false];lives=5;gameOver=false;resetFrog();updateHud();t0=performance.now();startWall=performance.now();loop();root.querySelector('#fr-status').innerHTML='';};}
+    const rb=root.querySelector('#fr-retry');if(rb)rb.onclick=()=>{if(locked)return;bays=[false,false,false,false,false];lives=5;gameOver=false;resetFrog();updateHud();t0=performance.now();startWall=performance.now();root.querySelector('#fr-status').innerHTML='';loop();};}
   function drawDoneOverlay(time,fresh){const st=root.querySelector('#fr-status');if(st)st.innerHTML=`<div class="fr-done">🎉 ${fresh?`Alle huisjes gevuld! +🪙 ${REWARD}`:'Vandaag al gehaald'} · ⏱️ ${fmt(time)}<div class="fr-count">Nieuwe uitdaging over <b id="fr-cd">–</b></div></div>`;
     const el=root.querySelector('#fr-cd');if(!el)return;const upd=()=>{const now=new Date(),m=new Date(now);m.setHours(24,0,0,0);let s=Math.floor((m-now)/1000);const h=s/3600|0;s%=3600;el.textContent=`${pad(h)}:${pad(s/60|0)}:${pad(s%60)}`;};upd();clearInterval(cdId);cdId=setInterval(upd,1000);}
   function celebrate(){const c=document.createElement('div');c.className='fr-coinpop';c.textContent=`+🪙${REWARD}`;root.appendChild(c);setTimeout(()=>c.remove(),1500);
@@ -3441,7 +3416,7 @@
     .fr-coinpop{position:absolute;top:35%;left:50%;transform:translateX(-50%);font-size:34px;font-weight:900;color:var(--accent);text-shadow:0 2px 6px rgba(0,0,0,.3);pointer-events:none;animation:fr-coin 1.5s ease-out forwards;z-index:60}
     @keyframes fr-coin{0%{opacity:0;transform:translate(-50%,10px) scale(.6)}20%{opacity:1;transform:translate(-50%,0) scale(1.1)}70%{opacity:1;transform:translate(-50%,-30px) scale(1)}100%{opacity:0;transform:translate(-50%,-60px) scale(.9)}}
     .fr-confetti{position:absolute;top:-10px;font-size:22px;pointer-events:none;animation:fr-fall 1.5s ease-in forwards;z-index:50}
-    @keyframes fr-fall{to{transform:translateY(440px) rotate(220deg);opacity:0}}
+    @keyframes fr-fall{to{transform:translateY(560px) rotate(220deg);opacity:0}}
   `;document.head.appendChild(s);}
 
   window.KanaFrogger={start};
