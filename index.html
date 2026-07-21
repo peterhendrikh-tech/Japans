@@ -354,6 +354,7 @@
             <button class="btn" style="background:var(--special);" onclick="startFloodInit()">🎨 Kleurnet (Flood-It)</button>
             <button class="btn" style="background:var(--ai);" onclick="startSokobanInit()">📦 Sokoban</button>
             <button class="btn" style="background:var(--matsuba);" onclick="startFroggerInit()">🐸 Frogger</button>
+            <button class="btn" style="background:#1c6b7a;" onclick="startKoiInit()">🎏 Koi-vijver</button>
         </div>
     </div>
 
@@ -504,6 +505,10 @@
 
     <div id="screen-frogger" class="screen">
         <div id="frogger-root"></div>
+    </div>
+
+    <div id="screen-koi" class="screen">
+        <div id="koi-root"></div>
     </div>
 
     <div id="screen-draw" class="screen">
@@ -3421,6 +3426,203 @@
 
   window.KanaFrogger={start};
   window.startFroggerInit=function(){(window.switchScreen||function(){})('screen-frogger');const el=document.getElementById('frogger-root');if(el)start(el);};
+})();
+
+</script>
+<script id="koi-engine">
+/* ============================================================
+   Kana Master · Koi-vijver (鯉の池) — muntbestemming
+   Koop koi-variëteiten met munten; ze zwemmen rond in je vijver.
+   Verzamel alle soorten in de koi-dex. Afboeken gebeurt veilig
+   server-side via de buy_koi RPC (zie koivijver.sql).
+   Blootgesteld: window.startKoiInit(), window.KanaKoi
+   ============================================================ */
+(function () {
+  // variety: id, jp, romaji, nl, prijs, base kleur, blotch, blotch2, headSpot, metallic, rarity
+  const KOI = [
+    {id:'kohaku',   jp:'紅白',     romaji:'Kōhaku',   nl:'Wit met rood',        prijs:0,   base:'#fbfbf7', blotch:'#cf3a2c', rar:'starter'},
+    {id:'yamabuki', jp:'山吹',     romaji:'Yamabuki', nl:'Goudgeel',            prijs:30,  base:'#e8bf3f', metallic:true, rar:'gewoon'},
+    {id:'chagoi',   jp:'茶鯉',     romaji:'Chagoi',   nl:'Theebruin',           prijs:40,  base:'#8f6f4a', rar:'gewoon'},
+    {id:'kigoi',    jp:'黄鯉',     romaji:'Kigoi',    nl:'Citroengeel',         prijs:50,  base:'#ece173', rar:'gewoon'},
+    {id:'benigoi',  jp:'緋鯉',     romaji:'Benigoi',  nl:'Dieprood',            prijs:70,  base:'#c0392b', rar:'ongewoon'},
+    {id:'asagi',    jp:'浅葱',     romaji:'Asagi',    nl:'Blauwgrijs net',      prijs:90,  base:'#6f8aa6', blotch:'#c9d6e3', rar:'ongewoon'},
+    {id:'ogon',     jp:'黄金',     romaji:'Ōgon',     nl:'Metallic goud',       prijs:120, base:'#e3b02a', metallic:true, rar:'ongewoon'},
+    {id:'bekko',    jp:'別甲',     romaji:'Bekkō',    nl:'Wit met zwarte vlek', prijs:150, base:'#f5f5ef', blotch:'#2a2a2a', rar:'zeldzaam'},
+    {id:'sanke',    jp:'大正三色', romaji:'Sanke',    nl:'Wit, rood & zwart',   prijs:200, base:'#fbfbf7', blotch:'#cf3a2c', blotch2:'#2a2a2a', rar:'zeldzaam'},
+    {id:'showa',    jp:'昭和三色', romaji:'Shōwa',    nl:'Zwart, rood & wit',   prijs:250, base:'#242424', blotch:'#cf3a2c', blotch2:'#f5f5ef', rar:'zeldzaam'},
+    {id:'platinum', jp:'白金',     romaji:'Purachina',nl:'Zilverwit metallic',  prijs:300, base:'#e6e8ee', metallic:true, rar:'episch'},
+    {id:'tancho',   jp:'丹頂',     romaji:'Tanchō',   nl:'Wit met rode kroon',  prijs:350, base:'#fbfbf7', headSpot:'#cf3a2c', rar:'episch'},
+    {id:'karasu',   jp:'烏鯉',     romaji:'Karasu',   nl:'Ravenzwart',          prijs:400, base:'#1c1f24', rar:'episch'},
+    {id:'kujaku',   jp:'孔雀',     romaji:'Kujaku',   nl:'Pauw: goud & rood',   prijs:500, base:'#d9b24a', blotch:'#cf3a2c', metallic:true, rar:'legendarisch'}
+  ];
+  const RAR_KLEUR={starter:'--muted',gewoon:'--matsuba',ongewoon:'--ai',zeldzaam:'--budou',episch:'--shu',legendarisch:'--kincha'};
+  const byId=id=>KOI.find(k=>k.id===id);
+
+  const LS={get:(k,f)=>{try{const v=localStorage.getItem(k);return v==null?f:JSON.parse(v);}catch(e){return f;}},set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}};
+  const user=()=> (typeof huidigeGebruiker!=='undefined')?huidigeGebruiker:null;
+  const hasCloud=()=> (typeof supabaseClient!=='undefined') && !!user();
+
+  let root,owned,coins,tab,cv,ctx,fish,raf,W,H;
+
+  function start(container){root=container;owned=new Set(LS.get('koi-owned',[]));coins=readCoinsLocal();tab='pond';
+    render();loadCloud();}
+  function readCoinsLocal(){ if(typeof huidigeCoins!=='undefined' && typeof huidigeCoins==='number')return huidigeCoins; return LS.get('koi-mockcoins',300); }
+  async function loadCloud(){
+    if(hasCloud()){
+      try{const {data}=await supabaseClient.from('kana_users').select('coins_100yen').eq('username',user()).maybeSingle();if(data)coins=data.coins_100yen||0;}catch(e){}
+      try{const {data}=await supabaseClient.rpc('get_koi',{p_username:user()});if(data)owned=new Set(data.map(r=>typeof r==='string'?r:(r.variety||r.get_koi)));}catch(e){}
+    }
+    if(owned.size===0){owned.add('kohaku');} // gratis starter
+    cache();buildFish();refresh();
+  }
+  function cache(){LS.set('koi-owned',[...owned]);}
+
+  function render(){
+    root.innerHTML=`
+      <div class="ki-wrap">
+        <div class="ki-head"><div><div class="ki-title">🎏 Koi-vijver</div><div class="ki-sub">Verzamel koi met je munten</div></div>
+          <div class="ki-meta"><span class="ki-chip">🪙 <span id="ki-coins">${coins}</span></span></div></div>
+        <div class="ki-tabs">
+          <button class="ki-tab" id="ki-tab-pond">🌊 Vijver</button>
+          <button class="ki-tab" id="ki-tab-dex">📖 Koi-dex</button>
+        </div>
+        <div id="ki-body"></div>
+        <button class="btn" id="ki-back" style="background:var(--muted);margin-top:12px;">← Menu</button>
+      </div>`;
+    injectStyle();
+    root.querySelector('#ki-tab-pond').onclick=()=>{tab='pond';refresh();};
+    root.querySelector('#ki-tab-dex').onclick=()=>{tab='dex';refresh();};
+    root.querySelector('#ki-back').onclick=()=>{stopPond();(window.switchScreen||function(){})('screen-menu');};
+  }
+  function refresh(){
+    const c=root.querySelector('#ki-coins');if(c)c.textContent=coins;
+    root.querySelector('#ki-tab-pond').classList.toggle('ki-on',tab==='pond');
+    root.querySelector('#ki-tab-dex').classList.toggle('ki-on',tab==='dex');
+    if(tab==='pond')renderPond(); else {stopPond();renderDex();}
+  }
+
+  // ---- vijver ----
+  function renderPond(){
+    root.querySelector('#ki-body').innerHTML=`
+      <div class="ki-pondwrap"><canvas id="ki-canvas"></canvas></div>
+      <p class="ki-hint">${owned.size} van ${KOI.length} soorten verzameld. Koop nieuwe koi in de koi-dex.</p>`;
+    cv=root.querySelector('#ki-canvas');ctx=cv.getContext('2d');sizePond();buildFish();loopPond();
+    window.addEventListener('resize',sizePond);
+  }
+  function sizePond(){const wrap=root.querySelector('.ki-pondwrap');if(!wrap||!cv)return;W=Math.min(wrap.clientWidth||340,420);H=Math.round(W*0.72);cv.width=W;cv.height=H;cv.style.width=W+'px';cv.style.height=H+'px';}
+  function buildFish(){fish=[];[...owned].forEach(id=>{const k=byId(id);if(!k)return;fish.push({k,x:40+Math.random()*260,y:40+Math.random()*160,a:Math.random()*6.28,sp:18+Math.random()*16,turn:0,ph:Math.random()*6.28,size:16+Math.random()*6});});}
+  function stopPond(){if(raf)cancelAnimationFrame(raf);raf=null;window.removeEventListener('resize',sizePond);}
+  let lastT=0;
+  function loopPond(){const now=performance.now();const dt=Math.min(0.05,(now-lastT)/1000||0.016);lastT=now;updateFish(dt);drawPond(now);raf=requestAnimationFrame(loopPond);}
+  function updateFish(dt){if(!W)return;for(const f of fish){
+    f.turn+=(Math.random()-0.5)*0.6;f.turn*=0.9;f.a+=f.turn*dt;
+    f.x+=Math.cos(f.a)*f.sp*dt;f.y+=Math.sin(f.a)*f.sp*dt;f.ph+=dt*6;
+    const m=24;if(f.x<m){f.x=m;f.a=Math.PI-f.a;}if(f.x>W-m){f.x=W-m;f.a=Math.PI-f.a;}
+    if(f.y<m){f.y=m;f.a=-f.a;}if(f.y>H-m){f.y=H-m;f.a=-f.a;}
+  }}
+  function drawPond(now){if(!ctx)return;
+    const g=ctx.createLinearGradient(0,0,0,H);g.addColorStop(0,'#20536b');g.addColorStop(1,'#123a4c');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+    // rimpelingen
+    ctx.strokeStyle='rgba(255,255,255,.05)';ctx.lineWidth=2;for(let i=0;i<5;i++){ctx.beginPath();const yy=(now/40+i*60)% (H+60)-30;ctx.ellipse(W/2,yy,W*0.42,10,0,0,6.28);ctx.stroke();}
+    for(const f of fish)drawKoi(f,now);
+  }
+  function drawKoi(f,now){const k=f.k,s=f.size;ctx.save();ctx.translate(f.x,f.y);ctx.rotate(f.a);
+    const wob=Math.sin(f.ph)*0.35;ctx.rotate(wob*0.08);
+    // staart
+    ctx.fillStyle=shade(k.base,-8);ctx.beginPath();ctx.moveTo(-s*0.9,0);ctx.lineTo(-s*1.7,-s*0.6);ctx.lineTo(-s*1.5,0);ctx.lineTo(-s*1.7,s*0.6);ctx.closePath();ctx.fill();
+    // lichaam
+    ctx.fillStyle=k.base;ctx.beginPath();ctx.ellipse(0,0,s*1.15,s*0.62,0,0,6.28);ctx.fill();
+    if(k.metallic){const gg=ctx.createLinearGradient(0,-s*0.6,0,s*0.6);gg.addColorStop(0,'rgba(255,255,255,.55)');gg.addColorStop(.5,'rgba(255,255,255,0)');gg.addColorStop(1,'rgba(0,0,0,.15)');ctx.fillStyle=gg;ctx.beginPath();ctx.ellipse(0,0,s*1.15,s*0.62,0,0,6.28);ctx.fill();}
+    // patroon
+    ctx.save();ctx.beginPath();ctx.ellipse(0,0,s*1.15,s*0.62,0,0,6.28);ctx.clip();
+    if(k.blotch){ctx.fillStyle=k.blotch;blot(ctx,s*0.35,-s*0.1,s*0.5);blot(ctx,-s*0.35,s*0.12,s*0.4);blot(ctx,s*0.75,s*0.15,s*0.32);}
+    if(k.blotch2){ctx.fillStyle=k.blotch2;blot(ctx,-s*0.05,-s*0.22,s*0.3);blot(ctx,s*0.55,-s*0.2,s*0.26);}
+    ctx.restore();
+    if(k.headSpot){ctx.fillStyle=k.headSpot;ctx.beginPath();ctx.arc(s*0.7,0,s*0.32,0,6.28);ctx.fill();}
+    // oog
+    ctx.fillStyle='#1c1c1c';ctx.beginPath();ctx.arc(s*0.85,-s*0.18,s*0.09,0,6.28);ctx.fill();
+    ctx.restore();
+  }
+  function blot(c,x,y,r){c.beginPath();c.ellipse(x,y,r,r*0.8,0.3,0,6.28);c.fill();}
+  function shade(hex,amt){try{const n=parseInt(hex.slice(1),16);let r=(n>>16)+amt,g=((n>>8)&255)+amt,b=(n&255)+amt;r=Math.max(0,Math.min(255,r));g=Math.max(0,Math.min(255,g));b=Math.max(0,Math.min(255,b));return`rgb(${r},${g},${b})`;}catch(e){return hex;}}
+
+  // ---- koi-dex ----
+  function renderDex(){
+    let html='<div class="ki-dex">';
+    for(const k of KOI){const have=owned.has(k.id);const canBuy=!have && coins>=k.prijs;
+      html+=`<div class="ki-card${have?' ki-have':''}">
+        <div class="ki-fishbox"><canvas class="ki-thumb" data-id="${k.id}" width="120" height="80"></canvas></div>
+        <div class="ki-name">${k.jp} <span class="ki-rom">${k.romaji}</span></div>
+        <div class="ki-nl">${k.nl}</div>
+        <div class="ki-rar" style="color:var(${RAR_KLEUR[k.rar]})">${k.rar}</div>
+        ${have?'<div class="ki-owned">✓ in vijver</div>':`<button class="ki-buy" data-buy="${k.id}" ${canBuy?'':'disabled'}>🪙 ${k.prijs}${k.prijs===0?' (gratis)':''}</button>`}
+      </div>`;
+    }
+    html+='</div>';
+    root.querySelector('#ki-body').innerHTML=html;
+    root.querySelectorAll('.ki-thumb').forEach(c=>drawThumb(c));
+    root.querySelectorAll('.ki-buy').forEach(b=>b.onclick=()=>buy(b.dataset.buy));
+  }
+  function drawThumb(canvas){const id=canvas.dataset.id,k=byId(id),c=canvas.getContext('2d');const have=owned.has(id);
+    c.clearRect(0,0,120,80);
+    if(!have){ // silhouet
+      c.fillStyle='rgba(255,255,255,.12)';c.strokeStyle='var(--muted)';
+      c.save();c.translate(60,40);c.fillStyle='#b9ac93';c.beginPath();c.ellipse(0,0,26,15,0,0,6.28);c.fill();c.beginPath();c.moveTo(-22,0);c.lineTo(-40,-13);c.lineTo(-36,0);c.lineTo(-40,13);c.closePath();c.fill();c.restore();
+      c.fillStyle='var(--muted)';c.font='bold 20px serif';c.textAlign='center';c.textBaseline='middle';c.fillText('？',60,40);
+      return;
+    }
+    // teken koi via drawKoi-achtige mini
+    const f={k,x:60,y:40,a:0,ph:0,size:20};const octx=ctx;ctx=c;drawKoi(f,0);ctx=octx;
+  }
+
+  async function buy(id){
+    const k=byId(id);if(!k||owned.has(id))return;
+    if(coins<k.prijs){toast('Niet genoeg munten');return;}
+    if(hasCloud()){
+      try{const {data,error}=await supabaseClient.rpc('buy_koi',{p_username:user(),p_variety:id});
+        if(error)throw error;
+        if(data&&data.ok){coins=data.coins;syncAppCoins(coins);owned.add(id);cache();afterBuy(k);}
+        else{toast(data&&data.reason==='insufficient'?'Niet genoeg munten':'Kon niet kopen');coins=(data&&data.coins)??coins;refresh();}
+      }catch(e){toast('Netwerkfout');}
+    } else { // preview: lokaal afboeken
+      let bal=LS.get('koi-mockcoins',coins);bal-=k.prijs;LS.set('koi-mockcoins',bal);coins=bal;owned.add(id);cache();afterBuy(k);
+    }
+  }
+  function afterBuy(k){toast(`${k.jp} ${k.romaji} toegevoegd! 🎉`);refresh();}
+  function syncAppCoins(v){try{if(typeof huidigeCoins!=='undefined')huidigeCoins=v;if(typeof updateCoinBadge==='function')updateCoinBadge();}catch(e){}}
+  function toast(msg){let t=root.querySelector('.ki-toast');if(!t){t=document.createElement('div');t.className='ki-toast';root.appendChild(t);}t.textContent=msg;t.classList.add('ki-show');setTimeout(()=>t.classList.remove('ki-show'),1600);}
+
+  function injectStyle(){if(document.getElementById('ki-style'))return;const s=document.createElement('style');s.id='ki-style';s.textContent=`
+    .ki-wrap{position:relative}
+    .ki-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;gap:8px}
+    .ki-title{font-family:var(--font-display);font-size:24px;font-weight:800;color:var(--dark)}
+    .ki-sub{font-size:13px;color:var(--muted)}
+    .ki-meta{display:flex;gap:6px}
+    .ki-chip{background:var(--input-bg);border:1px solid var(--border);border-radius:20px;padding:6px 12px;font-size:15px;font-weight:800;white-space:nowrap}
+    .ki-tabs{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+    .ki-tab{padding:9px;background:var(--input-bg);border:1px solid var(--border);border-radius:10px;font-weight:700;font-family:var(--font-body);color:var(--text);cursor:pointer}
+    .ki-tab.ki-on{border-color:var(--primary);box-shadow:0 0 0 2px var(--primary) inset}
+    .ki-pondwrap{display:flex;justify-content:center}
+    #ki-canvas{border:3px solid var(--sumi);border-radius:14px;max-width:100%;box-shadow:inset 0 2px 12px rgba(0,0,0,.3)}
+    .ki-hint{text-align:center;font-size:12.5px;color:var(--muted);margin-top:10px}
+    .ki-dex{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+    .ki-card{background:var(--input-bg);border:1px solid var(--border);border-radius:12px;padding:8px;text-align:center}
+    .ki-have{border-color:var(--success);background:color-mix(in srgb,var(--matsuba) 8%,var(--input-bg))}
+    .ki-fishbox{background:#173a4c;border-radius:8px;margin-bottom:6px}
+    .ki-thumb{width:100%;height:auto;display:block}
+    .ki-name{font-family:var(--font-display);font-weight:800;color:var(--dark);font-size:15px}
+    .ki-rom{font-size:11px;color:var(--muted);font-weight:600}
+    .ki-nl{font-size:11.5px;color:var(--muted)}
+    .ki-rar{font-size:11px;font-weight:800;text-transform:capitalize;margin:2px 0 6px}
+    .ki-owned{font-size:12px;font-weight:700;color:var(--success)}
+    .ki-buy{width:100%;padding:7px;background:var(--kincha);color:#fff8ee;border:none;border-radius:8px;font-weight:800;cursor:pointer}
+    .ki-buy:disabled{background:var(--border);color:var(--muted);cursor:not-allowed}
+    .ki-toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);background:var(--sumi);color:#fff8ee;padding:10px 16px;border-radius:20px;font-weight:700;font-size:14px;opacity:0;transition:.25s;z-index:9999;pointer-events:none}
+    .ki-toast.ki-show{opacity:1;transform:translateX(-50%) translateY(0)}
+  `;document.head.appendChild(s);}
+
+  window.KanaKoi={start};
+  window.startKoiInit=function(){(window.switchScreen||function(){})('screen-koi');const el=document.getElementById('koi-root');if(el)start(el);};
 })();
 
 </script>
