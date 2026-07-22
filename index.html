@@ -355,6 +355,7 @@
             <button class="btn" style="background:var(--ai);" onclick="startSokobanInit()">📦 Sokoban (300 levels)</button>
             <button class="btn" style="background:var(--matsuba);" onclick="startFroggerInit()">🐸 Frogger</button>
             <button class="btn" style="background:#1c6b7a;" onclick="startKoiInit()">🎏 Koi-vijver</button>
+            <button class="btn" style="background:#5b6b52;" onclick="startHoutInit()">📐 Houtberekening (EC5)</button>
         </div>
     </div>
 
@@ -509,6 +510,10 @@
 
     <div id="screen-koi" class="screen">
         <div id="koi-root"></div>
+    </div>
+
+    <div id="screen-hout" class="screen">
+        <div id="hout-root"></div>
     </div>
 
     <div id="screen-draw" class="screen">
@@ -3831,6 +3836,293 @@
 
   window.KanaKoi={start};
   window.startKoiInit=function(){(window.switchScreen||function(){})('screen-koi');const el=document.getElementById('koi-root');if(el)start(el);};
+})();
+
+</script>
+<script id="hout-engine">
+/* ============================================================
+   Kana Master · Houtberekening (NEN-EN 1995-1-1 / EC5)
+   Ligger op twee steunpunten of uitkraging. Zelfde invulvelden
+   en uitvoer als het rekenblad: opneembare spanningen, belasting-
+   combinaties, sterktetoetsen (buiging, schuif, oplegging) en
+   doorbuiging (winst, wq+wcreep, wnet;fin, wfin).
+   Blootgesteld: window.startHoutInit(), window.KanaHout
+   ============================================================ */
+(function () {
+  // karakteristieke waarden naaldhout/gelamineerd
+  const KLASSEN = {
+    'C18':{fmk:18,fvk:2.0,fc90k:2.2,E0mean:9000, soort:'gezaagd'},
+    'C24':{fmk:24,fvk:2.5,fc90k:2.5,E0mean:11000,soort:'gezaagd'},
+    'C30':{fmk:30,fvk:3.0,fc90k:2.7,E0mean:12000,soort:'gezaagd'},
+    'GL24h':{fmk:24,fvk:3.5,fc90k:2.5,E0mean:11500,soort:'gelamineerd'},
+    'GL28h':{fmk:28,fvk:3.5,fc90k:2.5,E0mean:12600,soort:'gelamineerd'},
+    'GL32h':{fmk:32,fvk:3.5,fc90k:2.5,E0mean:13700,soort:'gelamineerd'}
+  };
+  // kmod per klimaatklasse en belastingduurklasse (tabel 3.1, massief/gelamineerd)
+  const KMOD = {
+    1:{blijvend:0.60,lang:0.70,middellang:0.80,kort:0.90,zeerkort:1.10},
+    2:{blijvend:0.60,lang:0.70,middellang:0.80,kort:0.90,zeerkort:1.10},
+    3:{blijvend:0.50,lang:0.55,middellang:0.65,kort:0.70,zeerkort:0.90}
+  };
+  const KDEF = {1:0.60, 2:0.80, 3:2.00};
+  const GM   = {gezaagd:1.3, gelamineerd:1.25};
+  const DUUR = ['blijvend','lang','middellang','kort','zeerkort'];
+
+  const LS={get:(k,f)=>{try{const v=localStorage.getItem(k);return v==null?f:JSON.parse(v);}catch(e){return f;}},set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}};
+  const nf=(v,d=2)=>(isFinite(v)?v:0).toFixed(d).replace('.',',');
+  const num=id=>{const el=document.getElementById(id);const v=parseFloat((el?el.value:'0').replace(',','.'));return isFinite(v)?v:0;};
+  const val=id=>{const el=document.getElementById(id);return el?el.value:'';};
+
+  const DEF = {
+    schema:'ligger', klasse:'C24', klimaat:1, kfi:0.9,
+    b:46, h:145, L:2.200, opleg:100, hohL:610, hohR:610,
+    gkA:0.50, qkA:1.00, Qk:2.00, qkA2:0, eg:0,
+    psi0:0.4, psi1:0.5, psi2:0.3, psit:1.00,
+    duurPerm:'blijvend', duurVar:'middellang',
+    limInst:250, limQcreep:250, limNet:250, limFin:150, zeeg:0
+  };
+
+  let root, st;
+
+  function start(container){root=container;st=Object.assign({},DEF,LS.get('hout-invoer',{}));render();bereken();}
+
+  // ---------- rekenkern ----------
+  function reken(i){
+    const K=KLASSEN[i.klasse]||KLASSEN.C24;
+    const gM=GM[K.soort];
+    const kdef=KDEF[i.klimaat];
+    const kmodP=KMOD[i.klimaat][i.duurPerm];
+    const kmodV=KMOD[i.klimaat][i.duurVar];
+    const b=i.b, h=i.h, L=i.L*1000;                 // mm
+    const A=b*h, Wy=b*h*h/6, Iy=b*h*h*h/12;
+    // kh (hoogtefactor)
+    let kh=1;
+    if(K.soort==='gezaagd' && h<150) kh=Math.min(Math.pow(150/h,0.2),1.3);
+    if(K.soort==='gelamineerd' && h<600) kh=Math.min(Math.pow(600/h,0.1),1.1);
+
+    // opneembare spanningen
+    const fmd_p=kmodP*K.fmk/gM, fmd_v=kmodV*K.fmk/gM, fmd=kmodV*K.fmk/gM*kh;
+    const fvd_p=kmodP*K.fvk/gM, fvd_v=kmodV*K.fvk/gM, fvd=fvd_v;
+    const fc_p =kmodP*K.fc90k/gM, fc_v=kmodV*K.fc90k/gM, fcd=fc_v;
+
+    // belastingbreedte
+    const B=(i.hohL+i.hohR)/2/1000;                  // m
+    const gk=i.gkA*B + i.eg;                         // kN/m1 (incl. eigen gewicht balk)
+    const qk=i.qkA*B*i.psit;                         // kN/m1
+    const qk2=i.qkA2*B*i.psit;
+    const qkTot=qk+qk2;
+    const Qk=i.Qk;                                   // kN puntlast
+
+    // combinaties (NEN-EN 1990 6.10a/6.10b met KFI)
+    const K1=i.kfi;
+    const c1={naam:'Fund.Comb.1', gk:gk, qk:0,      qEd:1.35*K1*gk,                  QEd:0};
+    const c2={naam:'Fund.Comb.2', gk:gk, qk:qkTot,  qEd:1.2*K1*gk + 1.5*K1*qkTot,    QEd:1.5*K1*Qk};
+    const bg={naam:'Karak.Comb.1',gk:gk, qk:qkTot,  qEd:gk+qkTot,                    QEd:Qk};
+    const qEd=Math.max(c1.qEd,c2.qEd);
+    const QEd=c2.QEd;
+    const qEd_eg=c1.qEd;
+
+    // krachten
+    const uitkraging = i.schema==='uitkraging';
+    const l=i.L;                                     // m
+    const MEd = uitkraging ? (0.5*qEd*l*l + QEd*l) : (0.125*qEd*l*l + 0.25*QEd*l);
+    const VEd = uitkraging ? (qEd*l + QEd)          : (0.5*qEd*l + 0.5*QEd);
+    const Fc90 = VEd;                                // oplegreactie
+
+    // spanningen
+    const sm = MEd*1e6/Wy;
+    const sv = 1.5*VEd*1e3/(b*h);
+    const sc = Fc90*1e3/(b*i.opleg);
+
+    // doorbuiging (q in kN/m1 = N/mm)
+    const E=K.E0mean;
+    const fac = uitkraging ? (1/8) : (5/384);
+    const defl=q=>fac*q*Math.pow(L,4)/(E*Iy);
+    const wg=defl(gk), wq=defl(qkTot);
+    // puntlast bijdrage
+    const wQ = Qk>0 ? (uitkraging ? (Qk*1e3*Math.pow(L,3)/(3*E*Iy)) : (Qk*1e3*Math.pow(L,3)/(48*E*Iy))) : 0;
+    const wqTot=wq+wQ;
+    const winst=wg+wqTot;
+    const wcreep=kdef*(wg + i.psi2*wqTot);
+    const wqcreep=wqTot+wcreep;
+    const wnetfin=winst+wcreep-i.zeeg;
+    const wfin=wnetfin+i.zeeg;
+
+    const lim=n=>n>0?L/n:Infinity;
+    return {K,gM,kdef,kmodP,kmodV,A,Wy,Iy,kh,fmd_p,fmd_v,fmd,fvd_p,fvd_v,fvd,fc_p,fc_v,fcd,
+      B,gk,qk:qkTot,Qk,c1,c2,bg,qEd,QEd,qEd_eg,MEd,VEd,Fc90,sm,sv,sc,E,
+      wg,wq:wqTot,winst,wcreep,wqcreep,wnetfin,wfin,
+      limInst:lim(i.limInst),limQ:lim(i.limQcreep),limNet:lim(i.limNet),limFin:lim(i.limFin),uitkraging};
+  }
+
+  // ---------- weergave ----------
+  function render(){
+    root.innerHTML=`
+    <div class="ho-wrap">
+      <div class="ho-head"><div><div class="ho-title">📐 Houtberekening</div><div class="ho-sub">NEN-EN 1995-1-1 · ligger &amp; uitkraging</div></div></div>
+
+      <div class="ho-sec">Constructieonderdeel</div>
+      <div class="ho-grid">
+        ${sel('schema','Statisch schema',[['ligger','Ligger op 2 steunpunten'],['uitkraging','Uitkraging']],st.schema)}
+        ${inp('kfi','KFI (CC1 = 0,9)',st.kfi,'0,01')}
+      </div>
+
+      <div class="ho-sec">Geometrie</div>
+      <div class="ho-grid">
+        ${inp('L','Overspanning (m)',st.L,'0,001')}
+        ${inp('opleg','Opleglengte (mm)',st.opleg,'1')}
+        ${inp('hohL','H.o.h. links (mm)',st.hohL,'1')}
+        ${inp('hohR','H.o.h. rechts (mm)',st.hohR,'1')}
+        ${inp('b','Profiel b (mm)',st.b,'1')}
+        ${inp('h','Profiel h (mm)',st.h,'1')}
+      </div>
+
+      <div class="ho-sec">Materiaal</div>
+      <div class="ho-grid">
+        ${sel('klasse','Houtkwaliteit',Object.keys(KLASSEN).map(k=>[k,k]),st.klasse)}
+        ${sel('klimaat','Klimaatklasse',[[1,'1'],[2,'2'],[3,'3']],st.klimaat)}
+        ${sel('duurPerm','Duurklasse permanent',DUUR.map(d=>[d,d]),st.duurPerm)}
+        ${sel('duurVar','Duurklasse veranderlijk',DUUR.map(d=>[d,d]),st.duurVar)}
+      </div>
+
+      <div class="ho-sec">Belastingen</div>
+      <div class="ho-grid">
+        ${inp('gkA','Permanent gk (kN/m²)',st.gkA,'0,01')}
+        ${inp('eg','Eigen gewicht balk (kN/m¹)',st.eg,'0,01')}
+        ${inp('qkA','Veranderlijk qk (kN/m²)',st.qkA,'0,01')}
+        ${inp('qkA2','Veranderlijk qk 2 (kN/m²)',st.qkA2,'0,01')}
+        ${inp('Qk','Puntlast Qk (kN)',st.Qk,'0,01')}
+        ${inp('psit','Ψt',st.psit,'0,01')}
+        ${inp('psi0','Ψ0',st.psi0,'0,1')}
+        ${inp('psi1','Ψ1',st.psi1,'0,1')}
+        ${inp('psi2','Ψ2',st.psi2,'0,1')}
+      </div>
+
+      <div class="ho-sec">Doorbuigingseisen (l/n)</div>
+      <div class="ho-grid">
+        ${inp('limInst','winst  l/',st.limInst,'1')}
+        ${inp('limQcreep','wq+creep  l/',st.limQcreep,'1')}
+        ${inp('limNet','wnet;fin  l/',st.limNet,'1')}
+        ${inp('limFin','wfin  l/',st.limFin,'1')}
+        ${inp('zeeg','Zeeg wc (mm)',st.zeeg,'1')}
+      </div>
+
+      <div id="ho-uit"></div>
+      <div class="ho-btns">
+        <button class="btn ho-b2" id="ho-print">🖨️ Print / PDF</button>
+        <button class="btn ho-b2" id="ho-reset">↺ Standaardwaarden</button>
+      </div>
+      <button class="btn" id="ho-back" style="background:var(--muted);margin-top:10px;">← Menu</button>
+    </div>`;
+    injectStyle();
+    root.querySelectorAll('input,select').forEach(el=>{el.oninput=()=>{lees();bereken();};el.onchange=()=>{lees();bereken();};});
+    root.querySelector('#ho-print').onclick=()=>window.print();
+    root.querySelector('#ho-reset').onclick=()=>{st=Object.assign({},DEF);LS.set('hout-invoer',st);render();bereken();};
+    root.querySelector('#ho-back').onclick=()=>{(window.switchScreen||function(){})('screen-menu');};
+  }
+  function inp(id,label,v,step){return `<label class="ho-f"><span>${label}</span><input id="ho-${id}" type="text" inputmode="decimal" value="${String(v).replace('.',',')}"></label>`;}
+  function sel(id,label,opts,v){return `<label class="ho-f"><span>${label}</span><select id="ho-${id}">${opts.map(o=>`<option value="${o[0]}" ${String(o[0])===String(v)?'selected':''}>${o[1]}</option>`).join('')}</select></label>`;}
+
+  function lees(){
+    ['kfi','L','opleg','hohL','hohR','b','h','gkA','eg','qkA','qkA2','Qk','psit','psi0','psi1','psi2','limInst','limQcreep','limNet','limFin','zeeg']
+      .forEach(k=>st[k]=num('ho-'+k));
+    ['schema','klasse','duurPerm','duurVar'].forEach(k=>st[k]=val('ho-'+k));
+    st.klimaat=parseInt(val('ho-klimaat'))||1;
+    LS.set('hout-invoer',st);
+  }
+
+  function uc(v,lim){const u=lim>0?v/lim:0;return {u, ok:u<=1.0};}
+  function rij(label,waarde,eenheid,toets,limiet){
+    const r=uc(waarde,limiet);
+    return `<tr><td>${label}</td><td class="ho-n">${nf(waarde)}</td><td class="ho-u">${eenheid}</td>
+      <td class="ho-n">${nf(limiet)}</td><td class="ho-n"><b>${nf(r.u)}</b></td>
+      <td class="${r.ok?'ho-ok':'ho-nok'}">${r.ok?'akkoord':'niet akkoord'}</td></tr>`;
+  }
+
+  function bereken(){
+    const r=reken(st);
+    const el=root.querySelector('#ho-uit');
+    el.innerHTML=`
+      <div class="ho-sec">Uitgangspunten</div>
+      <div class="ho-kv">
+        <div><span>A</span><b>${nf(r.A,0)} mm²</b></div>
+        <div><span>Wy</span><b>${nf(r.Wy/1e3,1)}·10³ mm³</b></div>
+        <div><span>Iy</span><b>${nf(r.Iy/1e4,1)}·10⁴ mm⁴</b></div>
+        <div><span>E0;mean</span><b>${nf(r.E,0)} N/mm²</b></div>
+        <div><span>γM</span><b>${nf(r.gM)}</b></div>
+        <div><span>kdef</span><b>${nf(r.kdef)}</b></div>
+        <div><span>kmod perm</span><b>${nf(r.kmodP)}</b></div>
+        <div><span>kmod ver.</span><b>${nf(r.kmodV)}</b></div>
+        <div><span>kh</span><b>${nf(r.kh)}</b></div>
+      </div>
+
+      <div class="ho-sec">Opneembare spanningen</div>
+      <table class="ho-t">
+        <tr><th></th><th>permanent</th><th>veranderlijk</th><th>maatgevend (incl. kh)</th></tr>
+        <tr><td>fm;d</td><td class="ho-n">${nf(r.fmd_p)}</td><td class="ho-n">${nf(r.fmd_v)}</td><td class="ho-n"><b>${nf(r.fmd)}</b></td></tr>
+        <tr><td>fv;d</td><td class="ho-n">${nf(r.fvd_p)}</td><td class="ho-n">${nf(r.fvd_v)}</td><td class="ho-n"><b>${nf(r.fvd)}</b></td></tr>
+        <tr><td>fc;90;d</td><td class="ho-n">${nf(r.fc_p)}</td><td class="ho-n">${nf(r.fc_v)}</td><td class="ho-n"><b>${nf(r.fcd)}</b></td></tr>
+      </table>
+
+      <div class="ho-sec">Belastingen en belastingcombinaties</div>
+      <div class="ho-note">Belastingbreedte B = ${nf(r.B,3)} m · gk = ${nf(r.gk)} kN/m¹ · qk = ${nf(r.qk)} kN/m¹${r.Qk?` · Qk = ${nf(r.Qk)} kN`:''}</div>
+      <table class="ho-t">
+        <tr><th>UGT</th><th>gk</th><th>qk</th><th>qEd</th></tr>
+        <tr><td>Fund.Comb.1</td><td class="ho-n">${nf(r.c1.gk)}</td><td class="ho-n">${nf(r.c1.qk)}</td><td class="ho-n"><b>${nf(r.c1.qEd)}</b></td></tr>
+        <tr><td>Fund.Comb.2</td><td class="ho-n">${nf(r.c2.gk)}</td><td class="ho-n">${nf(r.c2.qk)}</td><td class="ho-n"><b>${nf(r.c2.qEd)}</b></td></tr>
+        <tr><th>BGT</th><th>gk</th><th>qk</th><th>qEk</th></tr>
+        <tr><td>Karak.Comb.1</td><td class="ho-n">${nf(r.bg.gk)}</td><td class="ho-n">${nf(r.bg.qk)}</td><td class="ho-n"><b>${nf(r.bg.qEd)}</b></td></tr>
+      </table>
+
+      <div class="ho-sec">Sterkte (berekening)</div>
+      <div class="ho-note">qEd = ${nf(r.qEd)} kN/m¹${r.QEd?` · QEd = ${nf(r.QEd)} kN`:''} · MEd = ${nf(r.MEd)} kNm · VEd = ${nf(r.VEd)} kN</div>
+      <table class="ho-t ho-tc">
+        <tr><th>toets</th><th>waarde</th><th></th><th>toelaatbaar</th><th>u.c.</th><th></th></tr>
+        ${rij('buigspanning σm;d',r.sm,'N/mm²',null,r.fmd)}
+        ${rij('schuifspanning σv;d',r.sv,'N/mm²',null,r.fvd)}
+        ${rij('oplegspanning σc;90;d',r.sc,'N/mm²',null,r.fcd)}
+      </table>
+
+      <div class="ho-sec">Doorbuiging (controle)</div>
+      <div class="ho-note">wg = ${nf(r.wg)} mm · wq = ${nf(r.wq)} mm · wcreep = ${nf(r.wcreep)} mm</div>
+      <table class="ho-t ho-tc">
+        <tr><th>toets</th><th>waarde</th><th></th><th>toelaatbaar</th><th>u.c.</th><th></th></tr>
+        ${rij('winst',r.winst,'mm',null,r.limInst)}
+        ${rij('wq + wcreep',r.wqcreep,'mm',null,r.limQ)}
+        ${rij('wnet;fin',r.wnetfin,'mm',null,r.limNet)}
+        ${rij('wfin',r.wfin,'mm',null,r.limFin)}
+      </table>`;
+  }
+
+  function injectStyle(){if(document.getElementById('ho-style'))return;const s=document.createElement('style');s.id='ho-style';s.textContent=`
+    .ho-wrap{position:relative}
+    .ho-head{margin-bottom:10px}
+    .ho-title{font-family:var(--font-display);font-size:24px;font-weight:800;color:var(--dark)}
+    .ho-sub{font-size:13px;color:var(--muted)}
+    .ho-sec{font-family:var(--font-display);font-weight:800;color:var(--dark);font-size:15px;margin:16px 0 8px;padding-bottom:4px;border-bottom:2px solid var(--border)}
+    .ho-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .ho-f{display:flex;flex-direction:column;gap:3px}
+    .ho-f span{font-size:11.5px;color:var(--muted);font-weight:700}
+    .ho-f input,.ho-f select{padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--input-bg);color:var(--text);font-family:var(--font-body);font-size:14px;font-weight:700;width:100%}
+    .ho-kv{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+    .ho-kv div{background:var(--input-bg);border:1px solid var(--border);border-radius:8px;padding:6px}
+    .ho-kv span{display:block;font-size:10.5px;color:var(--muted);font-weight:700}
+    .ho-kv b{font-size:12.5px;color:var(--dark)}
+    .ho-t{width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:4px}
+    .ho-t th{background:color-mix(in srgb,var(--sumi) 8%,var(--input-bg));color:var(--dark);font-weight:800;padding:6px;text-align:left;border:1px solid var(--border);font-size:11.5px}
+    .ho-t td{padding:6px;border:1px solid var(--border);color:var(--text)}
+    .ho-n{text-align:right;font-variant-numeric:tabular-nums}
+    .ho-u{color:var(--muted);font-size:11px}
+    .ho-ok{color:var(--success);font-weight:800}
+    .ho-nok{color:var(--danger);font-weight:800}
+    .ho-note{font-size:12px;color:var(--muted);margin-bottom:6px;font-weight:700}
+    .ho-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
+    .ho-b2{background:var(--input-bg)!important;color:var(--text)!important;border:1px solid var(--border)!important;box-shadow:none!important;margin:0!important}
+    @media print{.ho-btns,#ho-back{display:none}}
+  `;document.head.appendChild(s);}
+
+  window.KanaHout={start,reken};
+  window.startHoutInit=function(){(window.switchScreen||function(){})('screen-hout');const el=document.getElementById('hout-root');if(el)start(el);};
 })();
 
 </script>
