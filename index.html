@@ -356,6 +356,7 @@
             <button class="btn" style="background:var(--matsuba);" onclick="startFroggerInit()">🐸 Frogger</button>
             <button class="btn" style="background:#1c6b7a;" onclick="startKoiInit()">🎏 Koi-vijver</button>
             <button class="btn" style="background:#5b6b52;" onclick="startHoutInit()">📐 Houtberekening (EC5)</button>
+            <button class="btn" style="background:#4a4f57;" onclick="startStaalInit()">🏗️ Stalen ligger (EC3)</button>
         </div>
     </div>
 
@@ -514,6 +515,10 @@
 
     <div id="screen-hout" class="screen">
         <div id="hout-root"></div>
+    </div>
+
+    <div id="screen-staal" class="screen">
+        <div id="staal-root"></div>
     </div>
 
     <div id="screen-draw" class="screen">
@@ -4123,6 +4128,329 @@
 
   window.KanaHout={start,reken};
   window.startHoutInit=function(){(window.switchScreen||function(){})('screen-hout');const el=document.getElementById('hout-root');if(el)start(el);};
+})();
+
+</script>
+<script id="staal-engine">
+/* ============================================================
+   Kana Master · Stalen ligger op 2 steunpunten
+   NEN-EN 1993-1-1 + Nationale Bijlage (NL).
+   γM0 = γM1 = 1,00 (NB). Doorsnedeclassificatie (tabel 5.2),
+   buiging Mc,Rd, afschuiving Vpl,Rd (+ plooicontrole lijf),
+   M-V interactie, kipcontrole 6.3.2 (Mcr → χLT), en doorbuiging
+   volgens NEN-EN 1990 A.1.4.3 (w1/w3/wmax).
+   Blootgesteld: window.startStaalInit(), window.KanaStaal
+   ============================================================ */
+(function () {
+  // profielen: [h,b,tw,tf,r, A(cm2), Iy(cm4), Wely(cm3), Wply(cm3), Iz(cm4), It(cm4), g(kg/m)]
+  const PROF = {
+    'IPE 100':[100,55,4.1,5.7,7,10.3,171,34.2,39.4,15.9,1.20,8.1],
+    'IPE 120':[120,64,4.4,6.3,7,13.2,318,53.0,60.7,27.7,1.74,10.4],
+    'IPE 140':[140,73,4.7,6.9,7,16.4,541,77.3,88.3,44.9,2.45,12.9],
+    'IPE 160':[160,82,5.0,7.4,9,20.1,869,109,124,68.3,3.60,15.8],
+    'IPE 180':[180,91,5.3,8.0,9,23.9,1317,146,166,101,4.79,18.8],
+    'IPE 200':[200,100,5.6,8.5,12,28.5,1943,194,221,142,6.98,22.4],
+    'IPE 220':[220,110,5.9,9.2,12,33.4,2772,252,285,205,9.07,26.2],
+    'IPE 240':[240,120,6.2,9.8,15,39.1,3892,324,367,284,12.9,30.7],
+    'IPE 270':[270,135,6.6,10.2,15,45.9,5790,429,484,420,15.9,36.1],
+    'IPE 300':[300,150,7.1,10.7,15,53.8,8356,557,628,604,20.1,42.2],
+    'IPE 330':[330,160,7.5,11.5,18,62.6,11770,713,804,788,28.1,49.1],
+    'IPE 360':[360,170,8.0,12.7,18,72.7,16270,904,1019,1043,37.3,57.1],
+    'IPE 400':[400,180,8.6,13.5,21,84.5,23130,1156,1307,1318,51.1,66.3],
+    'IPE 450':[450,190,9.4,14.6,21,98.8,33740,1500,1702,1676,66.9,77.6],
+    'IPE 500':[500,200,10.2,16.0,21,116,48200,1928,2194,2142,89.3,90.7],
+    'IPE 550':[550,210,11.1,17.2,24,134,67120,2441,2787,2668,123,106],
+    'IPE 600':[600,220,12.0,19.0,24,156,92080,3069,3512,3387,165,122],
+    'HEA 100':[96,100,5.0,8.0,12,21.2,349,72.8,83.0,134,5.24,16.7],
+    'HEA 120':[114,120,5.0,8.0,12,25.3,606,106,119,231,5.99,19.9],
+    'HEA 140':[133,140,5.5,8.5,12,31.4,1033,155,173,389,8.13,24.7],
+    'HEA 160':[152,160,6.0,9.0,15,38.8,1673,220,245,616,12.2,30.4],
+    'HEA 180':[171,180,6.0,9.5,15,45.3,2510,294,325,925,14.8,35.5],
+    'HEA 200':[190,200,6.5,10.0,18,53.8,3692,389,429,1336,21.0,42.3],
+    'HEA 220':[210,220,7.0,11.0,18,64.3,5410,515,568,1955,28.5,50.5],
+    'HEA 240':[230,240,7.5,12.0,21,76.8,7763,675,745,2769,41.6,60.3],
+    'HEA 260':[250,260,7.5,12.5,24,86.8,10450,836,920,3668,52.4,68.2],
+    'HEA 280':[270,280,8.0,13.0,24,97.3,13670,1013,1112,4763,62.1,76.4],
+    'HEA 300':[290,300,8.5,14.0,27,112.5,18260,1260,1383,6310,85.2,88.3],
+    'HEA 320':[310,300,9.0,15.5,27,124.4,22930,1479,1628,6985,108,97.6],
+    'HEA 340':[330,300,9.5,16.5,27,133.5,27690,1678,1850,7436,127,105],
+    'HEA 360':[350,300,10.0,17.5,27,142.8,33090,1891,2088,7887,148,112],
+    'HEA 400':[390,300,11.0,19.0,27,159,45070,2311,2562,8564,189,125],
+    'HEB 100':[100,100,6.0,10.0,12,26.0,450,89.9,104,167,9.25,20.4],
+    'HEB 120':[120,120,6.5,11.0,12,34.0,864,144,165,318,13.8,26.7],
+    'HEB 140':[140,140,7.0,12.0,12,43.0,1509,216,245,550,20.1,33.7],
+    'HEB 160':[160,160,8.0,13.0,15,54.3,2492,311,354,889,31.2,42.6],
+    'HEB 180':[180,180,8.5,14.0,15,65.3,3831,426,481,1363,42.2,51.2],
+    'HEB 200':[200,200,9.0,15.0,18,78.1,5696,570,643,2003,59.3,61.3],
+    'HEB 220':[220,220,9.5,16.0,18,91.0,8091,736,827,2843,76.6,71.5],
+    'HEB 240':[240,240,10.0,17.0,21,106,11260,938,1053,3923,103,83.2],
+    'HEB 260':[260,260,10.0,17.5,24,118.4,14920,1148,1283,5135,124,93.0],
+    'HEB 280':[280,280,10.5,18.0,24,131.4,19270,1376,1534,6595,144,103],
+    'HEB 300':[300,300,11.0,19.0,27,149.1,25170,1678,1869,8563,185,117],
+    'HEB 320':[320,300,11.5,20.5,27,161.3,30820,1926,2149,9239,225,127],
+    'HEB 340':[340,300,12.0,21.5,27,170.9,36660,2156,2408,9690,257,134],
+    'HEB 360':[360,300,12.5,22.5,27,180.6,43190,2400,2683,10140,292,142],
+    'HEB 400':[400,300,13.5,24.0,27,197.8,57680,2884,3232,10820,356,155]
+  };
+  // staalsoort: fy voor t ≤ 40 mm en t > 40 mm (EN 1993-1-1 tabel 3.1)
+  const STAAL = {'S235':[235,215],'S275':[275,255],'S355':[355,335],'S460':[460,440]};
+  const E=210000, G=81000, gM0=1.00, gM1=1.00;   // NB: γM0 = γM1 = 1,00
+  // C1 voor Mcr, afhankelijk van momentenverloop
+  const BELV = {
+    'verdeeld':{C1:1.13, label:'gelijkmatig verdeelde belasting'},
+    'punt':    {C1:1.35, label:'puntlast in het midden'},
+    'constant':{C1:1.00, label:'constant moment (conservatief)'}
+  };
+
+  const LS={get:(k,f)=>{try{const v=localStorage.getItem(k);return v==null?f:JSON.parse(v);}catch(e){return f;}},set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}};
+  const nf=(v,d=2)=>(isFinite(v)?v:0).toFixed(d).replace('.',',');
+  const num=id=>{const el=document.getElementById(id);const v=parseFloat((el?el.value:'0').replace(',','.'));return isFinite(v)?v:0;};
+  const val=id=>{const el=document.getElementById(id);return el?el.value:'';};
+
+  const DEF={profiel:'IPE 300', staal:'S235', L:6.000, opleg:100, kfi:1.0,
+    hohL:5000, hohR:5000, gkA:1.50, qkA:2.50, Qk:0, psi0:0.4, egMee:1,
+    belv:'verdeeld', kipL:0, limMax:250, limBij:350, zeeg:0};
+
+  let root, st;
+  function start(container){root=container;st=Object.assign({},DEF,LS.get('staal-invoer',{}));render();bereken();}
+
+  // ---------- rekenkern ----------
+  function reken(i){
+    const P=PROF[i.profiel]||PROF['IPE 300'];
+    const [h,b,tw,tf,r,Acm,Iycm,Welcm,Wplcm,Izcm,Itcm,gkg]=P;
+    const A=Acm*100, Iy=Iycm*1e4, Wel=Welcm*1e3, Wpl=Wplcm*1e3, Iz=Izcm*1e4, It=Itcm*1e4;
+    const fy = tf<=40 ? STAAL[i.staal][0] : STAAL[i.staal][1];
+    const eps = Math.sqrt(235/fy);
+    const L=i.L*1000;
+
+    // --- doorsnedeclassificatie (tabel 5.2) ---
+    const cFlens=(b/2 - tw/2 - r), cf=cFlens/tf;                    // uitkragend deel flens
+    const cLijf=(h - 2*tf - 2*r), cw=cLijf/tw;                      // lijf, buiging
+    const klFlens = cf<=9*eps?1 : cf<=10*eps?2 : cf<=14*eps?3 : 4;
+    const klLijf  = cw<=72*eps?1 : cw<=83*eps?2 : cw<=124*eps?3 : 4;
+    const klasse=Math.max(klFlens,klLijf);
+    const Wgebruik = klasse<=2 ? Wpl : Wel;
+
+    // --- belastingen ---
+    const B=(i.hohL+i.hohR)/2/1000;
+    const eg = i.egMee ? gkg*9.81/1000 : 0;                          // kN/m1
+    const gk=i.gkA*B + eg, qk=i.qkA*B, Qk=i.Qk;
+    const K=i.kfi;
+    const c1=1.35*K*gk, c2=1.2*K*gk + 1.5*K*qk, QEd=1.5*K*Qk;
+    const qEd=Math.max(c1,c2), qEk=gk+qk;
+
+    // --- snedekrachten (ligger op 2 steunpunten) ---
+    const l=i.L;
+    const MEd=0.125*qEd*l*l + 0.25*QEd*l;
+    const VEd=0.5*qEd*l + 0.5*QEd;
+
+    // --- weerstanden ---
+    const McRd = Wgebruik*fy/gM0/1e6;                                // kNm
+    let Av = A - 2*b*tf + (tw + 2*r)*tf;                             // gewalst I/H (6.2.6)
+    const hw=h-2*tf, eta=1.0;                                        // NB: η = 1,0
+    Av=Math.max(Av, eta*hw*tw);
+    const VplRd = Av*(fy/Math.sqrt(3))/gM0/1e3;                      // kN
+    const plooiNodig = (hw/tw) > (72*eps/eta);                       // 6.2.6(6)
+
+    // M-V interactie (6.2.8): alleen als VEd > 0,5 Vpl,Rd
+    let McRdRed=McRd, interactie=false;
+    if(VEd > 0.5*VplRd && klasse<=2){
+      interactie=true;
+      const rho=Math.pow(2*VEd/VplRd - 1, 2);
+      const Wred = Wpl - rho*Av*Av/(4*tw);
+      McRdRed = Math.max(0, Wred*fy/gM0/1e6);
+    }
+
+    // --- kip (6.3.2) ---
+    const Lcr = (i.kipL>0? i.kipL : i.L)*1000;                       // kiplengte
+    const Iw = Iz*Math.pow(h-tf,2)/4;                                // welvingsconstante (benadering I-profiel)
+    const C1 = BELV[i.belv].C1;
+    const Mcr = C1*Math.PI*Math.PI*E*Iz/(Lcr*Lcr)
+              * Math.sqrt(Iw/Iz + Lcr*Lcr*G*It/(Math.PI*Math.PI*E*Iz)) / 1e6;  // kNm
+    const lamLT = Math.sqrt(Wgebruik*fy/1e6/Mcr);
+    const alfa = (h/b<=2) ? 0.34 : 0.49;                             // gewalst: curve b resp. c
+    const lam0=0.4, beta=0.75;
+    let chiLT=1;
+    if(lamLT>lam0){
+      const Phi=0.5*(1+alfa*(lamLT-lam0)+beta*lamLT*lamLT);
+      chiLT=1/(Phi+Math.sqrt(Math.max(0,Phi*Phi-beta*lamLT*lamLT)));
+      chiLT=Math.min(chiLT,1,1/(lamLT*lamLT));
+    }
+    const MbRd = i.kipL<0 ? McRd : chiLT*Wgebruik*fy/gM1/1e6;
+    const kipRelevant = i.kipL>=0;
+
+    // --- doorbuiging (EN 1990 A.1.4.3) ---
+    const defl=q=>5*q*Math.pow(L,4)/(384*E*Iy);
+    const deflQ=Q=>Q>0? Q*1e3*Math.pow(L,3)/(48*E*Iy) : 0;
+    const w1=defl(gk), w3=defl(qk)+deflQ(Qk);
+    const wmax=w1+w3-i.zeeg, wtot=w1+w3;
+    const limMax = i.limMax>0? L/i.limMax : Infinity;
+    const limBij = i.limBij>0? L/i.limBij : Infinity;
+
+    return {h,b,tw,tf,r,A,Iy,Wel,Wpl,Iz,It,gkg,fy,eps,cf,cw,klFlens,klLijf,klasse,Wgebruik,
+      B,eg,gk,qk,Qk,c1,c2,qEd,QEd,qEk,MEd,VEd,McRd,Av,VplRd,plooiNodig,hw,interactie,McRdRed,
+      Lcr,Mcr,lamLT,chiLT,MbRd,kipRelevant,C1,alfa,w1,w3,wmax,wtot,limMax,limBij,L};
+  }
+
+  // ---------- weergave ----------
+  function render(){
+    root.innerHTML=`
+    <div class="ho-wrap">
+      <div class="ho-head"><div><div class="ho-title">🏗️ Stalen ligger</div><div class="ho-sub">NEN-EN 1993-1-1 + NB · ligger op 2 steunpunten</div></div></div>
+
+      <div class="ho-sec">Profiel &amp; materiaal</div>
+      <div class="ho-grid">
+        ${sel('profiel','Profiel',Object.keys(PROF).map(k=>[k,k]),st.profiel)}
+        ${sel('staal','Staalsoort',Object.keys(STAAL).map(k=>[k,k]),st.staal)}
+      </div>
+
+      <div class="ho-sec">Geometrie</div>
+      <div class="ho-grid">
+        ${inp('L','Overspanning (m)',st.L)}
+        ${inp('opleg','Opleglengte (mm)',st.opleg)}
+        ${inp('hohL','Belastingbreedte links (mm)',st.hohL)}
+        ${inp('hohR','Belastingbreedte rechts (mm)',st.hohR)}
+      </div>
+
+      <div class="ho-sec">Belastingen</div>
+      <div class="ho-grid">
+        ${inp('gkA','Permanent gk (kN/m²)',st.gkA)}
+        ${inp('qkA','Veranderlijk qk (kN/m²)',st.qkA)}
+        ${inp('Qk','Puntlast Qk midden (kN)',st.Qk)}
+        ${inp('kfi','KFI (CC1 0,9 · CC2 1,0 · CC3 1,1)',st.kfi)}
+        ${sel('egMee','Eigen gewicht profiel',[[1,'meenemen'],[0,'niet meenemen']],st.egMee)}
+        ${sel('belv','Momentenverloop (C1)',Object.keys(BELV).map(k=>[k,BELV[k].label]),st.belv)}
+      </div>
+
+      <div class="ho-sec">Kip (lateral torsional buckling)</div>
+      <div class="ho-grid">
+        ${inp('kipL','Kiplengte Lcr (m) · 0 = overspanning · -1 = zijdelings gesteund',st.kipL)}
+      </div>
+
+      <div class="ho-sec">Doorbuigingseisen (NEN-EN 1990 NB)</div>
+      <div class="ho-grid">
+        ${inp('limMax','wmax  L/',st.limMax)}
+        ${inp('limBij','wbij (w3)  L/',st.limBij)}
+        ${inp('zeeg','Zeeg wc (mm)',st.zeeg)}
+      </div>
+
+      <div id="ho-uit"></div>
+      <div class="ho-btns">
+        <button class="btn ho-b2" id="ho-print">🖨️ Print / PDF</button>
+        <button class="btn ho-b2" id="ho-reset">↺ Standaardwaarden</button>
+      </div>
+      <button class="btn" id="ho-back" style="background:var(--muted);margin-top:10px;">← Menu</button>
+    </div>`;
+    injectStyle();
+    root.querySelectorAll('input,select').forEach(el=>{el.oninput=()=>{lees();bereken();};el.onchange=()=>{lees();bereken();};});
+    root.querySelector('#ho-print').onclick=()=>window.print();
+    root.querySelector('#ho-reset').onclick=()=>{st=Object.assign({},DEF);LS.set('staal-invoer',st);render();bereken();};
+    root.querySelector('#ho-back').onclick=()=>{(window.switchScreen||function(){})('screen-menu');};
+  }
+  function inp(id,label,v){return `<label class="ho-f"><span>${label}</span><input id="st-${id}" type="text" inputmode="decimal" value="${String(v).replace('.',',')}"></label>`;}
+  function sel(id,label,opts,v){return `<label class="ho-f"><span>${label}</span><select id="st-${id}">${opts.map(o=>`<option value="${o[0]}" ${String(o[0])===String(v)?'selected':''}>${o[1]}</option>`).join('')}</select></label>`;}
+  function lees(){
+    ['L','opleg','hohL','hohR','gkA','qkA','Qk','kfi','kipL','limMax','limBij','zeeg'].forEach(k=>st[k]=num('st-'+k));
+    ['profiel','staal','belv'].forEach(k=>st[k]=val('st-'+k));
+    st.egMee=parseInt(val('st-egMee'));
+    LS.set('staal-invoer',st);
+  }
+  function rij(label,waarde,eenheid,limiet){
+    const u=limiet>0?waarde/limiet:0, ok=u<=1.0;
+    return `<tr><td>${label}</td><td class="ho-n">${nf(waarde)}</td><td class="ho-u">${eenheid}</td>
+      <td class="ho-n">${nf(limiet)}</td><td class="ho-n"><b>${nf(u)}</b></td>
+      <td class="${ok?'ho-ok':'ho-nok'}">${ok?'akkoord':'niet akkoord'}</td></tr>`;
+  }
+
+  function bereken(){
+    const r=reken(st);
+    const kl4 = r.klasse===4;
+    root.querySelector('#ho-uit').innerHTML=`
+      <div class="ho-sec">Doorsnedegegevens</div>
+      <div class="ho-kv">
+        <div><span>h × b</span><b>${r.h} × ${r.b} mm</b></div>
+        <div><span>tw / tf</span><b>${nf(r.tw,1)} / ${nf(r.tf,1)} mm</b></div>
+        <div><span>A</span><b>${nf(r.A,0)} mm²</b></div>
+        <div><span>Iy</span><b>${nf(r.Iy/1e4,0)}·10⁴ mm⁴</b></div>
+        <div><span>Wel;y</span><b>${nf(r.Wel/1e3,0)}·10³ mm³</b></div>
+        <div><span>Wpl;y</span><b>${nf(r.Wpl/1e3,0)}·10³ mm³</b></div>
+        <div><span>fy</span><b>${r.fy} N/mm²</b></div>
+        <div><span>ε</span><b>${nf(r.eps,3)}</b></div>
+        <div><span>gewicht</span><b>${nf(r.gkg,1)} kg/m</b></div>
+      </div>
+
+      <div class="ho-sec">Doorsnedeclassificatie (tabel 5.2)</div>
+      <table class="ho-t">
+        <tr><th>onderdeel</th><th>c/t</th><th>grens klasse 1 / 2 / 3</th><th>klasse</th></tr>
+        <tr><td>flens (uitkragend)</td><td class="ho-n">${nf(r.cf,1)}</td><td class="ho-n">${nf(9*r.eps,1)} / ${nf(10*r.eps,1)} / ${nf(14*r.eps,1)}</td><td class="ho-n"><b>${r.klFlens}</b></td></tr>
+        <tr><td>lijf (buiging)</td><td class="ho-n">${nf(r.cw,1)}</td><td class="ho-n">${nf(72*r.eps,1)} / ${nf(83*r.eps,1)} / ${nf(124*r.eps,1)}</td><td class="ho-n"><b>${r.klLijf}</b></td></tr>
+      </table>
+      <div class="ho-note">Doorsnedeklasse <b>${r.klasse}</b> → weerstandsmoment met <b>${r.klasse<=2?'Wpl':'Wel'}</b>${kl4?' · ⚠ klasse 4: effectieve doorsnede vereist (niet in deze module)':''}</div>
+
+      <div class="ho-sec">Belastingen en combinaties</div>
+      <div class="ho-note">B = ${nf(r.B,3)} m · eigen gewicht = ${nf(r.eg,2)} kN/m¹ · gk = ${nf(r.gk)} kN/m¹ · qk = ${nf(r.qk)} kN/m¹${r.Qk?` · Qk = ${nf(r.Qk)} kN`:''}</div>
+      <table class="ho-t">
+        <tr><th>UGT</th><th>gk</th><th>qk</th><th>qEd</th></tr>
+        <tr><td>6.10a (1,35·KFI·gk)</td><td class="ho-n">${nf(r.gk)}</td><td class="ho-n">0,00</td><td class="ho-n"><b>${nf(r.c1)}</b></td></tr>
+        <tr><td>6.10b (1,2·gk + 1,5·qk)·KFI</td><td class="ho-n">${nf(r.gk)}</td><td class="ho-n">${nf(r.qk)}</td><td class="ho-n"><b>${nf(r.c2)}</b></td></tr>
+        <tr><th>BGT</th><th>gk</th><th>qk</th><th>qEk</th></tr>
+        <tr><td>Karakteristiek</td><td class="ho-n">${nf(r.gk)}</td><td class="ho-n">${nf(r.qk)}</td><td class="ho-n"><b>${nf(r.qEk)}</b></td></tr>
+      </table>
+
+      <div class="ho-sec">Toetsing UGT</div>
+      <div class="ho-note">qEd = ${nf(r.qEd)} kN/m¹${r.QEd?` · QEd = ${nf(r.QEd)} kN`:''} · MEd = ${nf(r.MEd)} kNm · VEd = ${nf(r.VEd)} kN · γM0 = 1,00 (NB)</div>
+      <table class="ho-t ho-tc">
+        <tr><th>toets</th><th>MEd / VEd</th><th></th><th>weerstand</th><th>u.c.</th><th></th></tr>
+        ${rij('buiging  MEd ≤ Mc;Rd',r.MEd,'kNm',r.McRd)}
+        ${rij('afschuiving  VEd ≤ Vpl;Rd',r.VEd,'kN',r.VplRd)}
+        ${r.interactie?rij('M-V interactie  MEd ≤ MV;Rd',r.MEd,'kNm',r.McRdRed):''}
+        ${r.kipRelevant?rij('kip  MEd ≤ Mb;Rd',r.MEd,'kNm',r.MbRd):''}
+      </table>
+      <div class="ho-note">
+        Av = ${nf(r.Av,0)} mm² · hw/tw = ${nf(r.hw/r.tw,1)} ${r.plooiNodig?`> 72ε = ${nf(72*r.eps,1)} → ⚠ plooicontrole lijf nodig (EN 1993-1-5)`:`≤ 72ε = ${nf(72*r.eps,1)} → geen plooicontrole nodig`}
+        ${r.interactie?' · VEd > 0,5·Vpl;Rd → M-V interactie meegenomen (6.2.8)':' · VEd ≤ 0,5·Vpl;Rd → geen M-V interactie'}
+      </div>
+      ${r.kipRelevant?`<div class="ho-note">Kip: Lcr = ${nf(r.Lcr/1000,2)} m · C1 = ${nf(r.C1)} · Mcr = ${nf(r.Mcr)} kNm · λ̄LT = ${nf(r.lamLT)} · χLT = ${nf(r.chiLT,3)} (curve ${r.alfa===0.34?'b':'c'}, h/b = ${nf(r.h/r.b,2)})</div>`
+        :`<div class="ho-note">Kip: profiel zijdelings gesteund → geen kipcontrole (Mb;Rd = Mc;Rd)</div>`}
+
+      <div class="ho-sec">Doorbuiging BGT (NEN-EN 1990 A.1.4.3)</div>
+      <div class="ho-note">w1 (permanent) = ${nf(r.w1)} mm · w3 (veranderlijk) = ${nf(r.w3)} mm · zeeg = ${nf(st.zeeg)} mm</div>
+      <table class="ho-t ho-tc">
+        <tr><th>toets</th><th>waarde</th><th></th><th>toelaatbaar</th><th>u.c.</th><th></th></tr>
+        ${rij('wmax = w1 + w3 − wc',r.wmax,'mm',r.limMax)}
+        ${rij('wbij = w3',r.w3,'mm',r.limBij)}
+      </table>
+      <div class="ho-note">De Eurocode geeft zelf geen grenswaarden; bovenstaande L/n-eisen komen uit de Nationale Bijlage bij NEN-EN 1990 en zijn hierboven instelbaar.</div>`;
+  }
+
+  function injectStyle(){if(document.getElementById('ho-style'))return;const s=document.createElement('style');s.id='ho-style';s.textContent=`
+    .ho-wrap{position:relative}
+    .ho-title{font-family:var(--font-display);font-size:24px;font-weight:800;color:var(--dark)}
+    .ho-sub{font-size:13px;color:var(--muted)}
+    .ho-sec{font-family:var(--font-display);font-weight:800;color:var(--dark);font-size:15px;margin:16px 0 8px;padding-bottom:4px;border-bottom:2px solid var(--border)}
+    .ho-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .ho-f{display:flex;flex-direction:column;gap:3px}
+    .ho-f span{font-size:11.5px;color:var(--muted);font-weight:700}
+    .ho-f input,.ho-f select{padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--input-bg);color:var(--text);font-family:var(--font-body);font-size:14px;font-weight:700;width:100%}
+    .ho-kv{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+    .ho-kv div{background:var(--input-bg);border:1px solid var(--border);border-radius:8px;padding:6px}
+    .ho-kv span{display:block;font-size:10.5px;color:var(--muted);font-weight:700}
+    .ho-kv b{font-size:12.5px;color:var(--dark)}
+    .ho-t{width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:4px}
+    .ho-t th{background:color-mix(in srgb,var(--sumi) 8%,var(--input-bg));color:var(--dark);font-weight:800;padding:6px;text-align:left;border:1px solid var(--border);font-size:11.5px}
+    .ho-t td{padding:6px;border:1px solid var(--border);color:var(--text)}
+    .ho-n{text-align:right;font-variant-numeric:tabular-nums}
+    .ho-u{color:var(--muted);font-size:11px}
+    .ho-ok{color:var(--success);font-weight:800}
+    .ho-nok{color:var(--danger);font-weight:800}
+    .ho-note{font-size:12px;color:var(--muted);margin-bottom:6px;font-weight:700;line-height:1.5}
+    .ho-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
+    .ho-b2{background:var(--input-bg)!important;color:var(--text)!important;border:1px solid var(--border)!important;box-shadow:none!important;margin:0!important}
+    @media print{.ho-btns,#ho-back{display:none}}
+  `;document.head.appendChild(s);}
+
+  window.KanaStaal={start,reken,PROF};
+  window.startStaalInit=function(){(window.switchScreen||function(){})('screen-staal');const el=document.getElementById('staal-root');if(el)start(el);};
 })();
 
 </script>
