@@ -354,6 +354,10 @@
             <button class="btn" style="background:var(--special);" onclick="startFloodInit()">🎨 Kleurnet (Flood-It)</button>
             <button class="btn" style="background:var(--ai);" onclick="startSokobanInit()">📦 Sokoban (300 levels)</button>
             <button class="btn" style="background:var(--matsuba);" onclick="startFroggerInit()">🐸 Frogger</button>
+            <button class="btn" style="background:#7a5a3a;" onclick="startKanadleInit()">🈁 Kanadle</button>
+            <button class="btn" style="background:#3f5d8a;" onclick="startSudokuInit()">🔢 Kanji-sudoku</button>
+            <button class="btn" style="background:#2c6e7a;" onclick="startHashiInit()">🌉 Bruggen (Hashi)</button>
+            <button class="btn" style="background:#8a3f5f;" onclick="startSlitherInit()">➰ Slitherlink</button>
             <button class="btn" style="background:#1c6b7a;" onclick="startKoiInit()">🎏 Koi-vijver</button>
             <button class="btn" style="background:#5b6b52;" onclick="startHoutInit()">📐 Houtberekening (EC5)</button>
             <button class="btn" style="background:#4a4f57;" onclick="startStaalInit()">🏗️ Stalen ligger (EC3)</button>
@@ -507,6 +511,22 @@
 
     <div id="screen-frogger" class="screen">
         <div id="frogger-root"></div>
+    </div>
+
+    <div id="screen-kanadle" class="screen">
+        <div id="kanadle-root"></div>
+    </div>
+
+    <div id="screen-sudoku" class="screen">
+        <div id="sudoku-root"></div>
+    </div>
+
+    <div id="screen-hashi" class="screen">
+        <div id="hashi-root"></div>
+    </div>
+
+    <div id="screen-slither" class="screen">
+        <div id="slither-root"></div>
     </div>
 
     <div id="screen-koi" class="screen">
@@ -3472,6 +3492,1159 @@
 
   window.KanaFrogger={start};
   window.startFroggerInit=function(){(window.switchScreen||function(){})('screen-frogger');const el=document.getElementById('frogger-root');if(el)start(el);};
+})();
+
+</script>
+<script id="kanadle-engine">
+/* ============================================================
+   Kana Master · Kanadle (かなドル) — Wordle met kana
+   Elke dag 2 puzzels: 3 tekens en 4 tekens, uit woordenData.
+   6 pogingen, feedback groen/geel/grijs per kana. Toetsenbord
+   toont alleen de kana die in de kandidaatwoorden voorkomen.
+   Blootgesteld: window.startKanadleInit(), window.KanaKanadle
+   ============================================================ */
+(function () {
+  const LENGTES = [3, 4];
+  const COUNT = LENGTES.length;
+  const COINS = {3: 8, 4: 12};
+  const MAXPOG = 6;
+  const CIRC = ['①','②'];
+
+  const FALLBACK = [
+    {kana:'きつね',romaji:'kitsune',betekenis:'vos',thema:'dieren'},
+    {kana:'みかん',romaji:'mikan',betekenis:'mandarijn',thema:'eten'},
+    {kana:'りんご',romaji:'ringo',betekenis:'appel',thema:'eten'},
+    {kana:'パンダ',romaji:'panda',betekenis:'panda',thema:'dieren'},
+    {kana:'トマト',romaji:'tomato',betekenis:'tomaat',thema:'eten'},
+    {kana:'はっぱ',romaji:'happa',betekenis:'blad',thema:'natuur'},
+    {kana:'ペンギン',romaji:'pengin',betekenis:'pinguïn',thema:'dieren'},
+    {kana:'きゅうり',romaji:'kyuuri',betekenis:'komkommer',thema:'eten'},
+    {kana:'にんじん',romaji:'ninjin',betekenis:'wortel',thema:'eten'},
+    {kana:'たてもの',romaji:'tatemono',betekenis:'gebouw',thema:'stad'}
+  ];
+
+  function hashStr(s){let h=2166136261>>>0;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0;}
+  function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+  const pad=n=>String(n).padStart(2,'0');
+  function todayStr(){const d=new Date();return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;}
+  const nlDate=s=>{const[y,m,d]=s.split('-');return `${d}-${m}-${y}`;};
+  const LS={get:(k,f)=>{try{const v=localStorage.getItem(k);return v==null?f:JSON.parse(v);}catch(e){return f;}},set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}};
+
+  function woorden(){
+    let bron = (typeof window.woordenData!=='undefined' && Array.isArray(window.woordenData) && window.woordenData.length) ? window.woordenData
+             : (typeof woordenData!=='undefined' && Array.isArray(woordenData) && woordenData.length) ? woordenData : FALLBACK;
+    return bron.filter(w=>w && typeof w.kana==='string');
+  }
+  function lijstVoor(n){
+    const seen=new Set(), uit=[];
+    for(const w of woorden()){ if([...w.kana].length!==n) continue; if(seen.has(w.kana)) continue; seen.add(w.kana); uit.push(w); }
+    return uit;
+  }
+
+  // ---- feedback (Wordle-regels, met dubbele tekens) ----
+  function beoordeel(gok, doel){
+    const g=[...gok], d=[...doel], uit=Array(g.length).fill('grijs');
+    const rest={};
+    g.forEach((c,i)=>{ if(c===d[i]) uit[i]='groen'; else rest[d[i]]=(rest[d[i]]||0)+1; });
+    g.forEach((c,i)=>{ if(uit[i]==='groen') return; if(rest[c]>0){ uit[i]='geel'; rest[c]--; } });
+    return uit;
+  }
+
+  let root, date, gi, lijst, doel, pogingen, huidig, klaar, cdId;
+
+  function start(container){root=container;date=todayStr();gi=firstUnsolved();renderShell();laad(gi);}
+  const key=i=>`kp-kanadle-${date}-${LENGTES[i]}`;
+  const dat=i=>LS.get(key(i),null);
+  const isKlaar=i=>!!dat(i);
+  const aantalKlaar=()=>{let n=0;for(let i=0;i<COUNT;i++)if(isKlaar(i))n++;return n;};
+  function firstUnsolved(){for(let i=0;i<COUNT;i++)if(!isKlaar(i))return i;return 0;}
+  function volgendeOpen(i){for(let j=1;j<=COUNT;j++){const k=(i+j)%COUNT;if(!isKlaar(k))return k;}return null;}
+
+  function renderShell(){
+    root.innerHTML=`
+      <div class="kd-wrap">
+        <div class="kd-head">
+          <div><div class="kd-title">🈁 Kanadle</div><div class="kd-date">${nlDate(date)}</div></div>
+          <div class="kd-meta"><span class="kd-chip">🔥 <span id="kd-streak">${LS.get('kp-kanadle-streak',0)}</span></span><span class="kd-chip">📅 <span id="kd-prog">${aantalKlaar()}</span>/${COUNT}</span></div>
+        </div>
+        <div class="kd-picker" id="kd-picker"></div>
+        <div id="kd-body"></div>
+        <button class="btn" id="kd-back" style="background:var(--muted);margin-top:12px;">← Menu</button>
+      </div>`;
+    injectStyle();
+    root.querySelector('#kd-back').onclick=()=>{clearInterval(cdId);(window.switchScreen||function(){})('screen-menu');};
+    tekenPicker();
+  }
+  function tekenPicker(){
+    const p=root.querySelector('#kd-picker');p.innerHTML='';
+    for(let i=0;i<COUNT;i++){
+      const b=document.createElement('button');
+      const d=dat(i);
+      b.className='kd-tab'+(i===gi?' kd-tab-on':'')+(d?(d.gewonnen?' kd-tab-win':' kd-tab-lose'):'');
+      b.innerHTML=`<span class="kd-tab-n">${CIRC[i]}</span><span class="kd-tab-sz">${LENGTES[i]} tekens</span><span class="kd-tab-coin">${d?(d.gewonnen?'✓':'✗'):'🪙'+COINS[LENGTES[i]]}</span>`;
+      b.onclick=()=>{if(i!==gi){gi=i;laad(i);tekenPicker();}};
+      p.appendChild(b);
+    }
+  }
+
+  function laad(i){
+    clearInterval(cdId);
+    const n=LENGTES[i];
+    lijst=lijstVoor(n);
+    if(lijst.length===0){root.querySelector('#kd-body').innerHTML=`<p class="kd-uitleg">Geen woorden van ${n} tekens gevonden in de woordenlijst.</p>`;return;}
+    const rng=mulberry32(hashStr(date+'#kanadle#'+n));
+    doel=lijst[Math.floor(rng()*lijst.length)];
+    const opgeslagen=dat(i);
+    pogingen = opgeslagen ? (opgeslagen.pogingen||[]) : [];
+    huidig='';
+    klaar = !!opgeslagen;
+    renderSpel();
+  }
+
+  function renderSpel(){
+    const n=LENGTES[gi];
+    root.querySelector('#kd-body').innerHTML=`
+      <p class="kd-uitleg">Raad het Japanse woord van ${n} tekens in ${MAXPOG} pogingen. <b class="kd-g">Groen</b> = juiste kana op de juiste plek, <b class="kd-y">geel</b> = komt voor maar staat elders. Alleen woorden uit je woordenlijst zijn toegestaan.</p>
+      <div class="kd-hint" id="kd-hint"></div>
+      <div class="kd-board" id="kd-board"></div>
+      <div class="kd-melding" id="kd-melding"></div>
+      <div class="kd-kb" id="kd-kb"></div>`;
+    tekenBord();tekenHint();tekenToetsenbord();
+    if(klaar)toonAfloop(false);
+  }
+
+  function tekenBord(){
+    const n=LENGTES[gi], b=root.querySelector('#kd-board');
+    b.style.setProperty('--n',n);
+    let html='';
+    for(let r=0;r<MAXPOG;r++){
+      const gok=pogingen[r];
+      const actief = !klaar && r===pogingen.length;
+      const tekens = gok ? [...gok] : (actief ? [...huidig] : []);
+      const fb = gok ? beoordeel(gok,doel.kana) : null;
+      html+='<div class="kd-rij">';
+      for(let c=0;c<n;c++){
+        const t=tekens[c]||'';
+        const cls = fb ? ' kd-'+fb[c] : (t?' kd-vol':'');
+        html+=`<div class="kd-vak${cls}">${t}</div>`;
+      }
+      html+='</div>';
+    }
+    b.innerHTML=html;
+  }
+  function tekenHint(){
+    const h=root.querySelector('#kd-hint');if(!h)return;
+    const p=pogingen.length;
+    if(klaar||p>=4) h.innerHTML=`💡 thema: <b>${doel.thema||'—'}</b> · betekenis: <b>${klaar||p>=5?(doel.betekenis||'—'):'???'}</b>`;
+    else if(p>=2) h.innerHTML=`💡 thema: <b>${doel.thema||'—'}</b>`;
+    else h.innerHTML=`💡 hints verschijnen na 2 pogingen`;
+  }
+  function tekenToetsenbord(){
+    const kb=root.querySelector('#kd-kb');if(!kb)return;
+    // alleen kana die in de kandidaatwoorden voorkomen
+    const set=new Set();lijst.forEach(w=>[...w.kana].forEach(c=>set.add(c)));
+    const tekens=[...set].sort();
+    // status per teken uit eerdere pogingen
+    const status={};
+    pogingen.forEach(g=>{const fb=beoordeel(g,doel.kana);[...g].forEach((c,i)=>{
+      const s=fb[i];
+      if(s==='groen')status[c]='groen';
+      else if(s==='geel'&&status[c]!=='groen')status[c]='geel';
+      else if(!status[c])status[c]='grijs';
+    });});
+    let html='<div class="kd-keys">';
+    tekens.forEach(c=>{html+=`<button class="kd-key ${status[c]?'kd-k-'+status[c]:''}" data-k="${c}">${c}</button>`;});
+    html+='</div><div class="kd-acts"><button class="kd-act" id="kd-del">⌫ wis</button><button class="kd-act kd-enter" id="kd-ent">↵ raad</button></div>';
+    kb.innerHTML=html;
+    kb.querySelectorAll('.kd-key').forEach(b=>b.onclick=()=>typ(b.dataset.k));
+    kb.querySelector('#kd-del').onclick=()=>{if(klaar)return;huidig=[...huidig].slice(0,-1).join('');tekenBord();};
+    kb.querySelector('#kd-ent').onclick=raad;
+  }
+  function typ(c){
+    if(klaar)return;
+    const n=LENGTES[gi];
+    if([...huidig].length>=n)return;
+    huidig+=c;tekenBord();
+  }
+  function melding(t){const m=root.querySelector('#kd-melding');if(!m)return;m.textContent=t;m.classList.add('kd-toon');setTimeout(()=>m.classList.remove('kd-toon'),1600);}
+
+  function raad(){
+    if(klaar)return;
+    const n=LENGTES[gi];
+    if([...huidig].length!==n){melding(`Vul ${n} tekens in`);schud();return;}
+    if(!lijst.some(w=>w.kana===huidig)){melding('Dit woord staat niet in je lijst');schud();return;}
+    pogingen.push(huidig);
+    const gewonnen = huidig===doel.kana;
+    huidig='';
+    tekenBord();tekenHint();tekenToetsenbord();
+    if(gewonnen||pogingen.length>=MAXPOG)afronden(gewonnen);
+  }
+  function schud(){const b=root.querySelector('#kd-board');if(!b)return;b.classList.add('kd-schud');setTimeout(()=>b.classList.remove('kd-schud'),300);}
+
+  function afronden(gewonnen){
+    klaar=true;
+    const reward = gewonnen ? COINS[LENGTES[gi]] : 0;
+    LS.set(key(gi),{gewonnen,pogingen,coins:reward});
+    if(gewonnen){try{ if(typeof window.wijsGachaMuntToe==='function') window.wijsGachaMuntToe(reward); }catch(e){console.warn('Munt kanadle mislukt:',e);}}
+    if(aantalKlaar()===COUNT){
+      const laatste=LS.get('kp-kanadle-last',null);
+      if(laatste!==date){const y=new Date();y.setDate(y.getDate()-1);const yStr=`${y.getFullYear()}-${pad(y.getMonth()+1)}-${pad(y.getDate())}`;
+        let st=LS.get('kp-kanadle-streak',0);st=(laatste===yStr)?st+1:1;LS.set('kp-kanadle-streak',st);LS.set('kp-kanadle-last',date);}
+    }
+    const sc=root.querySelector('#kd-streak');if(sc)sc.textContent=LS.get('kp-kanadle-streak',0);
+    const pc=root.querySelector('#kd-prog');if(pc)pc.textContent=aantalKlaar();
+    tekenHint();tekenPicker();
+    if(gewonnen)feest(reward);
+    setTimeout(()=>toonAfloop(true),gewonnen?700:200);
+  }
+  function toonAfloop(vers){
+    const d=dat(gi)||{};const gewonnen=d.gewonnen;
+    const alles=aantalKlaar()===COUNT, volgende=volgendeOpen(gi);
+    const m=root.querySelector('#kd-melding');if(!m)return;
+    m.classList.add('kd-toon');
+    m.innerHTML=`<div class="kd-afloop ${gewonnen?'kd-ok':'kd-nok'}">
+        ${gewonnen?`🎉 Geraden in ${(d.pogingen||[]).length} pogingen!${vers?` +🪙 ${COINS[LENGTES[gi]]}`:''}`:'😔 Niet geraden'}
+        <div class="kd-antwoord">${doel.kana} <span>${doel.romaji||''}</span> — ${doel.betekenis||''}</div>
+        ${alles?`<div class="kd-count">Beide klaar! Nieuw over <b id="kd-cd">–</b></div>`:(volgende!==null?`<button class="btn kd-next" id="kd-next">Volgende: ${LENGTES[volgende]} tekens →</button>`:'')}
+        <button class="btn kd-b2" id="kd-share">📋 Deel resultaat</button>
+      </div>`;
+    const nb=root.querySelector('#kd-next');if(nb)nb.onclick=()=>{gi=volgende;laad(volgende);tekenPicker();};
+    const sb=root.querySelector('#kd-share');if(sb)sb.onclick=deel;
+    if(alles)tikCd();
+  }
+  function deel(){
+    const em={groen:'🟩',geel:'🟨',grijs:'⬜'};
+    let txt=`🈁 Kana Master · Kanadle\n${nlDate(date)}\n`;
+    for(let i=0;i<COUNT;i++){
+      const d=dat(i);
+      txt+=`${LENGTES[i]} tekens: ${d?(d.gewonnen?`${(d.pogingen||[]).length}/${MAXPOG}`:`X/${MAXPOG}`):'–'}\n`;
+      if(d&&d.pogingen){const rng=mulberry32(hashStr(date+'#kanadle#'+LENGTES[i]));const lst=lijstVoor(LENGTES[i]);const dl=lst[Math.floor(rng()*lst.length)];
+        d.pogingen.forEach(g=>{txt+=beoordeel(g,dl.kana).map(s=>em[s]).join('')+'\n';});}
+    }
+    txt+=`🔥 Streak ${LS.get('kp-kanadle-streak',0)}`;
+    if(navigator.clipboard)navigator.clipboard.writeText(txt);
+    const b=root.querySelector('#kd-share');if(b){const o=b.textContent;b.textContent='✓ Gekopieerd!';setTimeout(()=>b.textContent=o,1500);}
+  }
+  function tikCd(){const el=root.querySelector('#kd-cd');if(!el)return;const upd=()=>{const now=new Date(),mid=new Date(now);mid.setHours(24,0,0,0);let s=Math.floor((mid-now)/1000);const h=s/3600|0;s%=3600;el.textContent=`${pad(h)}:${pad(s/60|0)}:${pad(s%60)}`;};upd();clearInterval(cdId);cdId=setInterval(upd,1000);}
+  function feest(reward){const c=document.createElement('div');c.className='kd-coinpop';c.textContent=`+🪙${reward}`;root.appendChild(c);setTimeout(()=>c.remove(),1400);
+    const em=['🌸','✨','🎉','🈁'];for(let i=0;i<12;i++){const s=document.createElement('div');s.className='kd-confetti';s.textContent=em[i%em.length];s.style.left=(Math.random()*100)+'%';s.style.animationDelay=(Math.random()*0.3)+'s';root.appendChild(s);setTimeout(()=>s.remove(),1600);}}
+
+  function injectStyle(){
+    if(document.getElementById('kd-style'))return;
+    const s=document.createElement('style');s.id='kd-style';s.textContent=`
+      .kd-wrap{position:relative}
+      .kd-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:8px}
+      .kd-title{font-family:var(--font-display);font-size:24px;font-weight:800;color:var(--dark)}
+      .kd-date{font-size:13px;color:var(--muted)}
+      .kd-meta{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+      .kd-chip{background:var(--input-bg);border:1px solid var(--border);border-radius:20px;padding:4px 10px;font-size:14px;font-weight:700;white-space:nowrap}
+      .kd-picker{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+      .kd-tab{display:flex;flex-direction:column;align-items:center;gap:1px;padding:8px 4px;background:var(--input-bg);border:1px solid var(--border);border-radius:10px;cursor:pointer;font-family:var(--font-body);color:var(--text)}
+      .kd-tab-on{border-color:var(--primary);box-shadow:0 0 0 2px var(--primary) inset}
+      .kd-tab-win{background:color-mix(in srgb,var(--success) 15%,var(--input-bg))}
+      .kd-tab-lose{background:color-mix(in srgb,var(--danger) 10%,var(--input-bg))}
+      .kd-tab-n{font-size:18px;line-height:1}.kd-tab-sz{font-size:11px;color:var(--muted);font-weight:700}
+      .kd-tab-coin{font-size:11px;font-weight:700;color:var(--accent)}
+      .kd-uitleg{font-size:12.5px;color:var(--muted);line-height:1.5;margin:0 0 8px}
+      .kd-g{color:var(--matsuba)}.kd-y{color:var(--kincha)}
+      .kd-hint{text-align:center;font-size:12.5px;color:var(--muted);background:var(--input-bg);border:1px solid var(--border);border-radius:10px;padding:6px;margin-bottom:10px}
+      .kd-board{display:flex;flex-direction:column;gap:6px;align-items:center;margin-bottom:10px}
+      .kd-rij{display:grid;grid-template-columns:repeat(var(--n),1fr);gap:6px;width:100%;max-width:calc(var(--n) * 66px)}
+      .kd-vak{aspect-ratio:1;display:flex;align-items:center;justify-content:center;border:2px solid var(--border);border-radius:10px;background:var(--input-bg);font-family:var(--font-display);font-size:clamp(20px,7vw,30px);font-weight:800;color:var(--dark)}
+      .kd-vol{border-color:var(--muted)}
+      .kd-groen{background:var(--matsuba);border-color:var(--matsuba);color:#fff8ee}
+      .kd-geel{background:var(--kincha);border-color:var(--kincha);color:#fff8ee}
+      .kd-grijs{background:color-mix(in srgb,var(--sumi) 45%,var(--input-bg));border-color:transparent;color:#fff8ee}
+      .kd-schud{animation:kd-shk .3s}@keyframes kd-shk{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+      .kd-melding{text-align:center;font-size:13px;font-weight:700;color:var(--muted);min-height:20px;opacity:0;transition:.2s}
+      .kd-melding.kd-toon{opacity:1}
+      .kd-kb{margin-top:10px}
+      .kd-keys{display:flex;flex-wrap:wrap;gap:5px;justify-content:center}
+      .kd-key{min-width:36px;padding:8px 4px;background:var(--input-bg);border:1px solid var(--border);border-radius:8px;font-family:var(--font-display);font-size:17px;font-weight:700;color:var(--dark);cursor:pointer}
+      .kd-key:active{background:var(--border)}
+      .kd-k-groen{background:var(--matsuba);border-color:var(--matsuba);color:#fff8ee}
+      .kd-k-geel{background:var(--kincha);border-color:var(--kincha);color:#fff8ee}
+      .kd-k-grijs{background:color-mix(in srgb,var(--sumi) 35%,var(--input-bg));border-color:transparent;color:#fff8ee;opacity:.75}
+      .kd-acts{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+      .kd-act{padding:11px;background:var(--input-bg);border:1px solid var(--border);border-radius:10px;font-weight:800;font-family:var(--font-body);font-size:14px;color:var(--text);cursor:pointer}
+      .kd-enter{background:var(--primary);color:#fff8ee;border-color:var(--primary)}
+      .kd-afloop{text-align:center;padding:10px;border-radius:12px;font-weight:800;margin-top:6px}
+      .kd-ok{background:color-mix(in srgb,var(--matsuba) 12%,var(--input-bg));border:1px solid var(--success);color:var(--success)}
+      .kd-nok{background:color-mix(in srgb,var(--shu) 10%,var(--input-bg));border:1px solid var(--danger);color:var(--danger)}
+      .kd-antwoord{font-family:var(--font-display);font-size:19px;color:var(--dark);margin:6px 0}
+      .kd-antwoord span{font-size:13px;color:var(--muted);font-family:var(--font-body)}
+      .kd-count{font-size:12.5px;color:var(--muted);font-weight:400;margin-top:4px}
+      .kd-next{margin-top:8px}
+      .kd-b2{background:var(--input-bg)!important;color:var(--text)!important;border:1px solid var(--border)!important;box-shadow:none!important;margin-top:8px!important}
+      .kd-coinpop{position:absolute;top:35%;left:50%;transform:translateX(-50%);font-size:34px;font-weight:900;color:var(--accent);text-shadow:0 2px 6px rgba(0,0,0,.3);pointer-events:none;animation:kd-coin 1.4s ease-out forwards;z-index:60}
+      @keyframes kd-coin{0%{opacity:0;transform:translate(-50%,10px) scale(.6)}20%{opacity:1;transform:translate(-50%,0) scale(1.1)}70%{opacity:1;transform:translate(-50%,-30px) scale(1)}100%{opacity:0;transform:translate(-50%,-60px) scale(.9)}}
+      .kd-confetti{position:absolute;top:-10px;font-size:22px;pointer-events:none;animation:kd-fall 1.5s ease-in forwards;z-index:50}
+      @keyframes kd-fall{to{transform:translateY(480px) rotate(220deg);opacity:0}}
+    `;
+    document.head.appendChild(s);
+  }
+
+  window.KanaKanadle={start,beoordeel,lijstVoor};
+  window.startKanadleInit=function(){(window.switchScreen||function(){})('screen-kanadle');const el=document.getElementById('kanadle-root');if(el)start(el);};
+})();
+
+</script>
+<script id="sudoku-engine">
+/* ============================================================
+   Kana Master · Kanji-sudoku (漢数字ナンプレ)
+   Klassieke 9×9 sudoku met kanji-telwoorden 一〜九 (of kana)
+   in plaats van cijfers. Elke dag drie niveaus, elk met een
+   gegarandeerd unieke oplossing. Voortgang wordt bewaard.
+   Blootgesteld: window.startSudokuInit(), window.KanaSudoku
+   ============================================================ */
+(function () {
+  const NIVEAUS = [
+    {id:'makkelijk', naam:'Makkelijk', hints:40, coins:10},
+    {id:'gemiddeld', naam:'Gemiddeld', hints:32, coins:15},
+    {id:'pittig',    naam:'Pittig',    hints:26, coins:25}
+  ];
+  const COUNT = NIVEAUS.length;
+  const CIRC = ['①','②','③'];
+
+  const SETS = {
+    kanji:{naam:'漢字', tekens:['一','二','三','四','五','六','七','八','九'],
+           lezing:['ichi','ni','san','shi/yon','go','roku','shichi/nana','hachi','kyū']},
+    kana: {naam:'かな', tekens:['あ','い','う','え','お','か','き','く','け'],
+           lezing:['a','i','u','e','o','ka','ki','ku','ke']}
+  };
+
+  function hashStr(s){let h=2166136261>>>0;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0;}
+  function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+  const pad=n=>String(n).padStart(2,'0');const fmt=s=>`${Math.floor(s/60)}:${pad(s%60)}`;
+  function todayStr(){const d=new Date();return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;}
+  const nlDate=s=>{const[y,m,d]=s.split('-');return `${d}-${m}-${y}`;};
+  const LS={get:(k,f)=>{try{const v=localStorage.getItem(k);return v==null?f:JSON.parse(v);}catch(e){return f;}},set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}};
+
+  // ---------- generator ----------
+  const mag=(g,i,v)=>{const r=(i/9|0),c=i%9,br=r-r%3,bc=c-c%3;
+    for(let k=0;k<9;k++){if(g[r*9+k]===v||g[k*9+c]===v)return false;}
+    for(let y=0;y<3;y++)for(let x=0;x<3;x++)if(g[(br+y)*9+bc+x]===v)return false;
+    return true;};
+  function vulGrid(rng){
+    const g=new Array(81).fill(0);
+    (function bt(i){
+      if(i===81)return true;
+      const opts=[1,2,3,4,5,6,7,8,9];
+      for(let k=opts.length-1;k>0;k--){const j=Math.floor(rng()*(k+1));[opts[k],opts[j]]=[opts[j],opts[k]];}
+      for(const v of opts){if(mag(g,i,v)){g[i]=v;if(bt(i+1))return true;g[i]=0;}}
+      return false;
+    })(0);
+    return g;
+  }
+  function telOpl(g0,max){
+    const g=g0.slice();let count=0;
+    (function bt(){
+      if(count>=max)return;
+      let best=-1,bestOpts=null;
+      for(let i=0;i<81;i++){
+        if(g[i])continue;
+        const opts=[];for(let v=1;v<=9;v++)if(mag(g,i,v))opts.push(v);
+        if(opts.length===0)return;
+        if(!bestOpts||opts.length<bestOpts.length){best=i;bestOpts=opts;if(opts.length===1)break;}
+      }
+      if(best<0){count++;return;}
+      for(const v of bestOpts){g[best]=v;bt();g[best]=0;if(count>=max)return;}
+    })();
+    return count;
+  }
+  function buildDaily(dateStr,niv){
+    const rng=mulberry32(hashStr(dateStr+'#sudoku#'+niv.id));
+    const vol=vulGrid(rng);
+    const g=vol.slice();
+    const order=[...Array(81).keys()];
+    for(let i=order.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[order[i],order[j]]=[order[j],order[i]];}
+    let hints=81;
+    for(const i of order){
+      if(hints<=niv.hints)break;
+      const bak=g[i];g[i]=0;
+      if(telOpl(g,2)!==1)g[i]=bak;else hints--;
+    }
+    return {start:g,oplossing:vol,hints};
+  }
+
+  // ---------- status ----------
+  let root,date,gi,puz,waarden,notities,sel,notitieModus,setId,startT,clockId,cdId,elapsed,klaar;
+
+  function start(container){root=container;date=todayStr();setId=LS.get('kp-sudoku-set','kanji');gi=firstOpen();renderShell();laad(gi);}
+  const sleutel=i=>`kp-sudoku-${date}-${NIVEAUS[i].id}`;
+  const staatSleutel=i=>`kp-sudoku-staat-${date}-${NIVEAUS[i].id}`;
+  const dat=i=>LS.get(sleutel(i),null);
+  const isKlaar=i=>!!dat(i);
+  const aantalKlaar=()=>{let n=0;for(let i=0;i<COUNT;i++)if(isKlaar(i))n++;return n;};
+  function firstOpen(){for(let i=0;i<COUNT;i++)if(!isKlaar(i))return i;return 0;}
+  function volgendeOpen(i){for(let j=1;j<=COUNT;j++){const k=(i+j)%COUNT;if(!isKlaar(k))return k;}return null;}
+  const T=v=>v?SETS[setId].tekens[v-1]:'';
+
+  function renderShell(){
+    root.innerHTML=`
+      <div class="sd-wrap">
+        <div class="sd-head">
+          <div><div class="sd-title">🔢 Kanji-sudoku</div><div class="sd-date">${nlDate(date)}</div></div>
+          <div class="sd-meta"><span class="sd-chip">🔥 <span id="sd-streak">${LS.get('kp-sudoku-streak',0)}</span></span><span class="sd-chip">📅 <span id="sd-prog">${aantalKlaar()}</span>/${COUNT}</span></div>
+        </div>
+        <div class="sd-picker" id="sd-picker"></div>
+        <div id="sd-body"></div>
+        <button class="btn" id="sd-back" style="background:var(--muted);margin-top:12px;">← Menu</button>
+      </div>`;
+    injectStyle();
+    root.querySelector('#sd-back').onclick=()=>{bewaarStaat();stop();(window.switchScreen||function(){})('screen-menu');};
+    tekenPicker();
+  }
+  function tekenPicker(){
+    const p=root.querySelector('#sd-picker');p.innerHTML='';
+    for(let i=0;i<COUNT;i++){
+      const b=document.createElement('button');
+      b.className='sd-tab'+(i===gi?' sd-tab-on':'')+(isKlaar(i)?' sd-tab-done':'');
+      b.innerHTML=`<span class="sd-tab-n">${CIRC[i]}</span><span class="sd-tab-sz">${NIVEAUS[i].naam}</span><span class="sd-tab-coin">${isKlaar(i)?'✓':'🪙'+NIVEAUS[i].coins}</span>`;
+      b.onclick=()=>{if(i!==gi){bewaarStaat();gi=i;laad(i);tekenPicker();}};
+      p.appendChild(b);
+    }
+  }
+
+  function laad(i){
+    stop();
+    puz=buildDaily(date,NIVEAUS[i]);
+    const opgeslagen=LS.get(staatSleutel(i),null);
+    waarden = opgeslagen && Array.isArray(opgeslagen.w) ? opgeslagen.w.slice() : puz.start.slice();
+    notities = opgeslagen && Array.isArray(opgeslagen.n) ? opgeslagen.n.map(a=>a?a.slice():[]) : Array.from({length:81},()=>[]);
+    sel=-1;notitieModus=false;elapsed = opgeslagen && opgeslagen.t ? opgeslagen.t : 0;
+    klaar=isKlaar(i);
+    renderSpel();
+    if(klaar){waarden=puz.oplossing.slice();tekenBord();toonKlaar(dat(i).time||0,false);}
+    else{startT=Date.now()-elapsed*1000;startClock();}
+  }
+  function bewaarStaat(){
+    if(!puz||klaar)return;
+    LS.set(staatSleutel(gi),{w:waarden,n:notities,t:elapsed});
+  }
+  function startClock(){clearInterval(clockId);clockId=setInterval(()=>{elapsed=Math.floor((Date.now()-startT)/1000);const t=root.querySelector('#sd-timer');if(t)t.textContent=fmt(elapsed);},1000);}
+  function stop(){clearInterval(clockId);clearInterval(cdId);}
+
+  function renderSpel(){
+    const s=SETS[setId];
+    root.querySelector('#sd-body').innerHTML=`
+      <p class="sd-uitleg">Vul het rooster zo dat elke rij, elke kolom en elk blok van 3×3 alle negen tekens precies één keer bevat. Tik een vakje aan en kies daarna een teken. Met ✎ zet je kleine notities.</p>
+      <div class="sd-bar">
+        <span class="sd-timerbar">⏱️ <span id="sd-timer">${fmt(elapsed)}</span></span>
+        <button class="sd-setbtn" id="sd-set">${s.naam} ⇄</button>
+      </div>
+      <div class="sd-boardwrap"><div class="sd-grid" id="sd-grid"></div></div>
+      <div class="sd-status" id="sd-status"></div>
+      <div class="sd-pad" id="sd-pad"></div>
+      <div class="sd-acts">
+        <button class="sd-act" id="sd-note">✎ notitie: uit</button>
+        <button class="sd-act" id="sd-erase">⌫ wissen</button>
+      </div>
+      <div class="sd-legenda" id="sd-legenda"></div>`;
+    bouwBord();tekenPad();tekenLegenda();
+    root.querySelector('#sd-set').onclick=()=>{setId=setId==='kanji'?'kana':'kanji';LS.set('kp-sudoku-set',setId);renderSpel();if(klaar)tekenBord();};
+    root.querySelector('#sd-note').onclick=()=>{notitieModus=!notitieModus;const b=root.querySelector('#sd-note');b.textContent=`✎ notitie: ${notitieModus?'aan':'uit'}`;b.classList.toggle('sd-act-on',notitieModus);};
+    root.querySelector('#sd-erase').onclick=()=>wis();
+  }
+  function bouwBord(){
+    const g=root.querySelector('#sd-grid');let html='';
+    for(let i=0;i<81;i++){
+      const r=(i/9|0),c=i%9;
+      const cls=['sd-cel'];
+      if(c%3===2&&c<8)cls.push('sd-br');
+      if(r%3===2&&r<8)cls.push('sd-bb');
+      html+=`<div class="${cls.join(' ')}" data-i="${i}"></div>`;
+    }
+    g.innerHTML=html;
+    g.querySelectorAll('.sd-cel').forEach(el=>el.onclick=()=>{if(klaar)return;sel=+el.dataset.i;tekenBord();});
+    tekenBord();
+  }
+  function conflict(i){
+    const v=waarden[i];if(!v)return false;
+    const r=(i/9|0),c=i%9,br=r-r%3,bc=c-c%3;
+    for(let k=0;k<9;k++){
+      if(r*9+k!==i&&waarden[r*9+k]===v)return true;
+      if(k*9+c!==i&&waarden[k*9+c]===v)return true;
+    }
+    for(let y=0;y<3;y++)for(let x=0;x<3;x++){const j=(br+y)*9+bc+x;if(j!==i&&waarden[j]===v)return true;}
+    return false;
+  }
+  function tekenBord(){
+    const selV = sel>=0 ? waarden[sel] : 0;
+    root.querySelectorAll('.sd-cel').forEach(el=>{
+      const i=+el.dataset.i, v=waarden[i], gegeven=puz.start[i]!==0;
+      el.className=el.className.split(' ').filter(c=>['sd-cel','sd-br','sd-bb'].includes(c)).join(' ');
+      if(gegeven)el.classList.add('sd-gegeven');
+      if(i===sel)el.classList.add('sd-sel');
+      else if(sel>=0){
+        const r1=(i/9|0),c1=i%9,r2=(sel/9|0),c2=sel%9;
+        if(r1===r2||c1===c2||((r1-r1%3)===(r2-r2%3)&&(c1-c1%3)===(c2-c2%3)))el.classList.add('sd-peer');
+      }
+      if(v&&selV&&v===selV&&i!==sel)el.classList.add('sd-gelijk');
+      if(conflict(i))el.classList.add('sd-fout');
+      if(v)el.innerHTML=`<span class="sd-teken">${T(v)}</span>`;
+      else if(notities[i]&&notities[i].length){
+        el.innerHTML=`<div class="sd-notities">${[1,2,3,4,5,6,7,8,9].map(n=>`<span>${notities[i].includes(n)?T(n):''}</span>`).join('')}</div>`;
+      } else el.innerHTML='';
+    });
+    const vol=waarden.filter(v=>v).length;
+    const st=root.querySelector('#sd-status');
+    if(st&&!klaar)st.textContent=`Ingevuld: ${vol}/81`;
+  }
+  function tekenPad(){
+    const p=root.querySelector('#sd-pad');if(!p)return;
+    let html='';
+    for(let v=1;v<=9;v++){
+      const over=9-waarden.filter(w=>w===v).length;
+      html+=`<button class="sd-key${over<=0?' sd-key-klaar':''}" data-v="${v}"><span class="sd-key-t">${T(v)}</span><span class="sd-key-n">${over>0?over:'✓'}</span></button>`;
+    }
+    p.innerHTML=html;
+    p.querySelectorAll('.sd-key').forEach(b=>b.onclick=()=>zet(+b.dataset.v));
+  }
+  function tekenLegenda(){
+    const l=root.querySelector('#sd-legenda');if(!l)return;
+    const s=SETS[setId];
+    l.innerHTML=s.tekens.map((t,i)=>`<span class="sd-leg"><b>${t}</b> ${s.lezing[i]} = ${i+1}</span>`).join('');
+  }
+  function zet(v){
+    if(klaar||sel<0)return;
+    if(puz.start[sel]!==0)return;
+    if(notitieModus){
+      const n=notities[sel];const ix=n.indexOf(v);
+      if(ix>=0)n.splice(ix,1);else n.push(v);
+      waarden[sel]=0;
+    } else {
+      waarden[sel]=waarden[sel]===v?0:v;
+      if(waarden[sel])notities[sel]=[];
+    }
+    tekenBord();tekenPad();bewaarStaat();checkWin();
+  }
+  function wis(){
+    if(klaar||sel<0||puz.start[sel]!==0)return;
+    waarden[sel]=0;notities[sel]=[];tekenBord();tekenPad();bewaarStaat();
+  }
+  function checkWin(){
+    for(let i=0;i<81;i++)if(!waarden[i]||conflict(i))return;
+    win();
+  }
+
+  function win(){
+    stop();klaar=true;const reward=NIVEAUS[gi].coins;const time=elapsed;
+    LS.set(sleutel(gi),{time,coins:reward});
+    try{localStorage.removeItem(staatSleutel(gi));}catch(e){}
+    try{if(typeof window.wijsGachaMuntToe==='function')window.wijsGachaMuntToe(reward);}catch(e){console.warn('Munt sudoku mislukt:',e);}
+    if(aantalKlaar()===COUNT){
+      const laatste=LS.get('kp-sudoku-last',null);
+      if(laatste!==date){const y=new Date();y.setDate(y.getDate()-1);const yStr=`${y.getFullYear()}-${pad(y.getMonth()+1)}-${pad(y.getDate())}`;
+        let s=LS.get('kp-sudoku-streak',0);s=(laatste===yStr)?s+1:1;LS.set('kp-sudoku-streak',s);LS.set('kp-sudoku-last',date);}
+    }
+    const sc=root.querySelector('#sd-streak');if(sc)sc.textContent=LS.get('kp-sudoku-streak',0);
+    const pc=root.querySelector('#sd-prog');if(pc)pc.textContent=aantalKlaar();
+    tekenPicker();feest(reward);
+    setTimeout(()=>toonKlaar(time,true),700);
+  }
+  function toonKlaar(time,vers){
+    const alles=aantalKlaar()===COUNT, volgende=volgendeOpen(gi);
+    const st=root.querySelector('#sd-status');if(!st)return;
+    st.innerHTML=`<div class="sd-done">🎉 ${vers?`${NIVEAUS[gi].naam} opgelost! +🪙 ${NIVEAUS[gi].coins}`:'Vandaag al opgelost'} · ⏱️ ${fmt(time)}
+      ${alles?`<div class="sd-count">Alle drie klaar! 🔥 Streak ${LS.get('kp-sudoku-streak',0)} · nieuw over <b id="sd-cd">–</b></div>`
+        :(volgende!==null?`<button class="btn sd-next" id="sd-next">Volgende: ${NIVEAUS[volgende].naam} →</button>`:'')}</div>`;
+    const nb=root.querySelector('#sd-next');if(nb)nb.onclick=()=>{gi=volgende;laad(volgende);tekenPicker();};
+    if(alles){const el=root.querySelector('#sd-cd');if(el){const upd=()=>{const now=new Date(),m=new Date(now);m.setHours(24,0,0,0);let s=Math.floor((m-now)/1000);const h=s/3600|0;s%=3600;el.textContent=`${pad(h)}:${pad(s/60|0)}:${pad(s%60)}`;};upd();clearInterval(cdId);cdId=setInterval(upd,1000);}}
+  }
+  function feest(reward){const c=document.createElement('div');c.className='sd-coinpop';c.textContent=`+🪙${reward}`;root.appendChild(c);setTimeout(()=>c.remove(),1400);
+    const em=['🎉','✨','🌸','🔢'];for(let i=0;i<12;i++){const s=document.createElement('div');s.className='sd-confetti';s.textContent=em[i%em.length];s.style.left=(Math.random()*100)+'%';s.style.animationDelay=(Math.random()*0.3)+'s';root.appendChild(s);setTimeout(()=>s.remove(),1600);}}
+
+  function injectStyle(){
+    if(document.getElementById('sd-style'))return;
+    const s=document.createElement('style');s.id='sd-style';s.textContent=`
+      .sd-wrap{position:relative}
+      .sd-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:8px}
+      .sd-title{font-family:var(--font-display);font-size:24px;font-weight:800;color:var(--dark)}
+      .sd-date{font-size:13px;color:var(--muted)}
+      .sd-meta{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+      .sd-chip{background:var(--input-bg);border:1px solid var(--border);border-radius:20px;padding:4px 10px;font-size:14px;font-weight:700;white-space:nowrap}
+      .sd-picker{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+      .sd-tab{display:flex;flex-direction:column;align-items:center;gap:1px;padding:8px 4px;background:var(--input-bg);border:1px solid var(--border);border-radius:10px;cursor:pointer;font-family:var(--font-body);color:var(--text)}
+      .sd-tab-on{border-color:var(--primary);box-shadow:0 0 0 2px var(--primary) inset}
+      .sd-tab-done{background:color-mix(in srgb,var(--success) 15%,var(--input-bg))}
+      .sd-tab-n{font-size:17px;line-height:1}.sd-tab-sz{font-size:11px;color:var(--muted);font-weight:700}
+      .sd-tab-coin{font-size:11px;font-weight:700;color:var(--accent)}.sd-tab-done .sd-tab-coin{color:var(--success)}
+      .sd-uitleg{font-size:12.5px;color:var(--muted);line-height:1.5;margin:0 0 8px}
+      .sd-bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+      .sd-timerbar{font-size:14px;font-weight:700;color:var(--muted)}
+      .sd-setbtn{background:var(--input-bg);border:1px solid var(--border);border-radius:20px;padding:5px 12px;font-family:var(--font-display);font-weight:800;font-size:14px;color:var(--dark);cursor:pointer}
+      .sd-boardwrap{display:flex;justify-content:center}
+      .sd-grid{display:grid;grid-template-columns:repeat(9,1fr);width:100%;max-width:min(94vw,400px);aspect-ratio:1;background:var(--input-bg);border:3px solid var(--sumi);border-radius:8px;overflow:hidden;touch-action:manipulation;user-select:none}
+      .sd-cel{position:relative;aspect-ratio:1;display:flex;align-items:center;justify-content:center;border:1px solid color-mix(in srgb,var(--sumi) 14%,transparent);cursor:pointer}
+      .sd-br{border-right:2px solid var(--sumi)}
+      .sd-bb{border-bottom:2px solid var(--sumi)}
+      .sd-teken{font-family:var(--font-display);font-size:clamp(15px,4.6vw,24px);font-weight:700;color:var(--ai)}
+      .sd-gegeven .sd-teken{color:var(--dark);font-weight:800}
+      .sd-gegeven{background:color-mix(in srgb,var(--sumi) 5%,var(--input-bg))}
+      .sd-peer{background:color-mix(in srgb,var(--ai) 8%,var(--input-bg))}
+      .sd-gelijk{background:color-mix(in srgb,var(--kincha) 26%,var(--input-bg))}
+      .sd-sel{background:color-mix(in srgb,var(--kincha) 40%,var(--input-bg));box-shadow:0 0 0 2px var(--kincha) inset}
+      .sd-fout .sd-teken{color:var(--danger)}
+      .sd-fout{background:color-mix(in srgb,var(--shu) 16%,var(--input-bg))}
+      .sd-notities{display:grid;grid-template-columns:repeat(3,1fr);width:100%;height:100%;font-size:clamp(6px,1.9vw,9px);color:var(--muted);line-height:1}
+      .sd-notities span{display:flex;align-items:center;justify-content:center}
+      .sd-status{text-align:center;font-size:13px;color:var(--muted);margin:12px 0 8px;min-height:18px;font-weight:700}
+      .sd-pad{display:grid;grid-template-columns:repeat(9,1fr);gap:4px}
+      .sd-key{display:flex;flex-direction:column;align-items:center;gap:0;padding:7px 0;background:var(--input-bg);border:1px solid var(--border);border-radius:8px;cursor:pointer}
+      .sd-key-t{font-family:var(--font-display);font-size:clamp(15px,4.4vw,21px);font-weight:800;color:var(--dark)}
+      .sd-key-n{font-size:9px;color:var(--muted);font-weight:700}
+      .sd-key-klaar{opacity:.45}
+      .sd-acts{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+      .sd-act{padding:10px;background:var(--input-bg);border:1px solid var(--border);border-radius:10px;font-weight:700;font-family:var(--font-body);font-size:14px;color:var(--text);cursor:pointer}
+      .sd-act-on{background:var(--kincha);color:#fff8ee;border-color:var(--kincha)}
+      .sd-legenda{display:flex;flex-wrap:wrap;gap:5px;justify-content:center;margin-top:12px;padding-top:10px;border-top:1px dashed var(--border)}
+      .sd-leg{font-size:11px;color:var(--muted);background:var(--input-bg);border:1px solid var(--border);border-radius:14px;padding:3px 8px}
+      .sd-leg b{font-family:var(--font-display);font-size:14px;color:var(--dark)}
+      .sd-done{text-align:center;font-weight:700;color:var(--success);background:color-mix(in srgb,var(--matsuba) 12%,var(--input-bg));border:1px solid var(--success);border-radius:10px;padding:10px}
+      .sd-count{font-size:12.5px;color:var(--muted);font-weight:400;margin-top:6px}
+      .sd-next{margin-top:8px}
+      .sd-coinpop{position:absolute;top:38%;left:50%;transform:translateX(-50%);font-size:34px;font-weight:900;color:var(--accent);text-shadow:0 2px 6px rgba(0,0,0,.3);pointer-events:none;animation:sd-coin 1.4s ease-out forwards;z-index:60}
+      @keyframes sd-coin{0%{opacity:0;transform:translate(-50%,10px) scale(.6)}20%{opacity:1;transform:translate(-50%,0) scale(1.1)}70%{opacity:1;transform:translate(-50%,-30px) scale(1)}100%{opacity:0;transform:translate(-50%,-60px) scale(.9)}}
+      .sd-confetti{position:absolute;top:-10px;font-size:22px;pointer-events:none;animation:sd-fall 1.5s ease-in forwards;z-index:50}
+      @keyframes sd-fall{to{transform:translateY(500px) rotate(220deg);opacity:0}}
+    `;
+    document.head.appendChild(s);
+  }
+
+  window.KanaSudoku={start,buildDaily,telOpl};
+  window.startSudokuInit=function(){(window.switchScreen||function(){})('screen-sudoku');const el=document.getElementById('sudoku-root');if(el)start(el);};
+})();
+
+</script>
+<script id="hashi-engine">
+/* ============================================================
+   Kana Master · Hashiwokakero (橋をかけろ) — bruggen bouwen
+   Dagelijkse 9×9 puzzel met gegarandeerd unieke oplossing.
+   Verbind de eilanden met 1 of 2 bruggen; het cijfer geeft het
+   totale aantal bruggen per eiland. Bruggen kruisen niet en
+   alle eilanden moeten één geheel vormen.
+   Blootgesteld: window.startHashiInit(), window.KanaHashi
+   ============================================================ */
+(function () {
+  const W = 9, H = 9, N_ISL = 14, REWARD = 15;
+  const D4 = [[1,0],[-1,0],[0,1],[0,-1]];
+
+  function hashStr(s){let h=2166136261>>>0;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0;}
+  function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+  const pad=n=>String(n).padStart(2,'0');const fmt=s=>`${Math.floor(s/60)}:${pad(s%60)}`;
+  function todayStr(){const d=new Date();return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;}
+  const nlDate=s=>{const[y,m,d]=s.split('-');return `${d}-${m}-${y}`;};
+  const LS={get:(k,f)=>{try{const v=localStorage.getItem(k);return v==null?f:JSON.parse(v);}catch(e){return f;}},set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}};
+  const K=(x,y)=>y*W+x;
+
+  // ---------- generator ----------
+  function genPuzzle(rng){
+    const isl=new Map(), occ=Array.from({length:H},()=>Array(W).fill(0));
+    const sx=2+Math.floor(rng()*(W-4)), sy=2+Math.floor(rng()*(H-4));
+    isl.set(K(sx,sy),{x:sx,y:sy,deg:0}); occ[sy][sx]=1;
+    let tries=0;
+    while(isl.size<N_ISL && tries<N_ISL*40){
+      tries++;
+      const arr=[...isl.values()], a=arr[Math.floor(rng()*arr.length)];
+      if(a.deg>=8)continue;
+      const [dx,dy]=D4[Math.floor(rng()*4)], dist=2+Math.floor(rng()*3);
+      const nx=a.x+dx*dist, ny=a.y+dy*dist;
+      if(nx<0||nx>=W||ny<0||ny>=H||occ[ny][nx])continue;
+      let clear=true;
+      for(let s=1;s<dist;s++){if(occ[a.y+dy*s][a.x+dx*s]){clear=false;break;}}
+      if(!clear)continue;
+      let adj=false;
+      for(const[ax,ay]of D4){const qx=nx+ax,qy=ny+ay;if(qx>=0&&qx<W&&qy>=0&&qy<H&&occ[qy][qx]===1)adj=true;}
+      if(adj)continue;
+      const n=1+Math.floor(rng()*2);
+      isl.set(K(nx,ny),{x:nx,y:ny,deg:n}); occ[ny][nx]=1;
+      for(let s=1;s<dist;s++)occ[a.y+dy*s][a.x+dx*s]=2;
+      a.deg+=n;
+    }
+    // extra verbindingen voor rijkere puzzel
+    const list=[...isl.values()];
+    for(let t=0;t<N_ISL*3;t++){
+      const a=list[Math.floor(rng()*list.length)];
+      const [dx,dy]=D4[Math.floor(rng()*4)];
+      let x=a.x+dx,y=a.y+dy,ok=true;
+      while(x>=0&&x<W&&y>=0&&y<H&&occ[y][x]!==1){if(occ[y][x]===2){ok=false;break;}x+=dx;y+=dy;}
+      if(!ok||x<0||x>=W||y<0||y>=H||occ[y][x]!==1)continue;
+      const b=isl.get(K(x,y));
+      if(!b||a.deg>=8||b.deg>=8)continue;
+      const n=1+(rng()<0.4?1:0);
+      for(let s=1;;s++){const px=a.x+dx*s,py=a.y+dy*s;if(px===x&&py===y)break;occ[py][px]=2;}
+      a.deg+=n;b.deg+=n;
+    }
+    return [...isl.values()].map(o=>({x:o.x,y:o.y,n:o.deg})).filter(o=>o.n>0);
+  }
+  function kandidaten(islands){
+    const idx=new Map();islands.forEach((o,i)=>idx.set(K(o.x,o.y),i));
+    const cand=[];
+    islands.forEach((o,i)=>{
+      for(const[dx,dy]of[[1,0],[0,1]]){
+        let x=o.x+dx,y=o.y+dy;
+        while(x>=0&&x<W&&y>=0&&y<H&&!idx.has(K(x,y))){x+=dx;y+=dy;}
+        if(x>=0&&x<W&&y>=0&&y<H&&idx.has(K(x,y)))cand.push({i,j:idx.get(K(x,y)),dx,dy,x1:o.x,y1:o.y,x2:x,y2:y});
+      }
+    });
+    return cand;
+  }
+  function kruisingen(cand){
+    const cross=cand.map(()=>[]);
+    for(let a=0;a<cand.length;a++)for(let b=a+1;b<cand.length;b++){
+      const A=cand[a],B=cand[b];
+      if(A.dx===B.dx&&A.dy===B.dy)continue;
+      const Hh=A.dx?A:B, V=A.dx?B:A;
+      if(Hh.y1>Math.min(V.y1,V.y2)&&Hh.y1<Math.max(V.y1,V.y2)&&V.x1>Math.min(Hh.x1,Hh.x2)&&V.x1<Math.max(Hh.x1,Hh.x2)){cross[a].push(b);cross[b].push(a);}
+    }
+    return cross;
+  }
+  function telOplossingen(islands,max){
+    const cand=kandidaten(islands), cross=kruisingen(cand);
+    const need=islands.map(o=>o.n), deg=islands.map(()=>0), val=cand.map(()=>0);
+    const inc=islands.map(()=>[]);cand.forEach((c,k)=>{inc[c.i].push(k);inc[c.j].push(k);});
+    let count=0;
+    const verbonden=()=>{const seen=new Set([0]),st=[0];
+      while(st.length){const u=st.pop();for(const k of inc[u])if(val[k]>0){const v=cand[k].i===u?cand[k].j:cand[k].i;if(!seen.has(v)){seen.add(v);st.push(v);}}}
+      return seen.size===islands.length;};
+    function bt(k){
+      if(count>=max)return;
+      if(k===cand.length){for(let i=0;i<islands.length;i++)if(deg[i]!==need[i])return;if(verbonden())count++;return;}
+      const c=cand[k], maxN=cross[k].some(o=>val[o]>0)?0:2;
+      for(let n=0;n<=maxN;n++){
+        if(deg[c.i]+n>need[c.i]||deg[c.j]+n>need[c.j])break;
+        val[k]=n;deg[c.i]+=n;deg[c.j]+=n;
+        let ok=true;
+        for(const i of[c.i,c.j]){let rest=0;for(const e of inc[i])if(e>k)rest+=2;if(deg[i]+rest<need[i]){ok=false;break;}}
+        if(ok)bt(k+1);
+        val[k]=0;deg[c.i]-=n;deg[c.j]-=n;
+      }
+    }
+    bt(0);return count;
+  }
+  function buildDaily(dateStr){
+    for(let a=0;a<60;a++){
+      const rng=mulberry32(hashStr(dateStr+'#hashi#'+a));
+      const islands=genPuzzle(rng);
+      if(islands.length<N_ISL-3)continue;
+      if(telOplossingen(islands,2)===1)return islands;
+    }
+    return genPuzzle(mulberry32(hashStr(dateStr+'#hashi#0')));
+  }
+
+  // ---------- status ----------
+  let root,date,islands,cand,cross,bruggen,gekozen,startT,clockId,cdId,elapsed,klaar;
+
+  function start(container){root=container;date=todayStr();
+    islands=buildDaily(date);cand=kandidaten(islands);cross=kruisingen(cand);
+    bruggen=cand.map(()=>0);gekozen=null;elapsed=0;
+    const d=LS.get('kp-hashi-'+date,null);
+    render();
+    if(d){klaar=true;toonKlaar(d.time||0,false);}
+    else{klaar=false;startT=Date.now();startClock();}
+  }
+  function startClock(){clearInterval(clockId);clockId=setInterval(()=>{elapsed=Math.floor((Date.now()-startT)/1000);const t=root.querySelector('#hs-timer');if(t)t.textContent=fmt(elapsed);},1000);}
+  function stop(){clearInterval(clockId);clearInterval(cdId);}
+
+  const graad=i=>{let d=0;cand.forEach((c,k)=>{if(c.i===i||c.j===i)d+=bruggen[k];});return d;};
+  function alleVerbonden(){const inc=islands.map(()=>[]);cand.forEach((c,k)=>{inc[c.i].push(k);inc[c.j].push(k);});
+    const seen=new Set([0]),st=[0];
+    while(st.length){const u=st.pop();for(const k of inc[u])if(bruggen[k]>0){const v=cand[k].i===u?cand[k].j:cand[k].i;if(!seen.has(v)){seen.add(v);st.push(v);}}}
+    return seen.size===islands.length;}
+
+  function render(){
+    root.innerHTML=`
+      <div class="hs-wrap">
+        <div class="hs-head"><div><div class="hs-title">🌉 Bruggen</div><div class="hs-date">${nlDate(date)}</div></div>
+          <div class="hs-meta"><span class="hs-chip">🪙 ${REWARD}</span><span class="hs-chip">⏱️ <span id="hs-timer">0:00</span></span></div></div>
+        <p class="hs-uitleg">Tik op twee eilanden op één lijn om er bruggen tussen te leggen (tik nogmaals voor een dubbele brug, en nog eens om te wissen). Het cijfer is het aantal bruggen dat op dat eiland uitkomt. Bruggen mogen elkaar niet kruisen en alle eilanden moeten uiteindelijk met elkaar verbonden zijn.</p>
+        <div class="hs-boardwrap"><svg id="hs-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg"></svg></div>
+        <div class="hs-status" id="hs-status"></div>
+        <div class="hs-btns"><button class="btn hs-b2" id="hs-reset">✕ Opnieuw</button></div>
+        <button class="btn" id="hs-back" style="background:var(--muted);margin-top:10px;">← Menu</button>
+      </div>`;
+    injectStyle();teken();
+    root.querySelector('#hs-reset').onclick=()=>{if(klaar)return;bruggen=cand.map(()=>0);gekozen=null;teken();};
+    root.querySelector('#hs-back').onclick=()=>{stop();(window.switchScreen||function(){})('screen-menu');};
+  }
+
+  function teken(){
+    const svg=root.querySelector('#hs-svg');if(!svg)return;
+    let h='';
+    // bruggen
+    cand.forEach((c,k)=>{
+      if(bruggen[k]===0)return;
+      const x1=c.x1+0.5,y1=c.y1+0.5,x2=c.x2+0.5,y2=c.y2+0.5;
+      if(bruggen[k]===1) h+=`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" class="hs-br"/>`;
+      else{const o=0.11;
+        if(c.dx){h+=`<line x1="${x1}" y1="${y1-o}" x2="${x2}" y2="${y2-o}" class="hs-br"/><line x1="${x1}" y1="${y1+o}" x2="${x2}" y2="${y2+o}" class="hs-br"/>`;}
+        else{h+=`<line x1="${x1-o}" y1="${y1}" x2="${x2-o}" y2="${y2}" class="hs-br"/><line x1="${x1+o}" y1="${y1}" x2="${x2+o}" y2="${y2}" class="hs-br"/>`;}}
+    });
+    // eilanden
+    islands.forEach((o,i)=>{
+      const d=graad(i), st=d===o.n?'hs-ok':(d>o.n?'hs-over':'');
+      const sel=gekozen===i?' hs-sel':'';
+      h+=`<g class="hs-isl${sel}" data-i="${i}"><circle cx="${o.x+0.5}" cy="${o.y+0.5}" r="0.40" class="hs-circ ${st}"/>
+          <text x="${o.x+0.5}" y="${o.y+0.5}" class="hs-num ${st}">${o.n}</text></g>`;
+    });
+    svg.innerHTML=h;
+    svg.querySelectorAll('.hs-isl').forEach(g=>g.onclick=()=>tik(+g.dataset.i));
+    const klaarN=islands.filter((o,i)=>graad(i)===o.n).length;
+    const st=root.querySelector('#hs-status');
+    if(st&&!klaar)st.textContent=`Eilanden compleet: ${klaarN}/${islands.length}${alleVerbonden()?' · alles verbonden':''}`;
+  }
+
+  function tik(i){
+    if(klaar)return;
+    if(gekozen===null){gekozen=i;teken();return;}
+    if(gekozen===i){gekozen=null;teken();return;}
+    const k=cand.findIndex(c=>(c.i===gekozen&&c.j===i)||(c.i===i&&c.j===gekozen));
+    if(k<0){gekozen=i;teken();return;}
+    const nieuw=(bruggen[k]+1)%3;
+    if(nieuw>0&&cross[k].some(o=>bruggen[o]>0)){melding('Deze brug zou een andere kruisen');gekozen=null;teken();return;}
+    bruggen[k]=nieuw;gekozen=null;teken();checkWin();
+  }
+  function melding(t){const st=root.querySelector('#hs-status');if(st){st.textContent=t;}}
+  function checkWin(){
+    for(let i=0;i<islands.length;i++)if(graad(i)!==islands[i].n)return;
+    if(!alleVerbonden())return;
+    win();
+  }
+
+  function win(){
+    stop();klaar=true;const time=elapsed;
+    LS.set('kp-hashi-'+date,{time,coins:REWARD});
+    try{if(typeof window.wijsGachaMuntToe==='function')window.wijsGachaMuntToe(REWARD);}catch(e){console.warn('Munt hashi mislukt:',e);}
+    feest();setTimeout(()=>toonKlaar(time,true),700);
+  }
+  function toonKlaar(time,vers){
+    const st=root.querySelector('#hs-status');
+    if(st)st.innerHTML=`<div class="hs-done">🎉 ${vers?`Alle eilanden verbonden! +🪙 ${REWARD}`:'Vandaag al opgelost'} · ⏱️ ${fmt(time)}<div class="hs-count">Nieuwe puzzel over <b id="hs-cd">–</b></div></div>`;
+    const el=root.querySelector('#hs-cd');if(!el)return;
+    const upd=()=>{const now=new Date(),m=new Date(now);m.setHours(24,0,0,0);let s=Math.floor((m-now)/1000);const h=s/3600|0;s%=3600;el.textContent=`${pad(h)}:${pad(s/60|0)}:${pad(s%60)}`;};
+    upd();clearInterval(cdId);cdId=setInterval(upd,1000);
+  }
+  function feest(){const c=document.createElement('div');c.className='hs-coinpop';c.textContent=`+🪙${REWARD}`;root.appendChild(c);setTimeout(()=>c.remove(),1400);
+    const em=['🌉','✨','🎉','⛩️'];for(let i=0;i<12;i++){const s=document.createElement('div');s.className='hs-confetti';s.textContent=em[i%em.length];s.style.left=(Math.random()*100)+'%';s.style.animationDelay=(Math.random()*0.3)+'s';root.appendChild(s);setTimeout(()=>s.remove(),1600);}}
+
+  function injectStyle(){if(document.getElementById('hs-style'))return;const s=document.createElement('style');s.id='hs-style';s.textContent=`
+    .hs-wrap{position:relative}
+    .hs-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:8px}
+    .hs-title{font-family:var(--font-display);font-size:24px;font-weight:800;color:var(--dark)}
+    .hs-date{font-size:13px;color:var(--muted)}
+    .hs-meta{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+    .hs-chip{background:var(--input-bg);border:1px solid var(--border);border-radius:20px;padding:4px 10px;font-size:14px;font-weight:700;white-space:nowrap}
+    .hs-uitleg{font-size:12.5px;color:var(--muted);line-height:1.5;margin:0 0 10px}
+    .hs-boardwrap{display:flex;justify-content:center}
+    #hs-svg{width:100%;max-width:400px;aspect-ratio:1;background:var(--input-bg);border:3px solid var(--sumi);border-radius:10px;touch-action:manipulation}
+    .hs-br{stroke:var(--ai);stroke-width:.07;stroke-linecap:round}
+    .hs-isl{cursor:pointer}
+    .hs-circ{fill:var(--card-bg);stroke:var(--sumi);stroke-width:.05}
+    .hs-circ.hs-ok{fill:color-mix(in srgb,var(--matsuba) 30%,var(--card-bg));stroke:var(--matsuba)}
+    .hs-circ.hs-over{fill:color-mix(in srgb,var(--shu) 25%,var(--card-bg));stroke:var(--danger)}
+    .hs-sel .hs-circ{stroke:var(--kincha);stroke-width:.09}
+    .hs-num{font-family:var(--font-display);font-size:.42px;font-weight:800;fill:var(--dark);text-anchor:middle;dominant-baseline:central;pointer-events:none}
+    .hs-num.hs-ok{fill:var(--matsuba)}.hs-num.hs-over{fill:var(--danger)}
+    .hs-status{text-align:center;font-size:13px;color:var(--muted);margin:12px 0 8px;min-height:18px;font-weight:700}
+    .hs-btns{display:grid;grid-template-columns:1fr;gap:8px}
+    .hs-b2{background:var(--input-bg)!important;color:var(--text)!important;border:1px solid var(--border)!important;box-shadow:none!important;margin:0!important}
+    .hs-done{text-align:center;font-weight:700;color:var(--success);background:color-mix(in srgb,var(--matsuba) 12%,var(--input-bg));border:1px solid var(--success);border-radius:10px;padding:10px}
+    .hs-count{font-size:12.5px;color:var(--muted);font-weight:400;margin-top:6px}
+    .hs-coinpop{position:absolute;top:35%;left:50%;transform:translateX(-50%);font-size:34px;font-weight:900;color:var(--accent);text-shadow:0 2px 6px rgba(0,0,0,.3);pointer-events:none;animation:hs-coin 1.4s ease-out forwards;z-index:60}
+    @keyframes hs-coin{0%{opacity:0;transform:translate(-50%,10px) scale(.6)}20%{opacity:1;transform:translate(-50%,0) scale(1.1)}70%{opacity:1;transform:translate(-50%,-30px) scale(1)}100%{opacity:0;transform:translate(-50%,-60px) scale(.9)}}
+    .hs-confetti{position:absolute;top:-10px;font-size:22px;pointer-events:none;animation:hs-fall 1.5s ease-in forwards;z-index:50}
+    @keyframes hs-fall{to{transform:translateY(460px) rotate(220deg);opacity:0}}
+  `;document.head.appendChild(s);}
+
+  window.KanaHashi={start,buildDaily,telOplossingen};
+  window.startHashiInit=function(){(window.switchScreen||function(){})('screen-hashi');const el=document.getElementById('hashi-root');if(el)start(el);};
+})();
+
+</script>
+<script id="slither-engine">
+/* ============================================================
+   Kana Master · Slitherlink (スリザーリンク) — één gesloten lus
+   Dagelijkse 6×6 puzzel met gegarandeerd unieke oplossing.
+   Het cijfer in een vakje geeft aan hoeveel van zijn 4 zijden
+   deel uitmaken van de lus. Teken één doorlopende gesloten lus
+   die zichzelf niet kruist of vertakt.
+   Blootgesteld: window.startSlitherInit(), window.KanaSlither
+   ============================================================ */
+(function () {
+  const W = 6, H = 6, REWARD = 18;
+  const D4 = [[1,0],[-1,0],[0,1],[0,-1]];
+  const TIJDBUDGET = 900;   // ms voor het uitdunnen van aanwijzingen
+
+  function hashStr(s){let h=2166136261>>>0;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0;}
+  function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+  const pad=n=>String(n).padStart(2,'0');const fmt=s=>`${Math.floor(s/60)}:${pad(s%60)}`;
+  function todayStr(){const d=new Date();return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;}
+  const nlDate=s=>{const[y,m,d]=s.split('-');return `${d}-${m}-${y}`;};
+  const LS={get:(k,f)=>{try{const v=localStorage.getItem(k);return v==null?f:JSON.parse(v);}catch(e){return f;}},set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}};
+
+  // ---------- generator ----------
+  function samenhangend(g,val){
+    let start=null;
+    for(let y=0;y<H&&!start;y++)for(let x=0;x<W;x++)if(g[y][x]===val){start=[x,y];break;}
+    if(!start)return true;
+    const seen=new Set([start[1]*W+start[0]]),st=[start];let tot=0;
+    for(let y=0;y<H;y++)for(let x=0;x<W;x++)if(g[y][x]===val)tot++;
+    while(st.length){const[x,y]=st.pop();for(const[dx,dy]of D4){const nx=x+dx,ny=y+dy;if(nx<0||nx>=W||ny<0||ny>=H||g[ny][nx]!==val)continue;const k=ny*W+nx;if(!seen.has(k)){seen.add(k);st.push([nx,ny]);}}}
+    return seen.size===tot;
+  }
+  function buitenOk(g){
+    const seen=new Set(),st=[];
+    for(let x=0;x<W;x++){if(!g[0][x]){seen.add(x);st.push([x,0]);}if(!g[H-1][x]){seen.add((H-1)*W+x);st.push([x,H-1]);}}
+    for(let y=0;y<H;y++){if(!g[y][0]){seen.add(y*W);st.push([0,y]);}if(!g[y][W-1]){seen.add(y*W+W-1);st.push([W-1,y]);}}
+    while(st.length){const[x,y]=st.pop();for(const[dx,dy]of D4){const nx=x+dx,ny=y+dy;if(nx<0||nx>=W||ny<0||ny>=H||g[ny][nx])continue;const k=ny*W+nx;if(!seen.has(k)){seen.add(k);st.push([nx,ny]);}}}
+    let tot=0;for(let y=0;y<H;y++)for(let x=0;x<W;x++)if(!g[y][x])tot++;
+    return seen.size===tot;
+  }
+  function geenKruis(g){
+    for(let y=0;y<H-1;y++)for(let x=0;x<W-1;x++){
+      const a=g[y][x],b=g[y][x+1],c=g[y+1][x],d=g[y+1][x+1];
+      if(a===d&&b===c&&a!==b)return false;
+    }
+    return true;
+  }
+  function genGebied(rng){
+    const g=Array.from({length:H},()=>Array(W).fill(0));
+    const sx=Math.floor(W/2),sy=Math.floor(H/2);g[sy][sx]=1;
+    let cnt=1,doel=Math.round(W*H*0.4),tries=0;
+    while(cnt<doel&&tries<doel*60){
+      tries++;
+      const x=Math.floor(rng()*W),y=Math.floor(rng()*H);
+      if(g[y][x])continue;
+      let raakt=false;for(const[dx,dy]of D4){const nx=x+dx,ny=y+dy;if(nx>=0&&nx<W&&ny>=0&&ny<H&&g[ny][nx])raakt=true;}
+      if(!raakt)continue;
+      g[y][x]=1;
+      if(samenhangend(g,1)&&buitenOk(g)&&geenKruis(g))cnt++;else g[y][x]=0;
+    }
+    return g;
+  }
+  const aanwijzing=(g,x,y)=>{let c=0;for(const[dx,dy]of D4){const nx=x+dx,ny=y+dy;const v=(nx<0||nx>=W||ny<0||ny>=H)?0:g[ny][nx];if(v!==g[y][x])c++;}return c;};
+
+  function telOplossingen(clues,max){
+    const g=Array.from({length:H},()=>Array(W).fill(-1));
+    let count=0;
+    const val=(x,y)=>(x<0||x>=W||y<0||y>=H)?0:g[y][x];
+    function checkCel(x,y){
+      if(x<0||y<0||x>=W||y>=H)return true;
+      const c=clues[y][x];if(c==null)return true;
+      let diff=0;
+      for(const[dx,dy]of D4){const nx=x+dx,ny=y+dy;const v=(nx<0||nx>=W||ny<0||ny>=H)?0:g[ny][nx];if(v<0)return true;if(v!==g[y][x])diff++;}
+      return diff===c;
+    }
+    function checkHoek(x,y){
+      const a=val(x,y),b=val(x+1,y),c=val(x,y+1),d=val(x+1,y+1);
+      if(a<0||b<0||c<0||d<0)return true;
+      return !(a===d&&b===c&&a!==b);
+    }
+    function bt(i){
+      if(count>=max)return;
+      if(i===W*H){
+        if(!samenhangend(g,1))return;
+        let heeft=false;for(let y=0;y<H;y++)for(let x=0;x<W;x++)if(g[y][x])heeft=true;
+        if(!heeft)return;
+        if(!buitenOk(g))return;
+        count++;return;
+      }
+      const x=i%W,y=(i-x)/W;
+      for(let v=0;v<=1;v++){
+        g[y][x]=v;
+        if(checkCel(x,y-1)&&checkCel(x-1,y-1)&&checkHoek(x-1,y-1)&&
+           (x===W-1?checkHoek(x,y-1):true)&&
+           (y===H-1?(checkCel(x,y)&&checkCel(x-1,y)&&(x===W-1?checkHoek(x-1,y)&&checkHoek(x,y):checkHoek(x-1,y))):true))
+          bt(i+1);
+        g[y][x]=-1;
+      }
+    }
+    bt(0);return count;
+  }
+  function buildDaily(dateStr){
+    for(let a=0;a<12;a++){
+      const rng=mulberry32(hashStr(dateStr+'#slither#'+a));
+      const binnen=genGebied(rng);
+      let n=0;for(let y=0;y<H;y++)for(let x=0;x<W;x++)if(binnen[y][x])n++;
+      if(n<5)continue;
+      const clues=Array.from({length:H},(_,y)=>Array.from({length:W},(_,x)=>aanwijzing(binnen,x,y)));
+      if(telOplossingen(clues,2)!==1)continue;
+      // aanwijzingen uitdunnen binnen tijdbudget
+      const order=[];for(let y=0;y<H;y++)for(let x=0;x<W;x++)order.push([x,y]);
+      for(let i=order.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[order[i],order[j]]=[order[j],order[i]];}
+      const t0=Date.now();
+      for(const[x,y]of order){
+        if(Date.now()-t0>TIJDBUDGET)break;
+        const bak=clues[y][x];clues[y][x]=null;
+        if(telOplossingen(clues,2)!==1)clues[y][x]=bak;
+      }
+      return {clues,binnen};
+    }
+    const rng=mulberry32(hashStr(dateStr+'#slither#0'));
+    const binnen=genGebied(rng);
+    return {clues:Array.from({length:H},(_,y)=>Array.from({length:W},(_,x)=>aanwijzing(binnen,x,y))),binnen};
+  }
+
+  // ---------- status ----------
+  // randen: hEdge[y][x] = rand boven cel (x,y), y=0..H ; vEdge[y][x] = rand links van cel (x,y), x=0..W
+  let root,date,puz,hE,vE,startT,clockId,cdId,elapsed,klaar;
+
+  function start(container){root=container;date=todayStr();puz=buildDaily(date);
+    hE=Array.from({length:H+1},()=>Array(W).fill(0));
+    vE=Array.from({length:H},()=>Array(W+1).fill(0));
+    elapsed=0;
+    const d=LS.get('kp-slither-'+date,null);
+    render();
+    if(d){klaar=true;vulOplossing();teken();toonKlaar(d.time||0,false);}
+    else{klaar=false;startT=Date.now();startClock();}
+  }
+  function startClock(){clearInterval(clockId);clockId=setInterval(()=>{elapsed=Math.floor((Date.now()-startT)/1000);const t=root.querySelector('#sl-timer');if(t)t.textContent=fmt(elapsed);},1000);}
+  function stop(){clearInterval(clockId);clearInterval(cdId);}
+  function vulOplossing(){
+    const b=puz.binnen, v=(x,y)=>(x<0||x>=W||y<0||y>=H)?0:b[y][x];
+    for(let y=0;y<=H;y++)for(let x=0;x<W;x++)hE[y][x]=v(x,y-1)!==v(x,y)?1:0;
+    for(let y=0;y<H;y++)for(let x=0;x<=W;x++)vE[y][x]=v(x-1,y)!==v(x,y)?1:0;
+  }
+
+  function celTelling(x,y){
+    let n=0;
+    if(hE[y][x]===1)n++; if(hE[y+1][x]===1)n++;
+    if(vE[y][x]===1)n++; if(vE[y][x+1]===1)n++;
+    return n;
+  }
+  function hoekGraad(x,y){ // hoekpunt (x,y), x=0..W, y=0..H
+    let n=0;
+    if(x>0   && hE[y][x-1]===1)n++;
+    if(x<W   && hE[y][x]===1)n++;
+    if(y>0   && vE[y-1][x]===1)n++;
+    if(y<H   && vE[y][x]===1)n++;
+    return n;
+  }
+  function isOpgelost(){
+    for(let y=0;y<H;y++)for(let x=0;x<W;x++){const c=puz.clues[y][x];if(c!=null&&celTelling(x,y)!==c)return false;}
+    let totaal=0,start=null;
+    for(let y=0;y<=H;y++)for(let x=0;x<=W;x++){const d=hoekGraad(x,y);if(d!==0&&d!==2)return false;if(d===2&&!start)start=[x,y];}
+    for(let y=0;y<=H;y++)for(let x=0;x<W;x++)if(hE[y][x]===1)totaal++;
+    for(let y=0;y<H;y++)for(let x=0;x<=W;x++)if(vE[y][x]===1)totaal++;
+    if(totaal<4||!start)return false;
+    // één gesloten lus: loop hem af
+    const bez=new Set();let [cx,cy]=start,prev=null,stappen=0;
+    while(stappen<totaal+2){
+      const buren=[];
+      if(cx>0&&hE[cy][cx-1]===1)buren.push([cx-1,cy,'h'+cy+'-'+(cx-1)]);
+      if(cx<W&&hE[cy][cx]===1)buren.push([cx+1,cy,'h'+cy+'-'+cx]);
+      if(cy>0&&vE[cy-1][cx]===1)buren.push([cx,cy-1,'v'+(cy-1)+'-'+cx]);
+      if(cy<H&&vE[cy][cx]===1)buren.push([cx,cy+1,'v'+cy+'-'+cx]);
+      const volgende=buren.find(b=>!bez.has(b[2]));
+      if(!volgende)break;
+      bez.add(volgende[2]);cx=volgende[0];cy=volgende[1];stappen++;
+      if(cx===start[0]&&cy===start[1])break;
+    }
+    return bez.size===totaal && cx===start[0] && cy===start[1];
+  }
+
+  function render(){
+    root.innerHTML=`
+      <div class="sl-wrap">
+        <div class="sl-head"><div><div class="sl-title">➰ Slitherlink</div><div class="sl-date">${nlDate(date)}</div></div>
+          <div class="sl-meta"><span class="sl-chip">🪙 ${REWARD}</span><span class="sl-chip">⏱️ <span id="sl-timer">0:00</span></span></div></div>
+        <p class="sl-uitleg">Teken één doorlopende gesloten lus langs de rasterlijnen. Het cijfer in een vakje zegt hoeveel van zijn vier zijden bij de lus horen. De lus mag zichzelf niet kruisen of vertakken. Tik een zijde aan voor een lijn, nogmaals voor een kruisje (zeker geen lijn), en nog eens om te wissen.</p>
+        <div class="sl-boardwrap"><svg id="sl-svg" viewBox="-0.6 -0.6 ${W+1.2} ${H+1.2}" xmlns="http://www.w3.org/2000/svg"></svg></div>
+        <div class="sl-status" id="sl-status"></div>
+        <div class="sl-btns"><button class="btn sl-b2" id="sl-reset">✕ Opnieuw</button></div>
+        <button class="btn" id="sl-back" style="background:var(--muted);margin-top:10px;">← Menu</button>
+      </div>`;
+    injectStyle();teken();
+    root.querySelector('#sl-reset').onclick=()=>{if(klaar)return;hE=Array.from({length:H+1},()=>Array(W).fill(0));vE=Array.from({length:H},()=>Array(W+1).fill(0));teken();};
+    root.querySelector('#sl-back').onclick=()=>{stop();(window.switchScreen||function(){})('screen-menu');};
+  }
+
+  function teken(){
+    const svg=root.querySelector('#sl-svg');if(!svg)return;
+    let h='';
+    // punten
+    for(let y=0;y<=H;y++)for(let x=0;x<=W;x++)h+=`<circle cx="${x}" cy="${y}" r="0.06" class="sl-dot"/>`;
+    // aanwijzingen
+    for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+      const c=puz.clues[y][x];if(c==null)continue;
+      const vol=celTelling(x,y)===c;
+      h+=`<text x="${x+0.5}" y="${y+0.5}" class="sl-num${vol?' sl-num-ok':''}">${c}</text>`;
+    }
+    // randen: lijn of kruis + trefvlak
+    for(let y=0;y<=H;y++)for(let x=0;x<W;x++){
+      const s=hE[y][x];
+      if(s===1)h+=`<line x1="${x}" y1="${y}" x2="${x+1}" y2="${y}" class="sl-lijn"/>`;
+      else if(s===2)h+=`<text x="${x+0.5}" y="${y}" class="sl-kruis">×</text>`;
+      h+=`<rect x="${x+0.14}" y="${y-0.18}" width="0.72" height="0.36" class="sl-hit" data-t="h" data-x="${x}" data-y="${y}"/>`;
+    }
+    for(let y=0;y<H;y++)for(let x=0;x<=W;x++){
+      const s=vE[y][x];
+      if(s===1)h+=`<line x1="${x}" y1="${y}" x2="${x}" y2="${y+1}" class="sl-lijn"/>`;
+      else if(s===2)h+=`<text x="${x}" y="${y+0.5}" class="sl-kruis">×</text>`;
+      h+=`<rect x="${x-0.18}" y="${y+0.14}" width="0.36" height="0.72" class="sl-hit" data-t="v" data-x="${x}" data-y="${y}"/>`;
+    }
+    svg.innerHTML=h;
+    svg.querySelectorAll('.sl-hit').forEach(r=>r.onclick=()=>tik(r.dataset.t,+r.dataset.x,+r.dataset.y));
+    const st=root.querySelector('#sl-status');
+    if(st&&!klaar){
+      let ok=0,tot=0;
+      for(let y=0;y<H;y++)for(let x=0;x<W;x++){const c=puz.clues[y][x];if(c==null)continue;tot++;if(celTelling(x,y)===c)ok++;}
+      st.textContent=`Cijfers kloppend: ${ok}/${tot}`;
+    }
+  }
+  function tik(t,x,y){
+    if(klaar)return;
+    if(t==='h')hE[y][x]=(hE[y][x]+1)%3; else vE[y][x]=(vE[y][x]+1)%3;
+    teken();
+    if(isOpgelost())win();
+  }
+
+  function win(){
+    stop();klaar=true;const time=elapsed;
+    LS.set('kp-slither-'+date,{time,coins:REWARD});
+    try{if(typeof window.wijsGachaMuntToe==='function')window.wijsGachaMuntToe(REWARD);}catch(e){console.warn('Munt slither mislukt:',e);}
+    feest();setTimeout(()=>toonKlaar(time,true),700);
+  }
+  function toonKlaar(time,vers){
+    const st=root.querySelector('#sl-status');
+    if(st)st.innerHTML=`<div class="sl-done">🎉 ${vers?`Lus gesloten! +🪙 ${REWARD}`:'Vandaag al opgelost'} · ⏱️ ${fmt(time)}<div class="sl-count">Nieuwe puzzel over <b id="sl-cd">–</b></div></div>`;
+    const el=root.querySelector('#sl-cd');if(!el)return;
+    const upd=()=>{const now=new Date(),m=new Date(now);m.setHours(24,0,0,0);let s=Math.floor((m-now)/1000);const h=s/3600|0;s%=3600;el.textContent=`${pad(h)}:${pad(s/60|0)}:${pad(s%60)}`;};
+    upd();clearInterval(cdId);cdId=setInterval(upd,1000);
+  }
+  function feest(){const c=document.createElement('div');c.className='sl-coinpop';c.textContent=`+🪙${REWARD}`;root.appendChild(c);setTimeout(()=>c.remove(),1400);
+    const em=['➰','✨','🎉','🌸'];for(let i=0;i<12;i++){const s=document.createElement('div');s.className='sl-confetti';s.textContent=em[i%em.length];s.style.left=(Math.random()*100)+'%';s.style.animationDelay=(Math.random()*0.3)+'s';root.appendChild(s);setTimeout(()=>s.remove(),1600);}}
+
+  function injectStyle(){if(document.getElementById('sl-style'))return;const s=document.createElement('style');s.id='sl-style';s.textContent=`
+    .sl-wrap{position:relative}
+    .sl-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:8px}
+    .sl-title{font-family:var(--font-display);font-size:24px;font-weight:800;color:var(--dark)}
+    .sl-date{font-size:13px;color:var(--muted)}
+    .sl-meta{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+    .sl-chip{background:var(--input-bg);border:1px solid var(--border);border-radius:20px;padding:4px 10px;font-size:14px;font-weight:700;white-space:nowrap}
+    .sl-uitleg{font-size:12.5px;color:var(--muted);line-height:1.5;margin:0 0 10px}
+    .sl-boardwrap{display:flex;justify-content:center}
+    #sl-svg{width:100%;max-width:380px;aspect-ratio:1;background:var(--input-bg);border:3px solid var(--sumi);border-radius:10px;touch-action:manipulation}
+    .sl-dot{fill:color-mix(in srgb,var(--sumi) 55%,transparent)}
+    .sl-num{font-family:var(--font-display);font-size:.42px;font-weight:800;fill:var(--dark);text-anchor:middle;dominant-baseline:central;pointer-events:none}
+    .sl-num-ok{fill:color-mix(in srgb,var(--muted) 70%,transparent)}
+    .sl-lijn{stroke:var(--shu);stroke-width:.09;stroke-linecap:round;pointer-events:none}
+    .sl-kruis{font-size:.3px;fill:var(--muted);text-anchor:middle;dominant-baseline:central;pointer-events:none}
+    .sl-hit{fill:transparent;cursor:pointer}
+    .sl-status{text-align:center;font-size:13px;color:var(--muted);margin:12px 0 8px;min-height:18px;font-weight:700}
+    .sl-btns{display:grid;grid-template-columns:1fr;gap:8px}
+    .sl-b2{background:var(--input-bg)!important;color:var(--text)!important;border:1px solid var(--border)!important;box-shadow:none!important;margin:0!important}
+    .sl-done{text-align:center;font-weight:700;color:var(--success);background:color-mix(in srgb,var(--matsuba) 12%,var(--input-bg));border:1px solid var(--success);border-radius:10px;padding:10px}
+    .sl-count{font-size:12.5px;color:var(--muted);font-weight:400;margin-top:6px}
+    .sl-coinpop{position:absolute;top:35%;left:50%;transform:translateX(-50%);font-size:34px;font-weight:900;color:var(--accent);text-shadow:0 2px 6px rgba(0,0,0,.3);pointer-events:none;animation:sl-coin 1.4s ease-out forwards;z-index:60}
+    @keyframes sl-coin{0%{opacity:0;transform:translate(-50%,10px) scale(.6)}20%{opacity:1;transform:translate(-50%,0) scale(1.1)}70%{opacity:1;transform:translate(-50%,-30px) scale(1)}100%{opacity:0;transform:translate(-50%,-60px) scale(.9)}}
+    .sl-confetti{position:absolute;top:-10px;font-size:22px;pointer-events:none;animation:sl-fall 1.5s ease-in forwards;z-index:50}
+    @keyframes sl-fall{to{transform:translateY(460px) rotate(220deg);opacity:0}}
+  `;document.head.appendChild(s);}
+
+  window.KanaSlither={start,buildDaily,telOplossingen};
+  window.startSlitherInit=function(){(window.switchScreen||function(){})('screen-slither');const el=document.getElementById('slither-root');if(el)start(el);};
 })();
 
 </script>
