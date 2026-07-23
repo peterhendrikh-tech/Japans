@@ -353,6 +353,7 @@
             <button class="btn" style="background:var(--matsuba);" onclick="startFlowInit()">🔵 Flow (Numberlink)</button>
             <button class="btn" style="background:var(--special);" onclick="startFloodInit()">🎨 Kleurnet (Flood-It)</button>
             <button class="btn" style="background:var(--ai);" onclick="startSokobanInit()">📦 Sokoban (300 levels)</button>
+            <button class="btn" style="background:#7a4a2a;" onclick="startNinjaInit()">🥷 Kana Ninja (platformer)</button>
             <button class="btn" style="background:var(--matsuba);" onclick="startFroggerInit()">🐸 Frogger</button>
             <button class="btn" style="background:#7a5a3a;" onclick="startKanadleInit()">🈁 Kanadle</button>
             <button class="btn" style="background:#3f5d8a;" onclick="startSudokuInit()">🔢 Kanji-sudoku</button>
@@ -507,6 +508,10 @@
 
     <div id="screen-sokoban" class="screen">
         <div id="sokoban-root"></div>
+    </div>
+
+    <div id="screen-ninja" class="screen">
+        <div id="ninja-root"></div>
     </div>
 
     <div id="screen-frogger" class="screen">
@@ -3315,6 +3320,346 @@
 
   window.KanaSokoban={start};
   window.startSokobanInit=function(){(window.switchScreen||function(){})('screen-sokoban');const el=document.getElementById('sokoban-root');if(el)start(el);};
+})();
+
+</script>
+<script id="ninja-engine">
+/* ============================================================
+   Kana Master · Kana Ninja (かなニンジャ) — platformer
+   20 vaste levels: ren, spring, verzamel kana en bereik de
+   torii ⛩️. Levels zijn vooraf gegenereerd én gevalideerd op
+   sprongafstand, dus altijd uitspeelbaar. Munten bij de eerste
+   keer uitspelen; bonus als je alle kana meeneemt.
+   Blootgesteld: window.startNinjaInit(), window.KanaNinja
+   ============================================================ */
+(function () {
+const LEVELS=[
+['                                        ','                                        ','                                        ','                                        ','                                        ','                                        ','                                        ','                                        ','                                        ','                             ==         ','                      ==                ','  P      o       o   o   o E o       T  ','############   #################  ######','############   #################  ######'],
+['                                         ','                                         ','                                         ','                                         ','                                         ','                                         ','                                         ','          o      o                       ','          ===  ====       ===            ','              E      o                   ','      o     ###############o             ','  P   ##########################      T  ','################################  #######','################################  #######'],
+['                                           ','                                           ','                                           ','                                           ','                                           ','                                           ','                                           ','                                           ','           o       o                       ','           === o   ==                      ','              ===                          ','  P                      o   E   o      T  ','############  ######   ####################','############  ######   ####################'],
+['                                            ','                                            ','                                            ','                                            ','                                            ','                                            ','                                            ','                                            ','             ==                             ','            ====          Eo    o    o   T  ','                o   o   ####################','  P         #########   ####################','#####################   ####################','#####################   ####################'],
+['                                              ','                                              ','                                              ','                                              ','                                              ','                                              ','                                              ','                                              ','                                              ','                         ===o                 ','                           ====   ====        ','  P       o   o     o     E       o        T  ','#################   #########   #####   ######','#################   #########   #####   ######'],
+['                                                ','                                                ','                                                ','                                                ','                                                ','                                                ','                                                ','                                                ','          o                                     ','         ====             ===                T  ','                      ==  o     o       ########','  P   o       o         #########  #############','#################   #############  #############','#################   ############# ^#############'],
+['                                                 ','                                                 ','                                                 ','                                                 ','                                                 ','                                                 ','                                                 ','           ====                                  ','                                                 ','         o        o                              ','        ######   ====  ===                       ','  P     ######      E    o   o         o      T  ','######  ######################   ################','######  ######################  ^################'],
+['                                                   ','                                                   ','                                                   ','                                                   ','                                                   ','                                                   ','                                                   ','                                                   ','          o                                        ','          ==           o===                        ','                     ====                          ','  P              E         o         o    o     T  ','######  #####   #############  ####################','######  #####  ^#############  ####################'],
+['                                                    ','                                                    ','                                                    ','                                                    ','                                                    ','                 o                                  ','                ==                                  ','                ==                                  ','               E        o      ====   ==    o    T  ','            ################    E       o  #########','          o ########################################','  P   ##############################################','####################################################','####################################################'],
+['                                                      ','                                                      ','                                                      ','                                                      ','                                                      ','                                                      ','                             o           o            ','                             ==     o  ===            ','                                    ====           T  ','                                   E   E    ##########','         ====        #################################','  P         o    o   #################################','######################################################','######################################################'],
+['                                                        ','                                                        ','                                                        ','                                                        ','                                                        ','                                                        ','                                                        ','                                      ==                ','                     o               ====               ','              ==   ====        o E  o           o       ','                          ##############  #######    T  ','  P      o  E             ##############  ##############','######  ########  ######################  ##############','######^ ######## ^###################### ^##############'],
+['                                                         ','                                                         ','                                                         ','                                                         ','                                                         ','                                                         ','                                                         ','                            o                            ','                           ==                            ','                                                      T  ','          ====             #######                 ######','  P         o   o     E    #######  o         o    ######','######  ###############################  ########  ######','######  ###############################^ ########  ######'],
+['                                                           ','                                                           ','                                                           ','                                                           ','                                                           ','                                                           ','                                                           ','                                                           ','                                                           ','                    o             ====   ====      o       ','                   ==                   ==== #######    T  ','  P            o E                o   o      ####### ######','######  ############  ######  ############   ####### ######','######  ############  ######  ############   ####### ######'],
+['                                                            ','                                                            ','                                                            ','                                                            ','                                                            ','                                                            ','                           o                                ','          ==         o    ====                              ','                     ====      ====                         ','                     E  E                ==                 ','        #########  #############          ====              ','  P     #########  #############    o E  o     o         T  ','######  #########  #############  ##########################','###### ^#########^ #############  ##########################'],
+['                                                              ','                                                              ','                                                              ','                                                              ','                                                              ','                                                              ','                     o                                        ','                    ===                                       ','                           ====               ===  ===     T  ','                  #########                  ====      #######','          E   o   ######### o           E o   o        #######','  P   #############################   ###############  #######','###################################   ###############  #######','################################### ^ ############### ^#######'],
+['                                                                ','                                                                ','                                                                ','                                                                ','                                                                ','                                                                ','                                                                ','                                          ==== ====          T  ','                  o   ===                 ===        ###########','               ====          Eo           E   o      ###########','                         ######## ==     ##########  ###########','  P    o             ############  o     ##########  ###########','##################   #################   ##########  ###########','##################   #################   ##########  ###########'],
+['                                                                 ','                                                                 ','                                                                 ','                                                                 ','                                                                 ','                                                                 ','                                                                 ','                                                                 ','                      ===                                        ','                          ===    ==     o                        ','                      o  E      ==     ==           ===       T  ','  P             o    #########  o  E               o ####  ######','######   #########   #########  #########################  ######','######   #########  ^#########  ######################### ^######'],
+['                                                                   ','                                                                   ','                                                                   ','                                                                   ','                                                                   ','                                                                   ','                                                                   ','                                                                   ','                        o                                          ','                    ======                            ====         ','                   ===                                          T  ','  P        E Eo              o               o       E o  #########','######   ########################  #####  ######  ######  #########','######^  ########################  #####  ###### ^###### ^#########'],
+['                                                                    ','                                                                    ','                                                                    ','                                                                    ','                                                                    ','                                                                    ','                                                                    ','                                                                    ','                                                                    ','                            ==        ===                           ','                               ==         === ####                  ','  P         o         o     EE      o     o   #### E       o     T  ','######   ####  ########   #############  ################  #########','######^  ####  ########   #############  ################^^#########'],
+['                                                                      ','                                                                      ','                                                                      ','                                                                      ','                                                                      ','                                                          ==          ','                                                           ==         ','                              o  ===           o   o     E            ','                         ==  ======           #######  ########       ','                         E           o        #######  ########    T  ','               ===      ##############  ####  #######  ###############','  P          o      ##################  ####  #######  ###############','##################  ##################  ####  #######  ###############','##################  ################## ^####^ ####### ^###############']
+];
+  const TILE=32, ROWS=14;
+  const G=2000, JUMP=660, SPEED=210, MAXVAL=760;
+  const COYOTE=0.10, BUFFER=0.12;
+  const KANA=['あ','い','う','え','お','か','き','く','け','こ','さ','し','す','せ','そ','た','ち','つ','て','と','な','に','ぬ','ね','の'];
+  const ROMAJI={'あ':'a','い':'i','う':'u','え':'e','お':'o','か':'ka','き':'ki','く':'ku','け':'ke','こ':'ko','さ':'sa','し':'shi','す':'su','せ':'se','そ':'so','た':'ta','ち':'chi','つ':'tsu','て':'te','と':'to','な':'na','に':'ni','ぬ':'nu','ね':'ne','の':'no'};
+  const BELONING=lvl=>3+Math.floor(lvl/4);      // 3..7 munten
+  const BONUS=2;                                 // extra bij alle kana
+
+  const LS={get:(k,f)=>{try{const v=localStorage.getItem(k);return v==null?f:JSON.parse(v);}catch(e){return f;}},set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}};
+  const pad=n=>String(n).padStart(2,'0');const fmt=s=>`${Math.floor(s/60)}:${pad(s%60)}`;
+
+  let root,view,cur,voortgang,cv,ctx,VW,VH,scale;
+  let kaart,W,speler,vijanden,kanas,doel,camX,toetsen,raf,laatste,dood,gewonnen,startT,tijd,jumpBuf,coyote,keyH,keyU,pauze;
+
+  function start(container){root=container;voortgang=LS.get('ninja-voortgang',{});view='select';renderSelect();}
+
+  const gedaan=l=>!!voortgang[l];
+  const alleKana=l=>voortgang[l]&&voortgang[l].alle;
+  function eersteOpen(){for(let i=1;i<=LEVELS.length;i++)if(!gedaan(i))return i;return 1;}
+
+  // ---------- levelkiezer ----------
+  function renderSelect(){
+    stopSpel();
+    const klaar=Object.keys(voortgang).length;
+    let html=`<div class="nj-wrap">
+      <div class="nj-head"><div><div class="nj-title">🥷 Kana Ninja</div><div class="nj-sub">${klaar}/${LEVELS.length} levels uitgespeeld</div></div></div>
+      <p class="nj-uitleg">Ren en spring door het level, verzamel de kana en bereik de torii ⛩️. Pas op voor de tanuki 🦝 en de bamboepunten. Je kunt vijanden uitschakelen door er bovenop te springen.</p>
+      <button class="btn" id="nj-verder" style="margin:0 0 12px">▶ Ga verder (level ${eersteOpen()})</button>
+      <div class="nj-lvlgrid">`;
+    for(let l=1;l<=LEVELS.length;l++){
+      const d=voortgang[l];
+      html+=`<button class="nj-lvl${d?' nj-lvl-done':''}" data-l="${l}">
+        <span class="nj-lvl-n">${l}</span>
+        <span class="nj-lvl-s">${d?(d.alle?'★':'✓'):'·'}</span></button>`;
+    }
+    html+=`</div><button class="btn" id="nj-menu" style="background:var(--muted);margin-top:12px;">← Menu</button></div>`;
+    root.innerHTML=html;injectStyle();
+    root.querySelector('#nj-verder').onclick=()=>laad(eersteOpen());
+    root.querySelectorAll('.nj-lvl').forEach(b=>b.onclick=()=>laad(+b.dataset.l));
+    root.querySelector('#nj-menu').onclick=()=>{stopSpel();(window.switchScreen||function(){})('screen-menu');};
+  }
+
+  // ---------- level laden ----------
+  function laad(l){
+    cur=l;view='play';
+    const rijen=LEVELS[l-1];
+    W=rijen[0].length;
+    kaart=rijen.map(r=>r.split(''));
+    vijanden=[];kanas=[];doel=null;
+    let kIdx=(l*7)%KANA.length;
+    for(let y=0;y<ROWS;y++)for(let x=0;x<W;x++){
+      const c=kaart[y][x];
+      if(c==='P'){speler={x:x*TILE,y:y*TILE,vx:0,vy:0,w:22,h:28,grond:false,kijk:1};kaart[y][x]=' ';}
+      else if(c==='E'){vijanden.push({x:x*TILE,y:y*TILE+4,w:26,h:26,vx:45,dood:false,x0:x*TILE});kaart[y][x]=' ';}
+      else if(c==='o'){kanas.push({x:x*TILE+16,y:y*TILE+16,teken:KANA[kIdx%KANA.length],op:false});kIdx++;kaart[y][x]=' ';}
+      else if(c==='T'){doel={x:x*TILE,y:y*TILE};kaart[y][x]=' ';}
+    }
+    camX=0;dood=false;gewonnen=false;pauze=false;tijd=0;startT=performance.now();
+    jumpBuf=0;coyote=0;toetsen={l:false,r:false,j:false};
+    renderSpel();
+  }
+
+  function renderSpel(){
+    root.innerHTML=`<div class="nj-wrap">
+      <div class="nj-head"><div><div class="nj-title">🥷 Level ${cur}</div><div class="nj-sub" id="nj-sub">kana <span id="nj-kana">0</span>/${kanas.length} · 🪙 ${BELONING(cur)}</div></div>
+        <div class="nj-meta"><span class="nj-chip">⏱️ <span id="nj-timer">0:00</span></span></div></div>
+      <div class="nj-cvwrap"><canvas id="nj-cv"></canvas><div class="nj-overlay" id="nj-ov"></div></div>
+      <div class="nj-ctrl">
+        <div class="nj-dpad">
+          <button class="nj-key" id="nj-left">◀</button>
+          <button class="nj-key" id="nj-right">▶</button>
+        </div>
+        <button class="nj-jump" id="nj-jump">SPRING</button>
+      </div>
+      <div class="nj-btns">
+        <button class="btn nj-b2" id="nj-herstart">↺ Opnieuw</button>
+        <button class="btn nj-b2" id="nj-levels">≡ Levels</button>
+      </div></div>`;
+    injectStyle();
+    cv=root.querySelector('#nj-cv');ctx=cv.getContext('2d');maatCanvas();
+    const bind=(id,k)=>{const b=root.querySelector(id);
+      const aan=e=>{e.preventDefault();toetsen[k]=true;if(k==='j')jumpBuf=BUFFER;};
+      const uit=e=>{e.preventDefault();toetsen[k]=false;};
+      b.addEventListener('pointerdown',aan);b.addEventListener('pointerup',uit);
+      b.addEventListener('pointerleave',uit);b.addEventListener('pointercancel',uit);};
+    bind('#nj-left','l');bind('#nj-right','r');bind('#nj-jump','j');
+    root.querySelector('#nj-herstart').onclick=()=>laad(cur);
+    root.querySelector('#nj-levels').onclick=()=>{stopSpel();renderSelect();};
+    keyH=e=>{const m={ArrowLeft:'l',ArrowRight:'r',a:'l',d:'r'};if(m[e.key]){e.preventDefault();toetsen[m[e.key]]=true;}
+      if(e.key===' '||e.key==='ArrowUp'||e.key==='w'){e.preventDefault();toetsen.j=true;jumpBuf=BUFFER;}};
+    keyU=e=>{const m={ArrowLeft:'l',ArrowRight:'r',a:'l',d:'r'};if(m[e.key])toetsen[m[e.key]]=false;
+      if(e.key===' '||e.key==='ArrowUp'||e.key==='w')toetsen.j=false;};
+    window.addEventListener('keydown',keyH);window.addEventListener('keyup',keyU);
+    window.addEventListener('resize',maatCanvas);
+    laatste=performance.now();raf=requestAnimationFrame(lus);
+  }
+  function maatCanvas(){
+    const wrap=root.querySelector('.nj-cvwrap');if(!wrap||!cv)return;
+    const bw=Math.min(wrap.clientWidth||360,520);
+    VW=Math.round(bw); VH=Math.round(bw*0.58);
+    cv.width=VW;cv.height=VH;cv.style.width=VW+'px';cv.style.height=VH+'px';
+    scale=VH/(ROWS*TILE);
+  }
+  function stopSpel(){if(raf)cancelAnimationFrame(raf);raf=null;
+    if(keyH){window.removeEventListener('keydown',keyH);keyH=null;}
+    if(keyU){window.removeEventListener('keyup',keyU);keyU=null;}
+    window.removeEventListener('resize',maatCanvas);}
+
+  // ---------- fysica ----------
+  const vast=(tx,ty)=>{if(tx<0||tx>=W||ty<0)return true;if(ty>=ROWS)return false;const c=kaart[ty][tx];return c==='#';};
+  const platform=(tx,ty)=>{if(tx<0||tx>=W||ty<0||ty>=ROWS)return false;return kaart[ty][tx]==='=';};
+  const spike=(tx,ty)=>{if(tx<0||tx>=W||ty<0||ty>=ROWS)return false;return kaart[ty][tx]==='^';};
+
+  function botsX(o){
+    const t=Math.floor(o.y/TILE), b=Math.floor((o.y+o.h-1)/TILE);
+    if(o.vx>0){const r=Math.floor((o.x+o.w)/TILE);
+      for(let y=t;y<=b;y++)if(vast(r,y)){o.x=r*TILE-o.w-0.01;o.vx=0;return true;}}
+    else if(o.vx<0){const l=Math.floor(o.x/TILE);
+      for(let y=t;y<=b;y++)if(vast(l,y)){o.x=(l+1)*TILE+0.01;o.vx=0;return true;}}
+    return false;
+  }
+  function botsY(o){
+    const l=Math.floor(o.x/TILE), r=Math.floor((o.x+o.w-1)/TILE);
+    o.grond=false;
+    if(o.vy>0){const b=Math.floor((o.y+o.h)/TILE);
+      for(let x=l;x<=r;x++){
+        if(vast(x,b)||(platform(x,b)&&(o.y+o.h)-b*TILE<=o.vy*0.05+12)){
+          o.y=b*TILE-o.h-0.01;o.vy=0;o.grond=true;return;}}}
+    else if(o.vy<0){const t=Math.floor(o.y/TILE);
+      for(let x=l;x<=r;x++)if(vast(x,t)){o.y=(t+1)*TILE+0.01;o.vy=0;return;}}
+  }
+  function raaktSpike(o){
+    const l=Math.floor(o.x/TILE), r=Math.floor((o.x+o.w-1)/TILE);
+    const t=Math.floor(o.y/TILE), b=Math.floor((o.y+o.h-1)/TILE);
+    for(let y=t;y<=b;y++)for(let x=l;x<=r;x++)if(spike(x,y))return true;
+    return false;
+  }
+  const overlap=(a,b)=>a.x<b.x+b.w&&b.x<a.x+a.w&&a.y<b.y+b.h&&b.y<a.y+a.h;
+
+  function update(dt){
+    if(dood||gewonnen||pauze)return;
+    tijd=(performance.now()-startT)/1000;
+    // horizontaal
+    const richting=(toetsen.r?1:0)-(toetsen.l?1:0);
+    speler.vx=richting*SPEED;
+    if(richting)speler.kijk=richting;
+    speler.x+=speler.vx*dt;botsX(speler);
+    // springen met coyote-tijd en invoerbuffer
+    coyote=speler.grond?COYOTE:Math.max(0,coyote-dt);
+    jumpBuf=Math.max(0,jumpBuf-dt);
+    if(jumpBuf>0&&coyote>0){speler.vy=-JUMP;speler.grond=false;coyote=0;jumpBuf=0;}
+    if(!toetsen.j&&speler.vy<-200)speler.vy=-200;   // variabele spronghoogte
+    speler.vy=Math.min(MAXVAL,speler.vy+G*dt);
+    speler.y+=speler.vy*dt;botsY(speler);
+    // vijanden
+    for(const v of vijanden){
+      if(v.dood)continue;
+      v.x+=v.vx*dt;
+      const vt=Math.floor((v.y+v.h+2)/TILE);
+      const vl=Math.floor(v.x/TILE), vr=Math.floor((v.x+v.w-1)/TILE);
+      const steunL=vast(vl,vt)||platform(vl,vt), steunR=vast(vr,vt)||platform(vr,vt);
+      if(!steunL||!steunR||vast(vr+(v.vx>0?1:0),Math.floor(v.y/TILE))||Math.abs(v.x-v.x0)>90){v.vx*=-1;v.x+=v.vx*dt*2;}
+      if(overlap(speler,v)){
+        if(speler.vy>60&&speler.y+speler.h-v.y<18){v.dood=true;speler.vy=-380;}
+        else sterf();
+      }
+    }
+    // kana
+    for(const k of kanas){
+      if(k.op)continue;
+      if(Math.abs((speler.x+speler.w/2)-k.x)<22&&Math.abs((speler.y+speler.h/2)-k.y)<24){
+        k.op=true;melding(k.teken+' = '+(ROMAJI[k.teken]||''));
+        const el=root.querySelector('#nj-kana');if(el)el.textContent=kanas.filter(q=>q.op).length;
+      }
+    }
+    // gevaren
+    if(raaktSpike(speler)||speler.y>ROWS*TILE+80)sterf();
+    // doel
+    if(doel&&Math.abs((speler.x+speler.w/2)-(doel.x+TILE/2))<26&&Math.abs((speler.y+speler.h)-(doel.y+TILE))<40)win();
+    // camera
+    const doelCam=speler.x+speler.w/2-(VW/scale)/2;
+    camX+=(Math.max(0,Math.min(W*TILE-(VW/scale),doelCam))-camX)*Math.min(1,dt*8);
+    const t=root.querySelector('#nj-timer');if(t)t.textContent=fmt(Math.floor(tijd));
+  }
+
+  function sterf(){
+    if(dood)return;dood=true;
+    toonOverlay(`<div class="nj-msg nj-fail">💥 Oeps!<button class="btn" id="nj-retry">Opnieuw proberen</button></div>`);
+    const b=root.querySelector('#nj-retry');if(b)b.onclick=()=>laad(cur);
+  }
+  function win(){
+    if(gewonnen)return;gewonnen=true;
+    const alle=kanas.every(k=>k.op);
+    const eerder=voortgang[cur];
+    const verdien=(!eerder?BELONING(cur):0)+((alle&&(!eerder||!eerder.alle))?BONUS:0);
+    voortgang[cur]={tijd:Math.floor(tijd),alle:alle||(eerder&&eerder.alle)};
+    LS.set('ninja-voortgang',voortgang);
+    if(verdien>0){try{if(typeof window.wijsGachaMuntToe==='function')window.wijsGachaMuntToe(verdien);}catch(e){console.warn('Munt ninja mislukt:',e);}}
+    const volgende=cur<LEVELS.length?cur+1:null;
+    toonOverlay(`<div class="nj-msg nj-ok">⛩️ Level ${cur} gehaald!
+      <div class="nj-res">kana ${kanas.filter(k=>k.op).length}/${kanas.length}${alle?' ★':''} · ⏱️ ${fmt(Math.floor(tijd))}${verdien>0?` · +🪙 ${verdien}`:''}</div>
+      ${volgende?`<button class="btn" id="nj-next">Volgend level →</button>`:`<div class="nj-res">🏆 Alle levels uitgespeeld!</div>`}
+      <button class="btn nj-b2" id="nj-back2">≡ Levels</button></div>`);
+    const nb=root.querySelector('#nj-next');if(nb)nb.onclick=()=>laad(volgende);
+    root.querySelector('#nj-back2').onclick=()=>{stopSpel();renderSelect();};
+  }
+  function toonOverlay(html){const ov=root.querySelector('#nj-ov');if(ov){ov.innerHTML=html;ov.classList.add('nj-ov-aan');}}
+  function melding(t){const ov=root.querySelector('#nj-ov');if(!ov||dood||gewonnen)return;
+    const d=document.createElement('div');d.className='nj-pop';d.textContent=t;ov.appendChild(d);setTimeout(()=>d.remove(),900);}
+
+  // ---------- tekenen ----------
+  function lus(nu){
+    const dt=Math.min(0.033,(nu-laatste)/1000||0.016);laatste=nu;
+    update(dt);teken();
+    raf=requestAnimationFrame(lus);
+  }
+  function teken(){
+    if(!ctx)return;
+    ctx.setTransform(1,0,0,1,0,0);
+    // lucht
+    const g=ctx.createLinearGradient(0,0,0,VH);g.addColorStop(0,'#cfe3ee');g.addColorStop(1,'#f2e6cf');
+    ctx.fillStyle=g;ctx.fillRect(0,0,VW,VH);
+    // verre bergen
+    ctx.fillStyle='rgba(90,120,130,.30)';
+    for(let i=0;i<6;i++){const bx=(i*260-camX*0.25)%(VW+520)-160;
+      ctx.beginPath();ctx.moveTo(bx,VH*0.72);ctx.lineTo(bx+120,VH*0.34);ctx.lineTo(bx+240,VH*0.72);ctx.closePath();ctx.fill();}
+    ctx.setTransform(scale,0,0,scale,-camX*scale,0);
+    const x0=Math.floor(camX/TILE)-1, x1=Math.ceil((camX+VW/scale)/TILE)+1;
+    // tegels
+    for(let y=0;y<ROWS;y++)for(let x=Math.max(0,x0);x<Math.min(W,x1);x++){
+      const c=kaart[y][x];const px=x*TILE,py=y*TILE;
+      if(c==='#'){
+        ctx.fillStyle='#6b5540';ctx.fillRect(px,py,TILE,TILE);
+        ctx.fillStyle='#4c6b4f';ctx.fillRect(px,py,TILE,7);
+        ctx.strokeStyle='rgba(0,0,0,.12)';ctx.lineWidth=1;ctx.strokeRect(px+.5,py+.5,TILE-1,TILE-1);
+      } else if(c==='='){
+        ctx.fillStyle='#b8893f';ctx.fillRect(px,py+6,TILE,12);
+        ctx.fillStyle='rgba(0,0,0,.15)';ctx.fillRect(px,py+16,TILE,2);
+      } else if(c==='^'){
+        ctx.fillStyle='#4c6b4f';
+        for(let k=0;k<3;k++){ctx.beginPath();ctx.moveTo(px+k*11,py+TILE);ctx.lineTo(px+k*11+5.5,py+8);ctx.lineTo(px+k*11+11,py+TILE);ctx.closePath();ctx.fill();}
+      }
+    }
+    // doel: torii
+    if(doel){const px=doel.x,py=doel.y;
+      ctx.fillStyle='#ab3a35';
+      ctx.fillRect(px-6,py-2,44,6); ctx.fillRect(px-2,py+8,36,5);
+      ctx.fillRect(px+2,py,6,TILE); ctx.fillRect(px+24,py,6,TILE);}
+    // kana
+    ctx.font='bold 20px "Shippori Mincho", serif';ctx.textAlign='center';ctx.textBaseline='middle';
+    for(const k of kanas){
+      if(k.op)continue;
+      const bob=Math.sin(performance.now()/300+k.x)*3;
+      ctx.fillStyle='rgba(255,248,238,.9)';ctx.beginPath();ctx.arc(k.x,k.y+bob,13,0,6.28);ctx.fill();
+      ctx.strokeStyle='#b8893f';ctx.lineWidth=2;ctx.stroke();
+      ctx.fillStyle='#2b2420';ctx.fillText(k.teken,k.x,k.y+bob+1);
+    }
+    // vijanden
+    for(const v of vijanden){
+      if(v.dood)continue;
+      ctx.font='24px serif';ctx.fillText('🦝',v.x+v.w/2,v.y+v.h/2);
+    }
+    // speler
+    const sx=speler.x,sy=speler.y;
+    ctx.fillStyle='#2c4a5e';ctx.fillRect(sx,sy+6,speler.w,speler.h-6);
+    ctx.fillStyle='#f6f0e3';ctx.fillRect(sx+2,sy,speler.w-4,10);   // hoofdband
+    ctx.fillStyle='#2b2420';ctx.fillRect(sx+3,sy+3,speler.w-6,4);
+    ctx.fillStyle='#fff';ctx.fillRect(sx+(speler.kijk>0?speler.w-9:4),sy+4,4,3);
+    ctx.setTransform(1,0,0,1,0,0);
+  }
+
+  function injectStyle(){if(document.getElementById('nj-style'))return;const s=document.createElement('style');s.id='nj-style';s.textContent=`
+    .nj-wrap{position:relative}
+    .nj-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:8px}
+    .nj-title{font-family:var(--font-display);font-size:24px;font-weight:800;color:var(--dark)}
+    .nj-sub{font-size:13px;color:var(--muted)}
+    .nj-meta{display:flex;gap:6px}
+    .nj-chip{background:var(--input-bg);border:1px solid var(--border);border-radius:20px;padding:4px 10px;font-size:14px;font-weight:700;white-space:nowrap}
+    .nj-uitleg{font-size:12.5px;color:var(--muted);line-height:1.5;margin:0 0 10px}
+    .nj-lvlgrid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+    .nj-lvl{position:relative;aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--input-bg);border:1px solid var(--border);border-radius:10px;cursor:pointer;color:var(--text)}
+    .nj-lvl-done{background:color-mix(in srgb,var(--success) 20%,var(--input-bg));border-color:var(--success)}
+    .nj-lvl-n{font-weight:800;font-size:15px}
+    .nj-lvl-s{font-size:12px;color:var(--kincha);font-weight:800}
+    .nj-cvwrap{position:relative;display:flex;justify-content:center}
+    #nj-cv{border:3px solid var(--sumi);border-radius:10px;touch-action:none;max-width:100%;display:block}
+    .nj-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
+    .nj-overlay.nj-ov-aan{background:rgba(20,16,12,.55);border-radius:10px;pointer-events:auto}
+    .nj-msg{background:var(--card-bg);border-radius:14px;padding:16px;text-align:center;font-weight:800;color:var(--dark);max-width:80%;font-size:16px}
+    .nj-ok{border:2px solid var(--success)}.nj-fail{border:2px solid var(--danger)}
+    .nj-res{font-size:12.5px;color:var(--muted);font-weight:600;margin:6px 0}
+    .nj-pop{position:absolute;top:18%;left:50%;transform:translateX(-50%);background:rgba(43,36,32,.85);color:#fff8ee;padding:5px 12px;border-radius:16px;font-weight:800;font-size:15px;animation:nj-pop 0.9s ease-out forwards}
+    @keyframes nj-pop{0%{opacity:0;transform:translate(-50%,8px)}25%{opacity:1;transform:translate(-50%,0)}100%{opacity:0;transform:translate(-50%,-16px)}}
+    .nj-ctrl{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:12px}
+    .nj-dpad{display:flex;gap:8px}
+    .nj-key{width:62px;height:56px;background:var(--input-bg);border:1px solid var(--border);border-radius:12px;font-size:22px;font-weight:800;color:var(--dark);cursor:pointer;touch-action:none;user-select:none}
+    .nj-key:active{background:var(--ai);color:#fff8ee}
+    .nj-jump{flex:1;height:56px;background:var(--shu);border:none;border-radius:12px;color:#fff8ee;font-family:var(--font-body);font-weight:800;font-size:16px;cursor:pointer;touch-action:none;user-select:none}
+    .nj-jump:active{filter:brightness(.9)}
+    .nj-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+    .nj-b2{background:var(--input-bg)!important;color:var(--text)!important;border:1px solid var(--border)!important;box-shadow:none!important;margin:0!important}
+  `;document.head.appendChild(s);}
+
+  window.KanaNinja={start,LEVELS};
+  window.startNinjaInit=function(){(window.switchScreen||function(){})('screen-ninja');const el=document.getElementById('ninja-root');if(el)start(el);};
 })();
 
 </script>
