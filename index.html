@@ -354,6 +354,7 @@
             <button class="btn" style="background:var(--special);" onclick="startFloodInit()">🎨 Kleurnet (Flood-It)</button>
             <button class="btn" style="background:var(--ai);" onclick="startSokobanInit()">📦 Sokoban (300 levels)</button>
             <button class="btn" style="background:#7a4a2a;" onclick="startNinjaInit()">🥷 Kana Ninja (platformer)</button>
+            <button class="btn" style="background:#8a5a2a;" onclick="startStudioInit()">🛠️ Ninja Studio (levels maken)</button>
             <button class="btn" style="background:var(--matsuba);" onclick="startFroggerInit()">🐸 Frogger</button>
             <button class="btn" style="background:#7a5a3a;" onclick="startKanadleInit()">🈁 Kanadle</button>
             <button class="btn" style="background:#3f5d8a;" onclick="startSudokuInit()">🔢 Kanji-sudoku</button>
@@ -512,6 +513,10 @@
 
     <div id="screen-ninja" class="screen">
         <div id="ninja-root"></div>
+    </div>
+
+    <div id="screen-studio" class="screen">
+        <div id="studio-root"></div>
     </div>
 
     <div id="screen-frogger" class="screen">
@@ -3468,10 +3473,23 @@ const LEVELS=[
   }
 
   // ---------- level laden ----------
+  let extern=null;            // {rijen, naam, terug} bij een zelfgemaakt/gedeeld level
+
   function laad(l){
+    extern=null;
+    laadRijen(LEVELS[l-1], l);
+  }
+  // speel een willekeurig level (editor, gedeelde levels)
+  function speelCustom(rijen, naam, terugFn, opGehaald){
+    extern={naam:naam||'Zelfgemaakt', terug:terugFn||null, opGehaald:opGehaald||null};
+    laadRijen(rijen, null);
+  }
+  let laatsteRijen=null;
+  function kaartNaarRijen(){return laatsteRijen;}
+  function laadRijen(rijen, l){
+    laatsteRijen=rijen.slice();
     stopSpel();                 // voorkomt dat er meerdere game-loops tegelijk draaien
     cur=l;view='play';
-    const rijen=LEVELS[l-1];
     W=rijen[0].length;ROWS=rijen.length;
     kaart=rijen.map(r=>r.split(''));
     vijanden=[];kanas=[];doel=null;
@@ -3492,7 +3510,7 @@ const LEVELS=[
 
   function renderSpel(){
     root.innerHTML=`<div class="nj-wrap">
-      <div class="nj-head"><div><div class="nj-title">🥷 Level ${cur}</div><div class="nj-sub" id="nj-sub">kana <span id="nj-kana">0</span>/${kanas.length} · 🪙 ${BELONING(cur)}</div></div>
+      <div class="nj-head"><div><div class="nj-title">🥷 ${extern?extern.naam:"Level "+cur}</div><div class="nj-sub" id="nj-sub">kana <span id="nj-kana">0</span>/${kanas.length} · 🪙 ${BELONING(cur)}</div></div>
         <div class="nj-meta"><span class="nj-chip">⏱️ <span id="nj-timer">0:00</span></span></div></div>
       <div class="nj-cvwrap"><canvas id="nj-cv"></canvas><div class="nj-overlay" id="nj-ov"></div></div>
       <div class="nj-ctrl">
@@ -3504,7 +3522,7 @@ const LEVELS=[
       </div>
       <div class="nj-btns">
         <button class="btn nj-b2" id="nj-herstart">↺ Opnieuw</button>
-        <button class="btn nj-b2" id="nj-levels">≡ Levels</button>
+        <button class="btn nj-b2" id="nj-levels">${extern?"← Terug":"≡ Levels"}</button>
       </div></div>`;
     injectStyle();
     cv=root.querySelector('#nj-cv');ctx=cv.getContext('2d');maatCanvas();
@@ -3514,8 +3532,8 @@ const LEVELS=[
       b.addEventListener('pointerdown',aan);b.addEventListener('pointerup',uit);
       b.addEventListener('pointerleave',uit);b.addEventListener('pointercancel',uit);};
     bind('#nj-left','l');bind('#nj-right','r');bind('#nj-jump','j');
-    root.querySelector('#nj-herstart').onclick=()=>laad(cur);
-    root.querySelector('#nj-levels').onclick=()=>{stopSpel();renderSelect();};
+    root.querySelector('#nj-herstart').onclick=()=>{if(extern)laadRijen(laatsteRijen,null);else laad(cur);};
+    root.querySelector('#nj-levels').onclick=()=>{stopSpel();if(extern&&extern.terug)extern.terug();else renderSelect();};
     keyH=e=>{const m={ArrowLeft:'l',ArrowRight:'r',a:'l',d:'r'};if(m[e.key]){e.preventDefault();toetsen[m[e.key]]=true;}
       if(e.key===' '||e.key==='ArrowUp'||e.key==='w'){e.preventDefault();toetsen.j=true;jumpBuf=BUFFER;}};
     keyU=e=>{const m={ArrowLeft:'l',ArrowRight:'r',a:'l',d:'r'};if(m[e.key])toetsen[m[e.key]]=false;
@@ -3622,6 +3640,17 @@ const LEVELS=[
   }
   function win(){
     if(gewonnen)return;gewonnen=true;
+    if(extern){
+      const alleK=kanas.every(k=>k.op);
+      if(extern.opGehaald)extern.opGehaald({tijd:Math.floor(tijd),alle:alleK,kana:kanas.filter(k=>k.op).length,totaal:kanas.length});
+      toonOverlay(`<div class="nj-msg nj-ok">⛩️ Uitgespeeld!
+        <div class="nj-res">kana ${kanas.filter(k=>k.op).length}/${kanas.length} · ⏱️ ${fmt(Math.floor(tijd))}</div>
+        <button class="btn" id="nj-again">↺ Nog eens</button>
+        <button class="btn nj-b2" id="nj-back3">← Terug</button></div>`);
+      const ab=root.querySelector('#nj-again');if(ab)ab.onclick=()=>laadRijen(kaartNaarRijen(), null);
+      const bb=root.querySelector('#nj-back3');if(bb)bb.onclick=()=>{stopSpel();if(extern.terug)extern.terug();};
+      return;
+    }
     const alle=kanas.every(k=>k.op);
     const eerder=voortgang[cur];
     const verdien=(!eerder?BELONING(cur):0)+((alle&&(!eerder||!eerder.alle))?BONUS:0);
@@ -3744,8 +3773,382 @@ const LEVELS=[
     .nj-b2{background:var(--input-bg)!important;color:var(--text)!important;border:1px solid var(--border)!important;box-shadow:none!important;margin:0!important}
   `;document.head.appendChild(s);}
 
-  window.KanaNinja={start,LEVELS};
+  window.KanaNinja={start,LEVELS,speelCustom,ROWS:()=>ROWS};
   window.startNinjaInit=function(){(window.switchScreen||function(){})('screen-ninja');const el=document.getElementById('ninja-root');if(el)start(el);};
+})();
+
+</script>
+<script id="studio-engine">
+/* ============================================================
+   Kana Master · Ninja Studio (忍者スタジオ)
+   Bouw je eigen Kana Ninja-levels, test ze, publiceer ze met een
+   deelcode en speel levels van anderen. Publiceren kan pas nadat
+   je je eigen level hebt uitgespeeld — zo staat er nooit een
+   onhaalbaar level online.
+   Blootgesteld: window.startStudioInit(), window.KanaStudio
+   ============================================================ */
+(function () {
+  const H = 20, MIN_W = 20, MAX_W = 200, START_W = 60;
+  const PALET = [
+    {t:'#', naam:'Grond',    icoon:'⬛', kleur:'#6b5540'},
+    {t:'=', naam:'Platform', icoon:'▬',  kleur:'#b8893f'},
+    {t:'^', naam:'Punten',   icoon:'▲',  kleur:'#4c6b4f'},
+    {t:'E', naam:'Tanuki',   icoon:'🦝', kleur:'transparent'},
+    {t:'o', naam:'Kana',     icoon:'㋐', kleur:'transparent'},
+    {t:'P', naam:'Start',    icoon:'🥷', kleur:'transparent', uniek:true},
+    {t:'T', naam:'Torii',    icoon:'⛩️', kleur:'transparent', uniek:true},
+    {t:' ', naam:'Wissen',   icoon:'✕',  kleur:'transparent'}
+  ];
+
+  const LS={get:(k,f)=>{try{const v=localStorage.getItem(k);return v==null?f:JSON.parse(v);}catch(e){return f;}},set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}};
+  const user=()=> (typeof huidigeGebruiker!=='undefined')?huidigeGebruiker:null;
+  const hasCloud=()=> (typeof supabaseClient!=='undefined') && !!user();
+  const pad=n=>String(n).padStart(2,'0');const fmt=s=>`${Math.floor(s/60)}:${pad(s%60)}`;
+
+  let root, tab, kaart, W, gekozenTegel, penseel, camX, getest, naam, mijnLevels, lijst, lijstSort, bezigTekenen;
+
+  function start(container){
+    root=container;tab='bouw';gekozenTegel='#';penseel=1;camX=0;getest=false;lijstSort='nieuw';
+    const bewaard=LS.get('studio-concept',null);
+    if(bewaard&&Array.isArray(bewaard.kaart)){kaart=bewaard.kaart.map(r=>r.split(''));W=kaart[0].length;naam=bewaard.naam||'';}
+    else nieuwKaart();
+    render();
+  }
+  function nieuwKaart(){
+    W=START_W;naam='';
+    kaart=Array.from({length:H},()=>Array(W).fill(' '));
+    for(let x=0;x<W;x++){kaart[H-1][x]='#';kaart[H-2][x]='#';}
+    kaart[H-3][2]='P';kaart[H-3][W-3]='T';
+    getest=false;
+  }
+  const rijen=()=>kaart.map(r=>r.join(''));
+  function bewaarConcept(){LS.set('studio-concept',{kaart:rijen(),naam});}
+
+  // ---------- validatie ----------
+  function controle(){
+    const t=rijen().join('');
+    const fouten=[];
+    const nP=(t.match(/P/g)||[]).length, nT=(t.match(/T/g)||[]).length;
+    if(nP!==1)fouten.push('precies één startpunt 🥷 nodig'+(nP>1?' (nu '+nP+')':''));
+    if(nT!==1)fouten.push('precies één torii ⛩️ nodig'+(nT>1?' (nu '+nT+')':''));
+    let grond=0;for(const r of kaart)for(const c of r)if(c==='#'||c==='=')grond++;
+    if(grond<10)fouten.push('te weinig grond om op te lopen');
+    // start moet iets onder zich hebben
+    let sp=null;
+    for(let y=0;y<H;y++)for(let x=0;x<W;x++)if(kaart[y][x]==='P')sp=[x,y];
+    if(sp){let steun=false;for(let d=1;d<=3;d++){const y=sp[1]+d;if(y<H&&(kaart[y][sp[0]]==='#'||kaart[y][sp[0]]==='='))steun=true;}
+      if(!steun)fouten.push('zet het startpunt boven grond of een platform');}
+    return fouten;
+  }
+
+  // ---------- weergave ----------
+  function render(){
+    root.innerHTML=`
+      <div class="ns-wrap">
+        <div class="ns-head">
+          <div><div class="ns-title">🛠️ Ninja Studio</div><div class="ns-sub">bouw &amp; deel je eigen levels</div></div>
+        </div>
+        <div class="ns-tabs">
+          <button class="ns-tab" id="ns-t-bouw">✏️ Bouwen</button>
+          <button class="ns-tab" id="ns-t-speel">🌏 Spelen</button>
+          <button class="ns-tab" id="ns-t-mijn">📁 Mijn levels</button>
+        </div>
+        <div id="ns-body"></div>
+        <button class="btn" id="ns-back" style="background:var(--muted);margin-top:12px;">← Menu</button>
+      </div>`;
+    injectStyle();
+    root.querySelector('#ns-t-bouw').onclick=()=>{tab='bouw';teken();};
+    root.querySelector('#ns-t-speel').onclick=()=>{tab='speel';teken();};
+    root.querySelector('#ns-t-mijn').onclick=()=>{tab='mijn';teken();};
+    root.querySelector('#ns-back').onclick=()=>{(window.switchScreen||function(){})('screen-menu');};
+    teken();
+  }
+  function teken(){
+    ['bouw','speel','mijn'].forEach(t=>root.querySelector('#ns-t-'+t).classList.toggle('ns-on',tab===t));
+    if(tab==='bouw')renderBouw(); else if(tab==='speel')renderSpeel(); else renderMijn();
+  }
+
+  // ---------- editor ----------
+  function renderBouw(){
+    root.querySelector('#ns-body').innerHTML=`
+      <p class="ns-uitleg">Tik of sleep op het raster om te bouwen. Je level moet één startpunt 🥷 en één torii ⛩️ hebben. Test het zelf uit; pas als je het hebt uitgespeeld kun je het publiceren.</p>
+      <div class="ns-palet" id="ns-palet"></div>
+      <div class="ns-schuif">
+        <button class="ns-nav" id="ns-links">◀</button>
+        <input type="range" id="ns-scroll" min="0" max="100" value="0">
+        <button class="ns-nav" id="ns-rechts">▶</button>
+      </div>
+      <div class="ns-gridwrap"><div class="ns-grid" id="ns-grid"></div></div>
+      <div class="ns-info" id="ns-info"></div>
+      <div class="ns-tools">
+        <button class="ns-tool" id="ns-breder">⇥ Breder</button>
+        <button class="ns-tool" id="ns-smaller">⇤ Smaller</button>
+        <button class="ns-tool" id="ns-leeg">🗑 Leegmaken</button>
+      </div>
+      <input class="ns-naam" id="ns-naamveld" maxlength="40" placeholder="Naam van je level" value="${(naam||'').replace(/"/g,'&quot;')}">
+      <div class="ns-acties">
+        <button class="btn ns-test" id="ns-test">▶ Testen</button>
+        <button class="btn ns-pub" id="ns-pub">📤 Publiceren</button>
+      </div>
+      <div class="ns-melding" id="ns-melding"></div>`;
+    tekenPalet();bouwGrid();updateInfo();
+    const sl=root.querySelector('#ns-scroll');
+    sl.max=Math.max(0,W-zichtbreedte());sl.value=camX;
+    sl.oninput=()=>{camX=+sl.value;bouwGrid();};
+    root.querySelector('#ns-links').onclick=()=>{camX=Math.max(0,camX-5);sl.value=camX;bouwGrid();};
+    root.querySelector('#ns-rechts').onclick=()=>{camX=Math.min(+sl.max,camX+5);sl.value=camX;bouwGrid();};
+    root.querySelector('#ns-breder').onclick=()=>{if(W>=MAX_W)return;for(let y=0;y<H;y++)for(let i=0;i<10;i++)kaart[y].push(y>=H-2?'#':' ');W+=10;getest=false;renderBouw();bewaarConcept();};
+    root.querySelector('#ns-smaller').onclick=()=>{if(W<=MIN_W+10)return;for(let y=0;y<H;y++)kaart[y].splice(W-10,10);W-=10;camX=Math.min(camX,Math.max(0,W-zichtbreedte()));getest=false;renderBouw();bewaarConcept();};
+    root.querySelector('#ns-leeg').onclick=()=>{if(confirm('Level leegmaken?')){nieuwKaart();camX=0;renderBouw();bewaarConcept();}};
+    root.querySelector('#ns-naamveld').oninput=e=>{naam=e.target.value;bewaarConcept();};
+    root.querySelector('#ns-test').onclick=testen;
+    root.querySelector('#ns-pub').onclick=publiceren;
+    updatePubKnop();
+  }
+  const zichtbreedte=()=>Math.min(W,24);
+  function tekenPalet(){
+    const p=root.querySelector('#ns-palet');
+    p.innerHTML=PALET.map(t=>`<button class="ns-tegel${t.t===gekozenTegel?' ns-tegel-on':''}" data-t="${t.t}">
+      <span class="ns-t-ico">${t.icoon}</span><span class="ns-t-naam">${t.naam}</span></button>`).join('');
+    p.querySelectorAll('.ns-tegel').forEach(b=>b.onclick=()=>{gekozenTegel=b.dataset.t;tekenPalet();});
+  }
+  function bouwGrid(){
+    const g=root.querySelector('#ns-grid');if(!g)return;
+    const bw=zichtbreedte();
+    g.style.setProperty('--n',bw);
+    let html='';
+    for(let y=0;y<H;y++)for(let i=0;i<bw;i++){
+      const x=camX+i;const c=x<W?kaart[y][x]:' ';
+      html+=`<div class="ns-cel ns-c-${teken2klasse(c)}" data-x="${x}" data-y="${y}">${teken2ico(c)}</div>`;
+    }
+    g.innerHTML=html;
+    g.querySelectorAll('.ns-cel').forEach(el=>{
+      el.onpointerdown=e=>{e.preventDefault();bezigTekenen=true;zet(+el.dataset.x,+el.dataset.y);};
+      el.onpointerenter=()=>{if(bezigTekenen)zet(+el.dataset.x,+el.dataset.y);};
+    });
+    g.onpointerup=()=>{bezigTekenen=false;bewaarConcept();};
+    g.onpointerleave=()=>{bezigTekenen=false;};
+  }
+  const teken2klasse=c=>({'#':'grond','=':'plat','^':'punt','E':'vij','o':'kana','P':'start','T':'doel'}[c]||'leeg');
+  const teken2ico=c=>({'E':'🦝','o':'㋐','P':'🥷','T':'⛩️','^':'▲'}[c]||'');
+  function zet(x,y){
+    if(x<0||x>=W||y<0||y>=H)return;
+    const def=PALET.find(t=>t.t===gekozenTegel);
+    if(def&&def.uniek){ // maar één start/torii
+      for(let yy=0;yy<H;yy++)for(let xx=0;xx<W;xx++)if(kaart[yy][xx]===gekozenTegel)kaart[yy][xx]=' ';
+    }
+    kaart[y][x]=gekozenTegel;
+    getest=false;bouwGrid();updateInfo();updatePubKnop();
+  }
+  function updateInfo(){
+    const el=root.querySelector('#ns-info');if(!el)return;
+    const t=rijen().join('');
+    el.innerHTML=`breedte ${W} · kana ${(t.match(/o/g)||[]).length} · tanuki ${(t.match(/E/g)||[]).length} · punten ${(t.match(/\^/g)||[]).length}
+      <span class="ns-pos">kolom ${camX+1}–${Math.min(W,camX+zichtbreedte())}</span>`;
+  }
+  function updatePubKnop(){
+    const b=root.querySelector('#ns-pub');if(!b)return;
+    b.disabled=!getest;
+    b.textContent=getest?'📤 Publiceren':'📤 Publiceren (eerst uitspelen)';
+  }
+  function melding(t,soort){
+    const m=root.querySelector('#ns-melding');if(!m)return;
+    m.className='ns-melding ns-toon '+(soort==='fout'?'ns-fout':soort==='ok'?'ns-ok':'');
+    m.innerHTML=t;
+  }
+
+  function testen(){
+    const f=controle();
+    if(f.length){melding('Nog niet klaar:<br>• '+f.join('<br>• '),'fout');return;}
+    if(typeof window.KanaNinja==='undefined'||!window.KanaNinja.speelCustom){melding('Speler niet gevonden.','fout');return;}
+    const mijnRijen=rijen();
+    (window.switchScreen||function(){})('screen-ninja');
+    const el=document.getElementById('ninja-root');
+    window.KanaNinja.speelCustom(mijnRijen, naam||'Test', ()=>{
+      (window.switchScreen||function(){})('screen-studio');
+      const s=document.getElementById('studio-root');if(s)start(s);
+      if(getest)melding('Uitgespeeld! Je kunt nu publiceren. 🎉','ok');
+    }, res=>{ getest=true; LS.set('studio-getest',{rijen:mijnRijen,tijd:res.tijd}); });
+    if(el)window.KanaNinja.start?0:0;
+  }
+
+  async function publiceren(){
+    if(!getest){melding('Speel je level eerst zelf uit.','fout');return;}
+    const f=controle();
+    if(f.length){melding('Nog niet klaar:<br>• '+f.join('<br>• '),'fout');return;}
+    if(!hasCloud()){melding('Log in om te publiceren; je level blijft lokaal bewaard.','fout');return;}
+    const bewijs=LS.get('studio-getest',null);
+    const tijd=bewijs&&JSON.stringify(bewijs.rijen)===JSON.stringify(rijen())?bewijs.tijd:null;
+    if(tijd===null){melding('Je level is aangepast na de test — test het opnieuw.','fout');getest=false;updatePubKnop();return;}
+    melding('Bezig met publiceren…');
+    try{
+      const {data,error}=await supabaseClient.rpc('ninja_publiceer',
+        {p_username:user(),p_naam:naam||'Naamloos',p_rijen:rijen(),p_tijd:tijd});
+      if(error)throw error;
+      if(data&&data.ok){
+        melding(`Gepubliceerd! Deelcode: <b class="ns-code">${data.code}</b><br>Anderen kunnen je level zo opzoeken.`,'ok');
+      } else {
+        const r=(data&&data.reason)||'';
+        melding(r==='te_veel'?'Je hebt al 30 levels gepubliceerd.':
+                r==='hoogte'||r==='breedte'?'Levelafmeting klopt niet.':
+                r==='geen_gebruiker'?'Log eerst in.':'Publiceren mislukt.','fout');
+      }
+    }catch(e){melding('Netwerkfout bij publiceren.','fout');}
+  }
+
+  // ---------- levels van anderen ----------
+  function renderSpeel(){
+    root.querySelector('#ns-body').innerHTML=`
+      <p class="ns-uitleg">Speel levels die anderen hebben gemaakt. Elk level is door de maker zelf uitgespeeld, dus het is altijd haalbaar.</p>
+      <div class="ns-zoek">
+        <input id="ns-code" placeholder="Deelcode (bv. 7QK3F2)" maxlength="6">
+        <button class="ns-zoekbtn" id="ns-zoek">Zoek</button>
+      </div>
+      <div class="ns-sorteer">
+        <button class="ns-sbtn${lijstSort==='nieuw'?' ns-son':''}" data-s="nieuw">🆕 Nieuwste</button>
+        <button class="ns-sbtn${lijstSort==='populair'?' ns-son':''}" data-s="populair">🔥 Populair</button>
+      </div>
+      <div id="ns-lijst" class="ns-lijst"><div class="ns-laad">Laden…</div></div>`;
+    root.querySelector('#ns-zoek').onclick=()=>{
+      const c=(root.querySelector('#ns-code').value||'').trim().toUpperCase();
+      if(c.length===6)speelCode(c); else melding('Voer een code van 6 tekens in.','fout');
+    };
+    root.querySelectorAll('.ns-sbtn').forEach(b=>b.onclick=()=>{lijstSort=b.dataset.s;renderSpeel();});
+    laadLijst();
+  }
+  async function laadLijst(){
+    const el=root.querySelector('#ns-lijst');if(!el)return;
+    if(!hasCloud()){el.innerHTML='<div class="ns-laad">Log in om levels van anderen te zien.</div>';return;}
+    try{
+      const {data,error}=await supabaseClient.rpc('ninja_lijst',{p_sort:lijstSort,p_limiet:30});
+      if(error)throw error;
+      const arr=(data||[]).map(d=>typeof d==='string'?JSON.parse(d):d);
+      if(!arr.length){el.innerHTML='<div class="ns-laad">Nog geen levels gepubliceerd — wees de eerste!</div>';return;}
+      el.innerHTML=arr.map(l=>`
+        <div class="ns-kaart">
+          <div class="ns-k-top"><b>${ontsnap(l.naam)}</b><span class="ns-k-code">${l.code}</span></div>
+          <div class="ns-k-meta">door ${ontsnap(l.maker)} · ${l.breedte} breed · ▶ ${l.gespeeld} · ⛩️ ${l.uitgespeeld} · ❤️ ${l.likes}</div>
+          <div class="ns-k-btns">
+            <button class="ns-k-play" data-code="${l.code}">▶ Spelen</button>
+            <button class="ns-k-like" data-code="${l.code}">❤️</button>
+          </div>
+        </div>`).join('');
+      el.querySelectorAll('.ns-k-play').forEach(b=>b.onclick=()=>speelCode(b.dataset.code));
+      el.querySelectorAll('.ns-k-like').forEach(b=>b.onclick=()=>like(b.dataset.code,b));
+    }catch(e){el.innerHTML='<div class="ns-laad">Kon de lijst niet laden.</div>';}
+  }
+  const ontsnap=s=>String(s==null?'':s).replace(/[<>&"]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
+  async function speelCode(code){
+    if(!hasCloud()){melding('Log in om levels te spelen.','fout');return;}
+    try{
+      const {data,error}=await supabaseClient.rpc('ninja_haal',{p_code:code});
+      if(error)throw error;
+      if(!data||!data.ok){melding('Level niet gevonden.','fout');return;}
+      const r=data.rijen;
+      (window.switchScreen||function(){})('screen-ninja');
+      window.KanaNinja.speelCustom(r, data.naam+' — '+data.maker, ()=>{
+        (window.switchScreen||function(){})('screen-studio');
+        const s=document.getElementById('studio-root');if(s){start(s);tab='speel';teken();}
+      }, ()=>{ try{supabaseClient.rpc('ninja_uitgespeeld',{p_code:code});}catch(e){} });
+    }catch(e){melding('Kon het level niet laden.','fout');}
+  }
+  async function like(code,btn){
+    if(!hasCloud())return;
+    try{const {data}=await supabaseClient.rpc('ninja_like',{p_code:code,p_username:user()});
+      if(data&&data.ok)btn.textContent=(data.aan?'❤️ ':'🤍 ')+data.likes;
+    }catch(e){}
+  }
+
+  // ---------- eigen levels ----------
+  async function renderMijn(){
+    const el=root.querySelector('#ns-body');
+    el.innerHTML=`<p class="ns-uitleg">Je gepubliceerde levels. Deel de code met anderen zodat ze jouw level kunnen spelen.</p><div id="ns-mijn" class="ns-lijst"><div class="ns-laad">Laden…</div></div>`;
+    const m=root.querySelector('#ns-mijn');
+    if(!hasCloud()){m.innerHTML='<div class="ns-laad">Log in om je levels te zien.</div>';return;}
+    try{
+      const {data,error}=await supabaseClient.rpc('ninja_mijn',{p_username:user()});
+      if(error)throw error;
+      const arr=(data||[]).map(d=>typeof d==='string'?JSON.parse(d):d);
+      if(!arr.length){m.innerHTML='<div class="ns-laad">Je hebt nog niets gepubliceerd.</div>';return;}
+      m.innerHTML=arr.map(l=>`
+        <div class="ns-kaart">
+          <div class="ns-k-top"><b>${ontsnap(l.naam)}</b><span class="ns-k-code">${l.code}</span></div>
+          <div class="ns-k-meta">${l.datum} · ▶ ${l.gespeeld} · ⛩️ ${l.uitgespeeld} · ❤️ ${l.likes}</div>
+          <div class="ns-k-btns">
+            <button class="ns-k-play" data-code="${l.code}">▶ Spelen</button>
+            <button class="ns-k-del" data-code="${l.code}">🗑 Verwijderen</button>
+          </div>
+        </div>`).join('');
+      m.querySelectorAll('.ns-k-play').forEach(b=>b.onclick=()=>speelCode(b.dataset.code));
+      m.querySelectorAll('.ns-k-del').forEach(b=>b.onclick=async()=>{
+        if(!confirm('Dit level verwijderen?'))return;
+        try{await supabaseClient.rpc('ninja_verwijder',{p_code:b.dataset.code,p_username:user()});renderMijn();}catch(e){}
+      });
+    }catch(e){m.innerHTML='<div class="ns-laad">Kon je levels niet laden.</div>';}
+  }
+
+  function injectStyle(){
+    if(document.getElementById('ns-style'))return;
+    const s=document.createElement('style');s.id='ns-style';s.textContent=`
+      .ns-wrap{position:relative}
+      .ns-title{font-family:var(--font-display);font-size:24px;font-weight:800;color:var(--dark)}
+      .ns-sub{font-size:13px;color:var(--muted)}
+      .ns-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0 12px}
+      .ns-tab{padding:9px 4px;background:var(--input-bg);border:1px solid var(--border);border-radius:10px;font-weight:700;font-family:var(--font-body);font-size:13px;color:var(--text);cursor:pointer}
+      .ns-tab.ns-on{border-color:var(--primary);box-shadow:0 0 0 2px var(--primary) inset}
+      .ns-uitleg{font-size:12.5px;color:var(--muted);line-height:1.5;margin:0 0 10px}
+      .ns-palet{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px}
+      .ns-tegel{display:flex;flex-direction:column;align-items:center;gap:2px;padding:7px 2px;background:var(--input-bg);border:1px solid var(--border);border-radius:9px;cursor:pointer;color:var(--text)}
+      .ns-tegel-on{border-color:var(--kincha);box-shadow:0 0 0 2px var(--kincha) inset}
+      .ns-t-ico{font-size:17px;line-height:1}
+      .ns-t-naam{font-size:10px;font-weight:700;color:var(--muted)}
+      .ns-schuif{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+      .ns-schuif input{flex:1}
+      .ns-nav{width:38px;height:32px;background:var(--input-bg);border:1px solid var(--border);border-radius:8px;font-weight:800;color:var(--dark);cursor:pointer}
+      .ns-gridwrap{display:flex;justify-content:center}
+      .ns-grid{display:grid;grid-template-columns:repeat(var(--n),1fr);width:100%;max-width:min(96vw,520px);aspect-ratio:var(--n) / 20;background:#cfe3ee;border:3px solid var(--sumi);border-radius:8px;overflow:hidden;touch-action:none;user-select:none}
+      .ns-cel{aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-size:clamp(7px,1.6vw,12px);border:1px solid rgba(43,36,32,.07);cursor:pointer}
+      .ns-c-grond{background:#6b5540}
+      .ns-c-plat{background:#b8893f}
+      .ns-c-punt{background:#dfeaf0;color:#4c6b4f}
+      .ns-c-leeg{background:transparent}
+      .ns-c-vij,.ns-c-kana,.ns-c-start,.ns-c-doel{background:rgba(255,255,255,.35)}
+      .ns-info{text-align:center;font-size:11.5px;color:var(--muted);font-weight:700;margin:8px 0}
+      .ns-pos{display:block;font-weight:400}
+      .ns-tools{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}
+      .ns-tool{padding:9px 2px;background:var(--input-bg);border:1px solid var(--border);border-radius:9px;font-weight:700;font-size:12.5px;color:var(--text);cursor:pointer;font-family:var(--font-body)}
+      .ns-naam{width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;background:var(--input-bg);color:var(--text);font-family:var(--font-body);font-size:14px;font-weight:700;margin-bottom:10px}
+      .ns-acties{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+      .ns-test{background:var(--matsuba)!important;margin:0!important}
+      .ns-pub{background:var(--shu)!important;margin:0!important;font-size:13px!important}
+      .ns-pub:disabled{background:var(--border)!important;color:var(--muted)!important;cursor:not-allowed}
+      .ns-melding{margin-top:10px;font-size:12.5px;font-weight:700;text-align:center;opacity:0;transition:.2s;min-height:16px}
+      .ns-melding.ns-toon{opacity:1}
+      .ns-fout{color:var(--danger)}
+      .ns-ok{color:var(--success)}
+      .ns-code{font-family:var(--font-display);font-size:18px;letter-spacing:2px;color:var(--dark)}
+      .ns-zoek{display:flex;gap:8px;margin-bottom:10px}
+      .ns-zoek input{flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:var(--input-bg);color:var(--text);font-family:var(--font-display);font-size:15px;letter-spacing:2px;text-transform:uppercase}
+      .ns-zoekbtn{padding:0 16px;background:var(--primary);color:#fff8ee;border:none;border-radius:10px;font-weight:800;cursor:pointer;font-family:var(--font-body)}
+      .ns-sorteer{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+      .ns-sbtn{padding:8px;background:var(--input-bg);border:1px solid var(--border);border-radius:9px;font-weight:700;font-size:12.5px;color:var(--text);cursor:pointer;font-family:var(--font-body)}
+      .ns-sbtn.ns-son{border-color:var(--primary);box-shadow:0 0 0 2px var(--primary) inset}
+      .ns-lijst{display:flex;flex-direction:column;gap:8px}
+      .ns-laad{text-align:center;font-size:12.5px;color:var(--muted);padding:14px}
+      .ns-kaart{background:var(--input-bg);border:1px solid var(--border);border-radius:12px;padding:10px}
+      .ns-k-top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+      .ns-k-top b{font-family:var(--font-display);font-size:15px;color:var(--dark)}
+      .ns-k-code{font-family:var(--font-display);font-size:12px;letter-spacing:1px;color:var(--muted);background:var(--card-bg);border:1px solid var(--border);border-radius:12px;padding:2px 8px}
+      .ns-k-meta{font-size:11.5px;color:var(--muted);margin:4px 0 8px}
+      .ns-k-btns{display:flex;gap:8px}
+      .ns-k-play{flex:1;padding:8px;background:var(--matsuba);color:#fff8ee;border:none;border-radius:8px;font-weight:800;cursor:pointer;font-family:var(--font-body)}
+      .ns-k-like,.ns-k-del{padding:8px 12px;background:var(--card-bg);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:13px;font-family:var(--font-body);color:var(--text)}
+    `;
+    document.head.appendChild(s);
+  }
+
+  window.KanaStudio={start,controle};
+  window.startStudioInit=function(){(window.switchScreen||function(){})('screen-studio');const el=document.getElementById('studio-root');if(el)start(el);};
 })();
 
 </script>
