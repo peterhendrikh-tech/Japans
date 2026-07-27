@@ -3436,6 +3436,7 @@ const LEVELS=[
 
   let root,view,cur,voortgang,cv,ctx,VW,VH,scale;
   let kaart,W,speler,vijanden,kanas,doel,camX,camY,toetsen,raf,laatste,dood,gewonnen,startT,tijd,jumpBuf,coyote,keyH,keyU,pauze;
+  let loopId=0;
 
   function start(container){root=container;voortgang=LS.get('ninja-voortgang',{});view='select';renderSelect();}
 
@@ -3520,8 +3521,7 @@ const LEVELS=[
       if(e.key===' '||e.key==='ArrowUp'||e.key==='w')toetsen.j=false;};
     window.addEventListener('keydown',keyH);window.addEventListener('keyup',keyU);
     window.addEventListener('resize',maatCanvas);
-    if(raf)cancelAnimationFrame(raf);
-    laatste=performance.now();raf=requestAnimationFrame(lus);
+    startLus();
   }
   function maatCanvas(){
     const wrap=root.querySelector('.nj-cvwrap');if(!wrap||!cv)return;
@@ -3530,7 +3530,7 @@ const LEVELS=[
     cv.width=VW;cv.height=VH;cv.style.width=VW+'px';cv.style.height=VH+'px';
     scale=VH/(ZICHT*TILE);
   }
-  function stopSpel(){if(raf)cancelAnimationFrame(raf);raf=null;
+  function stopSpel(){loopId++;if(raf)cancelAnimationFrame(raf);raf=null;
     if(keyH){window.removeEventListener('keydown',keyH);keyH=null;}
     if(keyU){window.removeEventListener('keyup',keyU);keyU=null;}
     window.removeEventListener('resize',maatCanvas);}
@@ -3640,11 +3640,20 @@ const LEVELS=[
     const d=document.createElement('div');d.className='nj-pop';d.textContent=t;ov.appendChild(d);setTimeout(()=>d.remove(),900);}
 
   // ---------- tekenen ----------
-  function lus(nu){
-    if(nu===laatste)return;                     // zelfde frame: niets doen
-    const dt=Math.min(0.033,Math.max(0,(nu-laatste)/1000)||0.016);laatste=nu;
-    update(dt);teken();
-    raf=requestAnimationFrame(lus);
+  function startLus(){
+    if(raf)cancelAnimationFrame(raf);
+    const mijn=++loopId;                         // alleen de nieuwste loop mag draaien
+    laatste=performance.now();
+    const stap=nu=>{
+      if(mijn!==loopId)return;                   // oude loop stopt zichzelf
+      let dt=(nu-laatste)/1000;
+      if(!(dt>0))dt=1/60;                        // eerste frame of gelijk tijdstempel
+      dt=Math.min(0.033,dt);
+      laatste=nu;
+      update(dt);teken();
+      raf=requestAnimationFrame(stap);           // altijd een volgend frame
+    };
+    raf=requestAnimationFrame(stap);
   }
   function teken(){
     if(!ctx)return;
