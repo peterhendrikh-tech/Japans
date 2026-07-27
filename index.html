@@ -344,7 +344,7 @@
             <button class="btn" style="background:var(--special);" onclick="startTekenenInit()">✍️ Teken Training</button>
             <button class="btn" style="background:var(--kincha); color:#3a2a00;" onclick="openGachaScreen()">🎰 Gachapon</button>
             <button class="btn btn-collector" onclick="openEcosysteem()">🐜 Imperium</button>
-            <button class="btn" style="background:var(--budou);" onclick="startPatchesInit()">◧ Dagelijkse Patches</button>
+            <button class="btn" style="background:var(--budou);" onclick="startPatchesInit()">◧ Patches (lappendeken)</button>
             <button class="btn" style="background:var(--kincha);" onclick="startWoordzoekerInit()">🔤 Woordzoeker (Japans)</button>
             <button class="btn" style="background:var(--ai);" onclick="startBuizenInit()">🚰 Buizenpuzzel</button>
             <button class="btn" style="background:var(--sumi);" onclick="startNonogramInit()">🖼️ Nonogram (Picross)</button>
@@ -1604,237 +1604,305 @@
 </script>
 <script id="patches-engine">
 /* ============================================================
-   Kana Master · Patches — 6 dagelijkse ruimtelijke logicapuzzels
-   Formaten 5×5 t/m 10×10. Munten per opgeloste puzzel (1..6),
-   toegekend via het bestaande muntsysteem (wijsGachaMuntToe).
-   Zelfstandige module. Geen externe libs. Muis + touch.
-   Blootgesteld: window.startPatchesInit(), window.KanaPatches
+   Kana Master · Patches (パッチ) — polyomino-legpuzzel
+   Vul het raster met de gegeven lappen. Vormen zijn vrij (L, T,
+   Z, trappen…), er staan blokkades ▨ in de weg, en stukken zijn
+   draaibaar. Per constructie altijd oplosbaar.
+   Drie dagformaten. Blootgesteld: window.startPatchesInit()
    ============================================================ */
 (function () {
-  const SIZES = [5, 6, 7, 8, 9, 10];   // 6 puzzels per dag, oplopend formaat
-  const COUNT = SIZES.length;
-  const coinsFor = i => i + 1;         // 5×5→1, 6×6→2, … 10×10→6
+  const MATEN = [
+    {N:7,  blok:4, min:3, max:5, coins:8,  label:'7×7'},
+    {N:9,  blok:6, min:3, max:6, coins:14, label:'9×9'},
+    {N:11, blok:9, min:4, max:7, coins:22, label:'11×11'}
+  ];
+  const COUNT = MATEN.length;
+  const CIRC = ['①','②','③'];
+  const D4 = [[1,0],[-1,0],[0,1],[0,-1]];
+  const KLEUREN = ['--shu','--ai','--matsuba','--kincha','--budou','--special'];
 
   function hashStr(s){let h=2166136261>>>0;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0;}
   function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
-  const shapeOf=(w,h)=> w===h?'sq':(w>h?'wide':'tall');
-
-  function generateSolution(N,rng){
-    const grid=Array.from({length:N},()=>Array(N).fill(false)),rects=[];
-    const firstEmpty=()=>{for(let y=0;y<N;y++)for(let x=0;x<N;x++)if(!grid[y][x])return[x,y];return null;};
-    let c;
-    while((c=firstEmpty())){
-      const [x,y]=c;let maxW=0;while(x+maxW<N&&!grid[y][x+maxW])maxW++;
-      let w=1+Math.floor(rng()*Math.min(maxW,4)),maxH=0;
-      outer:for(let h=0;y+h<N;h++){for(let dx=0;dx<w;dx++){if(grid[y+h][x+dx])break outer;}maxH++;}
-      let hh=1+Math.floor(rng()*Math.min(maxH,4));
-      if(w===1&&hh===1&&(maxW>1||maxH>1)){if(maxW>=2&&rng()<0.7)w=2;else if(maxH>=2)hh=2;}
-      for(let dy=0;dy<hh;dy++)for(let dx=0;dx<w;dx++)grid[y+dy][x+dx]=true;
-      rects.push({x,y,w,h:hh});
-    }
-    return rects;
-  }
-  const deriveClues=(rects,rng)=>rects.map(r=>({cx:r.x+Math.floor(rng()*r.w),cy:r.y+Math.floor(rng()*r.h),area:r.w*r.h,shape:shapeOf(r.w,r.h)}));
-  function candidatesForClue(N,clue,clueKey){
-    const out=[],A=clue.area,self=clue.cy*N+clue.cx;
-    for(let w=1;w<=A;w++){if(A%w)continue;const h=A/w;if(w>N||h>N)continue;if(shapeOf(w,h)!==clue.shape)continue;
-      for(let x=Math.max(0,clue.cx-w+1);x<=Math.min(clue.cx,N-w);x++)for(let y=Math.max(0,clue.cy-h+1);y<=Math.min(clue.cy,N-h);y++){
-        let ok=true;for(let dy=0;dy<h&&ok;dy++)for(let dx=0;dx<w;dx++){const k=(y+dy)*N+(x+dx);if(clueKey.has(k)&&k!==self){ok=false;break;}}
-        if(ok)out.push({x,y,w,h});}}
-    return out;
-  }
-  // Telt oplossingen (gecapt op 'cap'); stopt met -1 als het rekenbudget op is.
-  function countSolutions(N,clues,cap,budget){
-    const clueKey=new Set(clues.map(c=>c.cy*N+c.cx));
-    const cands=clues.map(c=>candidatesForClue(N,c,clueKey));
-    const cov=Array(N*N).fill(false),placed=Array(clues.length).fill(false);let count=0,steps=0,over=false;
-    const firstUnc=()=>{for(let i=0;i<N*N;i++)if(!cov[i])return i;return -1;};
-    const mark=(r,v)=>{for(let dy=0;dy<r.h;dy++)for(let dx=0;dx<r.w;dx++)cov[(r.y+dy)*N+(r.x+dx)]=v;};
-    const fits=r=>{for(let dy=0;dy<r.h;dy++)for(let dx=0;dx<r.w;dx++)if(cov[(r.y+dy)*N+(r.x+dx)])return false;return true;};
-    (function bt(){
-      if(over||count>=cap)return;if(++steps>budget){over=true;return;}
-      const c=firstUnc();if(c<0){count++;return;}
-      const cy=(c/N|0),cx=c%N;
-      for(let k=0;k<clues.length;k++){if(placed[k])continue;
-        for(const r of cands[k]){if(!(r.y<=cy&&cy<r.y+r.h&&r.x<=cx&&cx<r.x+r.w))continue;if(!fits(r))continue;
-          mark(r,true);placed[k]=true;bt();placed[k]=false;mark(r,false);if(over||count>=cap)return;}}
-    })();
-    return over?-1:count;
-  }
-  function buildPuzzle(dateStr,idx){
-    const N=SIZES[idx];let fallback=null;
-    for(let salt=0;salt<60;salt++){
-      const rng=mulberry32(hashStr(dateStr+'#p'+idx+'#'+salt));
-      const sol=generateSolution(N,rng);if(sol.length<3){continue;}
-      const clues=deriveClues(sol,rng);if(!fallback)fallback={N,sol,clues,unique:false};
-      if(countSolutions(N,clues,2,60000)===1)return{N,sol,clues,unique:true};
-    }
-    return fallback;
-  }
-
-  const HUES=['--ai','--shu','--matsuba','--kincha','--budou','--special'];
-  const colorFor=i=>`var(${HUES[i%HUES.length]})`;
-  const CIRC=['①','②','③','④','⑤','⑥'];
-  const pad=n=>String(n).padStart(2,'0');
-  const fmt=s=>`${Math.floor(s/60)}:${pad(s%60)}`;
+  const pad=n=>String(n).padStart(2,'0');const fmt=s=>`${Math.floor(s/60)}:${pad(s%60)}`;
   function todayStr(){const d=new Date();return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;}
   const nlDate=s=>{const[y,m,d]=s.split('-');return `${d}-${m}-${y}`;};
   const LS={get:(k,f)=>{try{const v=localStorage.getItem(k);return v==null?f:JSON.parse(v);}catch(e){return f;}},set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}};
 
-  let root,date,cache,idx,curN,puzzle,clueKey,patches,cellPatch,anchor,dragging,timerId,cdId,startTime,elapsed,locked;
+  // ---------- vormhulp ----------
+  const normaliseer=c=>{const mx=Math.min(...c.map(p=>p[0])),my=Math.min(...c.map(p=>p[1]));
+    return c.map(p=>[p[0]-mx,p[1]-my]).sort((a,b)=>a[1]-b[1]||a[0]-b[0]);};
+  const roteer=c=>normaliseer(c.map(([x,y])=>[-y,x]));
+  const sleutelVan=c=>normaliseer(c).map(p=>p.join(',')).join(';');
 
-  function start(container){root=container;date=todayStr();cache=Array(COUNT).fill(null);idx=firstUnsolved();renderShell();loadPuzzle(idx);}
-  const doneKey=i=>`kp-patches-${date}-${i}`;
-  const solvedData=i=>LS.get(doneKey(i),null);
-  const isSolved=i=>!!solvedData(i);
-  const solvedTime=i=>{const d=solvedData(i);return d?d.time:null;};
-  const solvedCount=()=>{let n=0;for(let i=0;i<COUNT;i++)if(isSolved(i))n++;return n;};
-  const coinsToday=()=>{let n=0;for(let i=0;i<COUNT;i++){const d=solvedData(i);if(d)n+=(d.coins||0);}return n;};
-  function firstUnsolved(){for(let i=0;i<COUNT;i++)if(!isSolved(i))return i;return 0;}
-  function firstUnsolvedAfter(i){for(let j=1;j<=COUNT;j++){const k=(i+j)%COUNT;if(!isSolved(k))return k;}return null;}
+  // ---------- generator ----------
+  function genPuzzel(N,rng,nBlok,minSz,maxSz){
+    const blok=new Set();let p=0;
+    while(blok.size<nBlok&&p<nBlok*30){p++;blok.add(Math.floor(rng()*N)*N+Math.floor(rng()*N));}
+    const geb=Array.from({length:N},()=>Array(N).fill(-1));
+    for(const k of blok)geb[(k/N|0)][k%N]=-2;
+    const regios=[];let id=0;
+    while(true){
+      const open=[];for(let y=0;y<N;y++)for(let x=0;x<N;x++)if(geb[y][x]===-1)open.push([x,y]);
+      if(!open.length)break;
+      const start=open[Math.floor(rng()*open.length)];
+      const doel=minSz+Math.floor(rng()*(maxSz-minSz+1));
+      const cel=[start];geb[start[1]][start[0]]=id;
+      while(cel.length<doel){
+        const rand=[];
+        for(const[cx,cy]of cel)for(const[dx,dy]of D4){const nx=cx+dx,ny=cy+dy;
+          if(nx>=0&&nx<N&&ny>=0&&ny<N&&geb[ny][nx]===-1&&!rand.some(q=>q[0]===nx&&q[1]===ny))rand.push([nx,ny]);}
+        if(!rand.length)break;
+        const q=rand[Math.floor(rng()*rand.length)];geb[q[1]][q[0]]=id;cel.push(q);
+      }
+      regios.push(cel);id++;
+    }
+    let veranderd=true;
+    while(veranderd){
+      veranderd=false;
+      for(let i=0;i<regios.length;i++){
+        if(!regios[i].length||regios[i].length>=minSz)continue;
+        let doel=-1;
+        for(const[x,y]of regios[i]){for(const[dx,dy]of D4){const nx=x+dx,ny=y+dy;
+          if(nx>=0&&nx<N&&ny>=0&&ny<N&&geb[ny][nx]>=0&&geb[ny][nx]!==i){doel=geb[ny][nx];break;}}if(doel>=0)break;}
+        if(doel>=0){for(const[x,y]of regios[i]){geb[y][x]=doel;regios[doel].push([x,y]);}regios[i]=[];veranderd=true;}
+      }
+    }
+    const stukken=[];
+    regios.forEach(r=>{if(r.length)stukken.push(normaliseer(r));});
+    return {N,blok:[...blok],stukken};
+  }
+  function buildDaily(dateStr,idx){
+    const m=MATEN[idx];
+    for(let a=0;a<20;a++){
+      const rng=mulberry32(hashStr(dateStr+'#patches2#'+m.N+'#'+a));
+      const p=genPuzzel(m.N,rng,m.blok,m.min,m.max);
+      const dekking=p.stukken.reduce((s,st)=>s+st.length,0)+p.blok.length;
+      if(dekking===m.N*m.N&&p.stukken.length>=4){
+        // stukken in willekeurige startrotatie en volgorde
+        const stukken=p.stukken.map((cellen,i)=>{
+          let c=cellen;const r=Math.floor(rng()*4);
+          for(let k=0;k<r;k++)c=roteer(c);
+          return {id:i,cellen:c,kleur:KLEUREN[i%KLEUREN.length],gelegd:null};
+        });
+        for(let i=stukken.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[stukken[i],stukken[j]]=[stukken[j],stukken[i]];}
+        return {N:m.N,blok:new Set(p.blok),stukken};
+      }
+    }
+    return null;
+  }
+
+  // ---------- status ----------
+  let root,date,gi,puz,N,bord,gekozen,startT,clockId,cdId,elapsed,klaar,hoverCel;
+
+  function start(container){root=container;date=todayStr();gi=eersteOpen();renderShell();laad(gi);}
+  const sleutel=i=>`kp-patches2-${date}-${MATEN[i].N}`;
+  const dat=i=>LS.get(sleutel(i),null);
+  const isKlaar=i=>!!dat(i);
+  const aantalKlaar=()=>{let n=0;for(let i=0;i<COUNT;i++)if(isKlaar(i))n++;return n;};
+  function eersteOpen(){for(let i=0;i<COUNT;i++)if(!isKlaar(i))return i;return 0;}
+  function volgendeOpen(i){for(let j=1;j<=COUNT;j++){const k=(i+j)%COUNT;if(!isKlaar(k))return k;}return null;}
 
   function renderShell(){
     root.innerHTML=`
       <div class="pt-wrap">
         <div class="pt-head">
           <div><div class="pt-title">◧ Patches</div><div class="pt-date">${nlDate(date)}</div></div>
-          <div class="pt-meta">
-            <span class="pt-chip">🔥 <span id="pt-streak">${LS.get('kp-patches-streak',0)}</span></span>
-            <span class="pt-chip">🪙 <span id="pt-coins">${coinsToday()}</span></span>
-            <span class="pt-chip">📅 <span id="pt-prog">${solvedCount()}</span>/${COUNT}</span>
-          </div>
+          <div class="pt-meta"><span class="pt-chip">🔥 <span id="pt-streak">${LS.get('kp-patches2-streak',0)}</span></span><span class="pt-chip">📅 <span id="pt-prog">${aantalKlaar()}</span>/${COUNT}</span></div>
         </div>
         <div class="pt-picker" id="pt-picker"></div>
         <div id="pt-body"></div>
         <button class="btn" id="pt-back" style="background:var(--muted);margin-top:12px;">← Menu</button>
       </div>`;
     injectStyle();
-    root.querySelector('#pt-back').onclick=()=>{stopTimers();(window.switchScreen||function(){})('screen-menu');};
-    drawPicker();
+    root.querySelector('#pt-back').onclick=()=>{stop();(window.switchScreen||function(){})('screen-menu');};
+    tekenPicker();
   }
-  function drawPicker(){
+  function tekenPicker(){
     const p=root.querySelector('#pt-picker');p.innerHTML='';
     for(let i=0;i<COUNT;i++){
       const b=document.createElement('button');
-      b.className='pt-tab'+(i===idx?' pt-tab-on':'')+(isSolved(i)?' pt-tab-done':'');
-      b.innerHTML=`<span class="pt-tab-n">${CIRC[i]}</span><span class="pt-tab-sz">${SIZES[i]}×${SIZES[i]}</span><span class="pt-tab-coin">${isSolved(i)?'✓':'🪙'+coinsFor(i)}</span>`;
-      b.onclick=()=>{if(i!==idx){idx=i;loadPuzzle(i);drawPicker();}};
+      b.className='pt-tab'+(i===gi?' pt-tab-on':'')+(isKlaar(i)?' pt-tab-done':'');
+      b.innerHTML=`<span class="pt-tab-n">${CIRC[i]}</span><span class="pt-tab-sz">${MATEN[i].label}</span><span class="pt-tab-coin">${isKlaar(i)?'✓':'🪙'+MATEN[i].coins}</span>`;
+      b.onclick=()=>{if(i!==gi){gi=i;laad(i);tekenPicker();}};
       p.appendChild(b);
     }
   }
-  function loadPuzzle(i){
-    stopTimers();
-    if(!cache[i])cache[i]=buildPuzzle(date,i);
-    puzzle=cache[i];curN=puzzle.N;
-    clueKey=new Map();puzzle.clues.forEach((c,k)=>clueKey.set(c.cy*curN+c.cx,k));
-    if(isSolved(i)){locked=true;renderSolvedBody(i);}
-    else{locked=false;patches=[];cellPatch=Array.from({length:curN},()=>Array(curN).fill(-1));renderPlayBody();startTimer();}
-  }
-  function renderPlayBody(){
-    root.querySelector('#pt-body').innerHTML=`
-      <p class="pt-uitleg">Vul het hele raster met rechthoeken. Elk cijfer = aantal vakjes van zijn rechthoek; icoon = vorm (◼ vierkant · ▭ liggend · ▯ staand). Sleep vanaf een cijfer; tik een rechthoek aan om te wissen. Oplossen levert <b>🪙 ${coinsFor(idx)}</b> op.</p>
-      <div class="pt-timerbar">⏱️ <span id="pt-timer">0:00</span></div>
-      <div id="pt-grid" class="pt-grid" style="--n:${curN}"></div>
-      <div class="pt-status" id="pt-status"></div>
-      <div class="pt-btns">
-        <button class="btn pt-btn-2" id="pt-undo">↶ Ongedaan</button>
-        <button class="btn pt-btn-2" id="pt-reset">✕ Opnieuw</button>
-      </div>`;
-    root.querySelector('#pt-undo').onclick=()=>{if(!locked){patches.pop();rebuild();}};
-    root.querySelector('#pt-reset').onclick=()=>{if(!locked){patches=[];rebuild();}};
-    draw();updateStatus();
-  }
-  function renderSolvedBody(i){
-    const allDone=solvedCount()===COUNT,next=firstUnsolvedAfter(i),d=solvedData(i)||{};
-    root.querySelector('#pt-body').innerHTML=`
-      <div class="pt-solved">
-        <div class="pt-big">${allDone?'⛩️':'✅'}</div>
-        <h3>Puzzel ${CIRC[i]} (${SIZES[i]}×${SIZES[i]}) opgelost</h3>
-        <div class="pt-res-row"><span>Tijd</span><b>${fmt(d.time||0)}</b></div>
-        <div class="pt-res-row"><span>Verdiend</span><b>🪙 ${d.coins||coinsFor(i)}</b></div>
-        ${allDone
-          ? `<div class="pt-daydone">Alle ${COUNT} vandaag gehaald! 🔥 Streak ${LS.get('kp-patches-streak',0)} · 🪙 ${coinsToday()} totaal</div>
-             <div class="pt-count">Nieuwe puzzels over <b id="pt-cd">–</b></div>`
-          : (next!==null?`<button class="btn" id="pt-next">Volgende: ${CIRC[next]} ${SIZES[next]}×${SIZES[next]} (🪙 ${coinsFor(next)}) →</button>`:'')}
-        <button class="btn pt-btn-2" id="pt-share">📋 Deel dag</button>
-      </div>`;
-    const nb=root.querySelector('#pt-next');if(nb)nb.onclick=()=>{idx=next;loadPuzzle(next);drawPicker();};
-    root.querySelector('#pt-share').onclick=doShare;
-    if(allDone)tickCountdown();
-  }
 
-  function rebuild(){cellPatch=Array.from({length:curN},()=>Array(curN).fill(-1));patches.forEach((p,k)=>{for(let dy=0;dy<p.h;dy++)for(let dx=0;dx<p.w;dx++)cellPatch[p.y+dy][p.x+dx]=k;});draw();updateStatus();}
-  function draw(){
-    const g=root.querySelector('#pt-grid');if(!g)return;g.innerHTML='';
-    for(let y=0;y<curN;y++)for(let x=0;x<curN;x++){
-      const cell=document.createElement('div');cell.className='pt-cell';cell.dataset.x=x;cell.dataset.y=y;
-      const pi=cellPatch[y][x];
-      if(pi>=0){const p=patches[pi];cell.style.background=colorFor(p.clueIndex);cell.classList.add('pt-filled');
-        if(y===0||cellPatch[y-1][x]!==pi)cell.style.borderTopWidth='3px';
-        if(y===curN-1||cellPatch[y+1][x]!==pi)cell.style.borderBottomWidth='3px';
-        if(x===0||cellPatch[y][x-1]!==pi)cell.style.borderLeftWidth='3px';
-        if(x===curN-1||cellPatch[y][x+1]!==pi)cell.style.borderRightWidth='3px';}
-      const ci=clueKey.get(y*curN+x);
-      if(ci!==undefined){const c=puzzle.clues[ci];cell.classList.add('pt-clue');if(patchSatisfiesClue(ci))cell.classList.add('pt-ok');
-        cell.innerHTML=`<span class="pt-num">${c.area}</span><span class="pt-shape pt-${c.shape}"></span>`;}
-      g.appendChild(cell);
+  function laad(i){
+    stop();
+    puz=buildDaily(date,i);
+    if(!puz){root.querySelector('#pt-body').innerHTML='<p class="pt-uitleg">Kon de puzzel niet opbouwen.</p>';return;}
+    N=puz.N;
+    bord=Array.from({length:N},()=>Array(N).fill(-1));
+    for(const k of puz.blok)bord[(k/N|0)][k%N]=-2;
+    puz.stukken.forEach(s=>s.gelegd=null);
+    gekozen=puz.stukken.length?puz.stukken[0].id:null;hoverCel=null;elapsed=0;
+    klaar=isKlaar(i);
+    renderSpel();
+    if(klaar){legAlles();toonKlaar(dat(i).time||0,false);}
+    else{startT=Date.now();startClock();}
+  }
+  function legAlles(){ /* toont opgeloste staat: alle stukken in hun bord-positie is niet bewaard; toon vinkje */ }
+  function startClock(){clearInterval(clockId);clockId=setInterval(()=>{elapsed=Math.floor((Date.now()-startT)/1000);const t=root.querySelector('#pt-timer');if(t)t.textContent=fmt(elapsed);},1000);}
+  function stop(){clearInterval(clockId);clearInterval(cdId);}
+
+  function renderSpel(){
+    root.querySelector('#pt-body').innerHTML=`
+      <p class="pt-uitleg">Leg alle lappen zo neer dat het hele raster gevuld is. De donkere vakjes ▨ zijn blokkades waar niets past. Kies een lap, draai hem met ↻ en tik op het raster om hem te leggen. Tik een gelegde lap aan om hem terug te nemen.</p>
+      <div class="pt-timerbar">⏱️ <span id="pt-timer">${fmt(elapsed)}</span></div>
+      <div class="pt-boardwrap"><div class="pt-grid" id="pt-grid" style="--n:${N}"></div></div>
+      <div class="pt-status" id="pt-status"></div>
+      <div class="pt-tools">
+        <button class="pt-tool" id="pt-rot">↻ Draaien</button>
+        <button class="pt-tool" id="pt-reset">✕ Opnieuw</button>
+      </div>
+      <div class="pt-tray" id="pt-tray"></div>`;
+    bouwBord();tekenTray();updateStatus();
+    root.querySelector('#pt-rot').onclick=()=>{
+      if(klaar||gekozen===null)return;
+      const s=puz.stukken.find(q=>q.id===gekozen);
+      if(s&&!s.gelegd){s.cellen=roteer(s.cellen);tekenTray();}
+    };
+    root.querySelector('#pt-reset').onclick=()=>{
+      if(klaar)return;
+      puz.stukken.forEach(s=>s.gelegd=null);
+      bord=Array.from({length:N},()=>Array(N).fill(-1));
+      for(const k of puz.blok)bord[(k/N|0)][k%N]=-2;
+      tekenBord();tekenTray();updateStatus();
+    };
+  }
+  function bouwBord(){
+    const g=root.querySelector('#pt-grid');let html='';
+    for(let y=0;y<N;y++)for(let x=0;x<N;x++)html+=`<div class="pt-cel" data-x="${x}" data-y="${y}"></div>`;
+    g.innerHTML=html;
+    g.querySelectorAll('.pt-cel').forEach(el=>{
+      const x=+el.dataset.x,y=+el.dataset.y;
+      el.onclick=()=>tikBord(x,y);
+      el.onpointerenter=()=>{if(!klaar){hoverCel=[x,y];tekenBord();}};
+    });
+    g.onpointerleave=()=>{hoverCel=null;tekenBord();};
+    tekenBord();
+  }
+  function past(cellen,ax,ay){
+    for(const [cx,cy] of cellen){
+      const x=ax+cx,y=ay+cy;
+      if(x<0||x>=N||y<0||y>=N)return false;
+      if(bord[y][x]!==-1)return false;
     }
-    bindPointer(g);
+    return true;
   }
-  function patchSatisfiesClue(ci){const p=patches.find(p=>p.clueIndex===ci);if(!p)return false;const c=puzzle.clues[ci];return(p.w*p.h===c.area)&&(shapeOf(p.w,p.h)===c.shape);}
-  function cellFromPoint(cx,cy){const el=document.elementFromPoint(cx,cy);if(el&&el.dataset&&el.dataset.x!==undefined)return[+el.dataset.x,+el.dataset.y];const c=el&&el.closest?el.closest('.pt-cell'):null;return c?[+c.dataset.x,+c.dataset.y]:null;}
-  function bindPointer(g){
-    g.onpointerdown=e=>{if(locked)return;const c=cellFromPoint(e.clientX,e.clientY);if(!c)return;e.preventDefault();anchor=c;dragging=true;g.setPointerCapture&&g.setPointerCapture(e.pointerId);preview(c);};
-    g.onpointermove=e=>{if(!dragging)return;const c=cellFromPoint(e.clientX,e.clientY);if(c)preview(c);};
-    const end=e=>{if(!dragging)return;dragging=false;const c=cellFromPoint(e.clientX,e.clientY)||anchor;commit(anchor,c);clearPreview();anchor=null;};
-    g.onpointerup=end;g.onpointercancel=end;
+  function tikBord(x,y){
+    if(klaar)return;
+    const bezet=bord[y][x];
+    if(bezet>=0){ // stuk terugnemen
+      const s=puz.stukken.find(q=>q.id===bezet);
+      if(s&&s.gelegd){
+        for(const [cx,cy] of s.cellen)bord[s.gelegd[1]+cy][s.gelegd[0]+cx]=-1;
+        s.gelegd=null;gekozen=s.id;tekenBord();tekenTray();updateStatus();
+      }
+      return;
+    }
+    if(bezet===-2||gekozen===null)return;
+    const s=puz.stukken.find(q=>q.id===gekozen);
+    if(!s||s.gelegd)return;
+    // anker zo dat het eerste vakje van de vorm op de tik komt
+    const [ox,oy]=s.cellen[0];
+    const ax=x-ox, ay=y-oy;
+    if(!past(s.cellen,ax,ay)){schud();return;}
+    for(const [cx,cy] of s.cellen)bord[ay+cy][ax+cx]=s.id;
+    s.gelegd=[ax,ay];
+    const volgende=puz.stukken.find(q=>!q.gelegd);
+    gekozen=volgende?volgende.id:null;
+    tekenBord();tekenTray();updateStatus();checkWin();
   }
-  const rectOf=(a,b)=>({x:Math.min(a[0],b[0]),y:Math.min(a[1],b[1]),w:Math.abs(a[0]-b[0])+1,h:Math.abs(a[1]-b[1])+1});
-  function validPlacement(r){let empty=true,clues=[];for(let dy=0;dy<r.h;dy++)for(let dx=0;dx<r.w;dx++){const yy=r.y+dy,xx=r.x+dx;if(cellPatch[yy][xx]>=0)empty=false;const ci=clueKey.get(yy*curN+xx);if(ci!==undefined)clues.push(ci);}return{ok:empty&&clues.length===1,clueIndex:clues.length===1?clues[0]:-1};}
-  function preview(c){const r=rectOf(anchor,c),v=validPlacement(r);root.querySelectorAll('.pt-cell').forEach(cell=>{const x=+cell.dataset.x,y=+cell.dataset.y,inside=x>=r.x&&x<r.x+r.w&&y>=r.y&&y<r.y+r.h;cell.classList.toggle('pt-prev-ok',inside&&v.ok);cell.classList.toggle('pt-prev-bad',inside&&!v.ok);});}
-  function clearPreview(){root.querySelectorAll('.pt-cell').forEach(cell=>cell.classList.remove('pt-prev-ok','pt-prev-bad'));}
-  function commit(a,b){
-    const r=rectOf(a,b);
-    if(r.w===1&&r.h===1&&cellPatch[r.y][r.x]>=0){patches.splice(cellPatch[r.y][r.x],1);rebuild();return;}
-    const v=validPlacement(r);if(!v.ok){const g=root.querySelector('#pt-grid');g.classList.add('pt-shake');setTimeout(()=>g.classList.remove('pt-shake'),300);return;}
-    patches.push({x:r.x,y:r.y,w:r.w,h:r.h,clueIndex:v.clueIndex});rebuild();checkWin();
+  function tekenBord(){
+    const s=gekozen!==null?puz.stukken.find(q=>q.id===gekozen):null;
+    let voorbeeld=new Set(),geldig=false;
+    if(s&&!s.gelegd&&hoverCel&&!klaar){
+      const [ox,oy]=s.cellen[0];
+      const ax=hoverCel[0]-ox, ay=hoverCel[1]-oy;
+      geldig=past(s.cellen,ax,ay);
+      for(const [cx,cy] of s.cellen){const x=ax+cx,y=ay+cy;if(x>=0&&x<N&&y>=0&&y<N)voorbeeld.add(y*N+x);}
+    }
+    root.querySelectorAll('.pt-cel').forEach(el=>{
+      const x=+el.dataset.x,y=+el.dataset.y,v=bord[y][x];
+      el.className='pt-cel';el.style.background='';
+      if(v===-2)el.classList.add('pt-blok');
+      else if(v>=0){
+        const st=puz.stukken.find(q=>q.id===v);
+        el.classList.add('pt-vol');
+        el.style.background=`color-mix(in srgb, var(${st.kleur}) 62%, var(--input-bg))`;
+        // randen tussen verschillende stukken
+        const buur=(dx,dy)=>{const nx=x+dx,ny=y+dy;return nx<0||nx>=N||ny<0||ny>=N?null:bord[ny][nx];};
+        if(buur(0,-1)!==v)el.classList.add('pt-rt');
+        if(buur(0,1)!==v)el.classList.add('pt-rb');
+        if(buur(-1,0)!==v)el.classList.add('pt-rl');
+        if(buur(1,0)!==v)el.classList.add('pt-rr');
+      }
+      if(voorbeeld.has(y*N+x))el.classList.add(geldig?'pt-prev-ok':'pt-prev-bad');
+    });
   }
-  function startTimer(){startTime=Date.now();elapsed=0;clearInterval(timerId);timerId=setInterval(()=>{elapsed=Math.floor((Date.now()-startTime)/1000);const t=root.querySelector('#pt-timer');if(t)t.textContent=fmt(elapsed);},1000);}
-  function stopTimers(){clearInterval(timerId);clearInterval(cdId);}
-  function updateStatus(){const filled=cellPatch.flat().filter(v=>v>=0).length,sat=puzzle.clues.filter((_,i)=>patchSatisfiesClue(i)).length,el=root.querySelector('#pt-status');if(el)el.textContent=`${filled}/${curN*curN} vakjes · ${sat}/${puzzle.clues.length} vormen kloppen`;}
-  function checkWin(){updateStatus();if(cellPatch.flat().every(v=>v>=0)&&puzzle.clues.every((_,i)=>patchSatisfiesClue(i)))win();}
+  function tekenTray(){
+    const t=root.querySelector('#pt-tray');if(!t)return;
+    let html='';
+    puz.stukken.forEach(s=>{
+      if(s.gelegd)return;
+      const w=Math.max(...s.cellen.map(c=>c[0]))+1, h=Math.max(...s.cellen.map(c=>c[1]))+1;
+      let mini='';
+      for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+        const aan=s.cellen.some(c=>c[0]===x&&c[1]===y);
+        mini+=`<div class="pt-mc${aan?' pt-mc-aan':''}" style="${aan?`background:color-mix(in srgb, var(${s.kleur}) 70%, var(--input-bg))`:''}"></div>`;
+      }
+      html+=`<button class="pt-stuk${s.id===gekozen?' pt-stuk-sel':''}" data-id="${s.id}">
+        <div class="pt-mini" style="grid-template-columns:repeat(${w},1fr)">${mini}</div>
+        <span class="pt-stuk-n">${s.cellen.length}</span></button>`;
+    });
+    const over=puz.stukken.filter(s=>!s.gelegd).length;
+    t.innerHTML=html||`<div class="pt-leeg">Alle lappen gelegd 🎉</div>`;
+    t.querySelectorAll('.pt-stuk').forEach(b=>b.onclick=()=>{gekozen=+b.dataset.id;tekenTray();tekenBord();});
+  }
+  function updateStatus(){
+    const el=root.querySelector('#pt-status');if(!el||klaar)return;
+    let vol=0,leeg=0;
+    for(let y=0;y<N;y++)for(let x=0;x<N;x++){if(bord[y][x]>=0)vol++;else if(bord[y][x]===-1)leeg++;}
+    const over=puz.stukken.filter(s=>!s.gelegd).length;
+    el.textContent=`${vol} vakjes gevuld · nog ${leeg} leeg · ${over} lappen over`;
+  }
+  function schud(){const g=root.querySelector('#pt-grid');if(!g)return;g.classList.add('pt-schud');setTimeout(()=>g.classList.remove('pt-schud'),260);}
+  function checkWin(){
+    for(let y=0;y<N;y++)for(let x=0;x<N;x++)if(bord[y][x]===-1)return;
+    win();
+  }
 
   function win(){
-    stopTimers();locked=true;
-    const reward=coinsFor(idx);
-    LS.set(doneKey(idx),{time:elapsed,coins:reward});
-    // munten toekennen via het bestaande systeem (lokaal saldo + cloud + badge)
-    try{ if(typeof window.wijsGachaMuntToe==='function') window.wijsGachaMuntToe(reward); }catch(e){ console.warn('Munttoekenning Patches mislukt:',e); }
-    if(solvedCount()===COUNT){
-      const last=LS.get('kp-patches-last',null);
-      if(last!==date){const y=new Date();y.setDate(y.getDate()-1);const yStr=`${y.getFullYear()}-${pad(y.getMonth()+1)}-${pad(y.getDate())}`;let st=LS.get('kp-patches-streak',0);st=(last===yStr)?st+1:1;LS.set('kp-patches-streak',st);LS.set('kp-patches-last',date);}
+    stop();klaar=true;const reward=MATEN[gi].coins,time=elapsed;
+    LS.set(sleutel(gi),{time,coins:reward});
+    try{if(typeof window.wijsGachaMuntToe==='function')window.wijsGachaMuntToe(reward);}catch(e){console.warn('Munt patches mislukt:',e);}
+    if(aantalKlaar()===COUNT){
+      const laatste=LS.get('kp-patches2-last',null);
+      if(laatste!==date){const y=new Date();y.setDate(y.getDate()-1);const yStr=`${y.getFullYear()}-${pad(y.getMonth()+1)}-${pad(y.getDate())}`;
+        let s=LS.get('kp-patches2-streak',0);s=(laatste===yStr)?s+1:1;LS.set('kp-patches2-streak',s);LS.set('kp-patches2-last',date);}
     }
-    const sc=root.querySelector('#pt-streak');if(sc)sc.textContent=LS.get('kp-patches-streak',0);
-    const cc=root.querySelector('#pt-coins');if(cc)cc.textContent=coinsToday();
-    const pc=root.querySelector('#pt-prog');if(pc)pc.textContent=solvedCount();
-    celebrate(reward);drawPicker();setTimeout(()=>renderSolvedBody(idx),750);
+    const sc=root.querySelector('#pt-streak');if(sc)sc.textContent=LS.get('kp-patches2-streak',0);
+    const pc=root.querySelector('#pt-prog');if(pc)pc.textContent=aantalKlaar();
+    tekenPicker();tekenTray();feest(reward);
+    setTimeout(()=>toonKlaar(time,true),700);
   }
-  function doShare(){
-    const parts=[];for(let i=0;i<COUNT;i++){const t=solvedTime(i);parts.push(`${CIRC[i]} ${t!=null?fmt(t):'–'}`);}
-    const txt=`⛩️ Kana Master · Patches\n${nlDate(date)}\n${parts.join('  ')}\n🪙 ${coinsToday()} · 🔥 Streak ${LS.get('kp-patches-streak',0)}`;
-    if(navigator.clipboard)navigator.clipboard.writeText(txt);
-    const b=root.querySelector('#pt-share');if(b){const o=b.textContent;b.textContent='✓ Gekopieerd!';setTimeout(()=>b.textContent=o,1500);}
+  function toonKlaar(time,vers){
+    const alles=aantalKlaar()===COUNT, volgende=volgendeOpen(gi);
+    const el=root.querySelector('#pt-status');if(!el)return;
+    el.innerHTML=`<div class="pt-done">🎉 ${vers?`${MATEN[gi].label} gevuld! +🪙 ${MATEN[gi].coins}`:'Vandaag al opgelost'} · ⏱️ ${fmt(time)}
+      ${alles?`<div class="pt-count">Alle drie klaar! 🔥 Streak ${LS.get('kp-patches2-streak',0)} · nieuw over <b id="pt-cd">–</b></div>`
+        :(volgende!==null?`<button class="btn pt-next" id="pt-next">Volgende: ${MATEN[volgende].label} →</button>`:'')}</div>`;
+    const nb=root.querySelector('#pt-next');if(nb)nb.onclick=()=>{gi=volgende;laad(volgende);tekenPicker();};
+    if(alles){const c=root.querySelector('#pt-cd');if(c){const upd=()=>{const now=new Date(),m=new Date(now);m.setHours(24,0,0,0);let s=Math.floor((m-now)/1000);const h=s/3600|0;s%=3600;c.textContent=`${pad(h)}:${pad(s/60|0)}:${pad(s%60)}`;};upd();clearInterval(cdId);cdId=setInterval(upd,1000);}}
   }
-  function tickCountdown(){const el=root.querySelector('#pt-cd');if(!el)return;const upd=()=>{const now=new Date(),mid=new Date(now);mid.setHours(24,0,0,0);let s=Math.floor((mid-now)/1000);const h=s/3600|0;s%=3600;el.textContent=`${pad(h)}:${pad(s/60|0)}:${pad(s%60)}`;};upd();clearInterval(cdId);cdId=setInterval(upd,1000);}
-  function celebrate(reward){
-    const g=root.querySelector('#pt-grid');if(g)g.classList.add('pt-win');
-    const c=document.createElement('div');c.className='pt-coinpop';c.textContent=`+🪙${reward}`;root.appendChild(c);setTimeout(()=>c.remove(),1400);
-    const em=['⛩️','🌸','✨','🎉','🏮'];for(let i=0;i<16;i++){const s=document.createElement('div');s.className='pt-confetti';s.textContent=em[i%em.length];s.style.left=(Math.random()*100)+'%';s.style.animationDelay=(Math.random()*0.3)+'s';root.appendChild(s);setTimeout(()=>s.remove(),1600);}
-  }
+  function feest(reward){const c=document.createElement('div');c.className='pt-coinpop';c.textContent=`+🪙${reward}`;root.appendChild(c);setTimeout(()=>c.remove(),1400);
+    const em=['🧵','✨','🎉','◧'];for(let i=0;i<12;i++){const s=document.createElement('div');s.className='pt-confetti';s.textContent=em[i%em.length];s.style.left=(Math.random()*100)+'%';s.style.animationDelay=(Math.random()*0.3)+'s';root.appendChild(s);setTimeout(()=>s.remove(),1600);}}
 
   function injectStyle(){
-    if(document.getElementById('pt-style'))return;
-    const s=document.createElement('style');s.id='pt-style';s.textContent=`
+    if(document.getElementById('pt2-style'))return;
+    const s=document.createElement('style');s.id='pt2-style';s.textContent=`
       .pt-wrap{position:relative}
       .pt-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:8px}
       .pt-title{font-family:var(--font-display);font-size:24px;font-weight:800;color:var(--dark)}
@@ -1842,48 +1910,48 @@
       .pt-meta{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
       .pt-chip{background:var(--input-bg);border:1px solid var(--border);border-radius:20px;padding:4px 10px;font-size:14px;font-weight:700;white-space:nowrap}
       .pt-picker{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
-      .pt-tab{position:relative;display:flex;flex-direction:column;align-items:center;gap:1px;padding:7px 4px;background:var(--input-bg);border:1px solid var(--border);border-radius:10px;cursor:pointer;font-family:var(--font-body);color:var(--text)}
+      .pt-tab{display:flex;flex-direction:column;align-items:center;gap:1px;padding:7px 4px;background:var(--input-bg);border:1px solid var(--border);border-radius:10px;cursor:pointer;font-family:var(--font-body);color:var(--text)}
       .pt-tab-on{border-color:var(--primary);box-shadow:0 0 0 2px var(--primary) inset}
       .pt-tab-done{background:color-mix(in srgb,var(--success) 15%,var(--input-bg))}
-      .pt-tab-n{font-size:18px;line-height:1}
-      .pt-tab-sz{font-size:11px;color:var(--muted);font-weight:700}
-      .pt-tab-coin{font-size:11px;font-weight:700;color:var(--accent)}
-      .pt-tab-done .pt-tab-coin{color:var(--success)}
-      .pt-uitleg{font-size:12.5px;color:var(--muted);line-height:1.5;margin:0 0 10px}
+      .pt-tab-n{font-size:17px;line-height:1}.pt-tab-sz{font-size:11px;color:var(--muted);font-weight:700}
+      .pt-tab-coin{font-size:11px;font-weight:700;color:var(--accent)}.pt-tab-done .pt-tab-coin{color:var(--success)}
+      .pt-uitleg{font-size:12.5px;color:var(--muted);line-height:1.5;margin:0 0 8px}
       .pt-timerbar{text-align:center;font-size:14px;font-weight:700;color:var(--muted);margin-bottom:8px}
-      .pt-grid{display:grid;grid-template-columns:repeat(var(--n),1fr);gap:0;width:100%;max-width:380px;margin:0 auto;aspect-ratio:1;touch-action:none;background:var(--border);border:3px solid var(--sumi);border-radius:8px;overflow:hidden;user-select:none}
-      .pt-cell{position:relative;display:flex;align-items:center;justify-content:center;background:var(--input-bg);border:1px solid color-mix(in srgb,var(--sumi) 18%,transparent);aspect-ratio:1;cursor:pointer}
-      .pt-filled{border-color:var(--sumi)!important}
-      .pt-clue .pt-num{position:relative;z-index:2;font-weight:900;font-size:clamp(10px,3.2vw,15px);color:var(--dark);text-shadow:0 1px 2px rgba(255,255,255,.6)}
-      .pt-filled.pt-clue .pt-num{color:#fff8ee;text-shadow:0 1px 3px rgba(0,0,0,.5)}
-      .pt-shape{position:absolute;top:2px;right:2px;z-index:2;opacity:.85}
-      .pt-sq{width:6px;height:6px;background:currentColor;color:var(--muted)}
-      .pt-wide{width:9px;height:4px;background:currentColor;color:var(--muted)}
-      .pt-tall{width:4px;height:9px;background:currentColor;color:var(--muted)}
-      .pt-filled .pt-shape{color:#fff8ee}
-      .pt-clue.pt-ok::after{content:"✓";position:absolute;bottom:0;left:2px;font-size:9px;font-weight:900;color:var(--success);z-index:2}
-      .pt-filled.pt-ok::after{color:#eafff0}
-      .pt-prev-ok{outline:3px solid var(--success);outline-offset:-3px;z-index:3}
-      .pt-prev-bad{outline:3px solid var(--danger);outline-offset:-3px;z-index:3}
-      .pt-status{text-align:center;font-size:13px;color:var(--muted);margin:10px 0 4px;min-height:18px}
-      .pt-btns{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-      .pt-btn-2{background:var(--input-bg)!important;color:var(--text)!important;border:1px solid var(--border)!important;box-shadow:none!important}
-      .pt-shake{animation:pt-shk .3s}@keyframes pt-shk{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
-      .pt-win{animation:pt-pop .5s}@keyframes pt-pop{0%{transform:scale(1)}40%{transform:scale(1.04)}100%{transform:scale(1)}}
-      .pt-confetti{position:absolute;top:-10px;font-size:22px;pointer-events:none;animation:pt-fall 1.5s ease-in forwards;z-index:50}
-      @keyframes pt-fall{to{transform:translateY(420px) rotate(220deg);opacity:0}}
-      .pt-coinpop{position:absolute;top:40%;left:50%;transform:translateX(-50%);font-size:34px;font-weight:900;color:var(--accent);text-shadow:0 2px 6px rgba(0,0,0,.3);pointer-events:none;animation:pt-coin 1.4s ease-out forwards;z-index:60}
+      .pt-boardwrap{display:flex;justify-content:center}
+      .pt-grid{display:grid;grid-template-columns:repeat(var(--n),1fr);width:100%;max-width:min(94vw,400px);aspect-ratio:1;background:var(--input-bg);border:3px solid var(--sumi);border-radius:8px;overflow:hidden;touch-action:manipulation;user-select:none}
+      .pt-cel{position:relative;aspect-ratio:1;border:1px solid color-mix(in srgb,var(--sumi) 12%,transparent);cursor:pointer}
+      .pt-blok{background:var(--sumi);background-image:repeating-linear-gradient(45deg,rgba(255,255,255,.10) 0 4px,transparent 4px 8px);cursor:default}
+      .pt-vol{border-color:transparent}
+      .pt-rt{border-top:2px solid color-mix(in srgb,var(--sumi) 65%,transparent)}
+      .pt-rb{border-bottom:2px solid color-mix(in srgb,var(--sumi) 65%,transparent)}
+      .pt-rl{border-left:2px solid color-mix(in srgb,var(--sumi) 65%,transparent)}
+      .pt-rr{border-right:2px solid color-mix(in srgb,var(--sumi) 65%,transparent)}
+      .pt-prev-ok{box-shadow:0 0 0 2px var(--matsuba) inset;background:color-mix(in srgb,var(--matsuba) 25%,var(--input-bg))!important}
+      .pt-prev-bad{box-shadow:0 0 0 2px var(--danger) inset;background:color-mix(in srgb,var(--danger) 18%,var(--input-bg))!important}
+      .pt-schud{animation:pt-shk .26s}@keyframes pt-shk{0%,100%{transform:translateX(0)}30%{transform:translateX(-5px)}70%{transform:translateX(5px)}}
+      .pt-status{text-align:center;font-size:13px;color:var(--muted);margin:12px 0 8px;min-height:18px;font-weight:700}
+      .pt-tools{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+      .pt-tool{padding:11px;background:var(--input-bg);border:1px solid var(--border);border-radius:10px;font-weight:800;font-family:var(--font-body);font-size:14px;color:var(--text);cursor:pointer}
+      .pt-tray{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;padding-top:10px;border-top:1px dashed var(--border);min-height:40px}
+      .pt-stuk{position:relative;display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px;background:var(--input-bg);border:1px solid var(--border);border-radius:10px;cursor:pointer}
+      .pt-stuk-sel{border-color:var(--kincha);box-shadow:0 0 0 2px var(--kincha) inset}
+      .pt-mini{display:grid;gap:1px}
+      .pt-mc{width:11px;height:11px;border-radius:2px}
+      .pt-mc-aan{box-shadow:0 0 0 1px color-mix(in srgb,var(--sumi) 40%,transparent) inset}
+      .pt-stuk-n{font-size:10px;font-weight:800;color:var(--muted)}
+      .pt-leeg{font-size:13px;color:var(--muted);font-weight:700;padding:8px}
+      .pt-done{text-align:center;font-weight:700;color:var(--success);background:color-mix(in srgb,var(--matsuba) 12%,var(--input-bg));border:1px solid var(--success);border-radius:10px;padding:10px}
+      .pt-count{font-size:12.5px;color:var(--muted);font-weight:400;margin-top:6px}
+      .pt-next{margin-top:8px}
+      .pt-coinpop{position:absolute;top:38%;left:50%;transform:translateX(-50%);font-size:34px;font-weight:900;color:var(--accent);text-shadow:0 2px 6px rgba(0,0,0,.3);pointer-events:none;animation:pt-coin 1.4s ease-out forwards;z-index:60}
       @keyframes pt-coin{0%{opacity:0;transform:translate(-50%,10px) scale(.6)}20%{opacity:1;transform:translate(-50%,0) scale(1.1)}70%{opacity:1;transform:translate(-50%,-30px) scale(1)}100%{opacity:0;transform:translate(-50%,-60px) scale(.9)}}
-      .pt-solved{text-align:center;padding:14px 6px}
-      .pt-big{font-size:52px;animation:pt-pop .6s}
-      .pt-res-row{display:flex;justify-content:space-between;max-width:240px;margin:8px auto;padding:8px 14px;background:var(--input-bg);border:1px solid var(--border);border-radius:10px;font-size:15px}
-      .pt-daydone{margin:10px 0;font-weight:700;color:var(--success)}
-      .pt-count{font-size:13px;color:var(--muted);margin:10px 0}
+      .pt-confetti{position:absolute;top:-10px;font-size:22px;pointer-events:none;animation:pt-fall 1.5s ease-in forwards;z-index:50}
+      @keyframes pt-fall{to{transform:translateY(500px) rotate(220deg);opacity:0}}
     `;
     document.head.appendChild(s);
   }
 
-  window.KanaPatches={start};
+  window.KanaPatches={start,buildDaily};
   window.startPatchesInit=function(){(window.switchScreen||function(){})('screen-patches');const el=document.getElementById('patches-root');if(el)start(el);};
 })();
 
@@ -3334,40 +3402,40 @@
    ============================================================ */
 (function () {
 const LEVELS=[
-['                                        ','                                        ','                                        ','                                        ','                                        ','                                        ','                                        ','                                        ','                                        ','                             ==         ','                      ==                ','  P      o       o   o   o E o       T  ','############   #################  ######','############   #################  ######'],
-['                                         ','                                         ','                                         ','                                         ','                                         ','                                         ','                                         ','          o      o                       ','          ===  ====       ===            ','              E      o                   ','      o     ###############o             ','  P   ##########################      T  ','################################  #######','################################  #######'],
-['                                           ','                                           ','                                           ','                                           ','                                           ','                                           ','                                           ','                                           ','           o       o                       ','           === o   ==                      ','              ===                          ','  P                      o   E   o      T  ','############  ######   ####################','############  ######   ####################'],
-['                                            ','                                            ','                                            ','                                            ','                                            ','                                            ','                                            ','                                            ','             ==                             ','            ====          Eo    o    o   T  ','                o   o   ####################','  P         #########   ####################','#####################   ####################','#####################   ####################'],
-['                                              ','                                              ','                                              ','                                              ','                                              ','                                              ','                                              ','                                              ','                                              ','                         ===o                 ','                           ====   ====        ','  P       o   o     o     E       o        T  ','#################   #########   #####   ######','#################   #########   #####   ######'],
-['                                                ','                                                ','                                                ','                                                ','                                                ','                                                ','                                                ','                                                ','          o                                     ','         ====             ===                T  ','                      ==  o     o       ########','  P   o       o         #########  #############','#################   #############  #############','#################   ############# ^#############'],
-['                                                 ','                                                 ','                                                 ','                                                 ','                                                 ','                                                 ','                                                 ','           ====                                  ','                                                 ','         o        o                              ','        ######   ====  ===                       ','  P     ######      E    o   o         o      T  ','######  ######################   ################','######  ######################  ^################'],
-['                                                   ','                                                   ','                                                   ','                                                   ','                                                   ','                                                   ','                                                   ','                                                   ','          o                                        ','          ==           o===                        ','                     ====                          ','  P              E         o         o    o     T  ','######  #####   #############  ####################','######  #####  ^#############  ####################'],
-['                                                    ','                                                    ','                                                    ','                                                    ','                                                    ','                 o                                  ','                ==                                  ','                ==                                  ','               E        o      ====   ==    o    T  ','            ################    E       o  #########','          o ########################################','  P   ##############################################','####################################################','####################################################'],
-['                                                      ','                                                      ','                                                      ','                                                      ','                                                      ','                                                      ','                             o           o            ','                             ==     o  ===            ','                                    ====           T  ','                                   E   E    ##########','         ====        #################################','  P         o    o   #################################','######################################################','######################################################'],
-['                                                        ','                                                        ','                                                        ','                                                        ','                                                        ','                                                        ','                                                        ','                                      ==                ','                     o               ====               ','              ==   ====        o E  o           o       ','                          ##############  #######    T  ','  P      o  E             ##############  ##############','######  ########  ######################  ##############','######^ ######## ^###################### ^##############'],
-['                                                         ','                                                         ','                                                         ','                                                         ','                                                         ','                                                         ','                                                         ','                            o                            ','                           ==                            ','                                                      T  ','          ====             #######                 ######','  P         o   o     E    #######  o         o    ######','######  ###############################  ########  ######','######  ###############################^ ########  ######'],
-['                                                           ','                                                           ','                                                           ','                                                           ','                                                           ','                                                           ','                                                           ','                                                           ','                                                           ','                    o             ====   ====      o       ','                   ==                   ==== #######    T  ','  P            o E                o   o      ####### ######','######  ############  ######  ############   ####### ######','######  ############  ######  ############   ####### ######'],
-['                                                            ','                                                            ','                                                            ','                                                            ','                                                            ','                                                            ','                           o                                ','          ==         o    ====                              ','                     ====      ====                         ','                     E  E                ==                 ','        #########  #############          ====              ','  P     #########  #############    o E  o     o         T  ','######  #########  #############  ##########################','###### ^#########^ #############  ##########################'],
-['                                                              ','                                                              ','                                                              ','                                                              ','                                                              ','                                                              ','                     o                                        ','                    ===                                       ','                           ====               ===  ===     T  ','                  #########                  ====      #######','          E   o   ######### o           E o   o        #######','  P   #############################   ###############  #######','###################################   ###############  #######','################################### ^ ############### ^#######'],
-['                                                                ','                                                                ','                                                                ','                                                                ','                                                                ','                                                                ','                                                                ','                                          ==== ====          T  ','                  o   ===                 ===        ###########','               ====          Eo           E   o      ###########','                         ######## ==     ##########  ###########','  P    o             ############  o     ##########  ###########','##################   #################   ##########  ###########','##################   #################   ##########  ###########'],
-['                                                                 ','                                                                 ','                                                                 ','                                                                 ','                                                                 ','                                                                 ','                                                                 ','                                                                 ','                      ===                                        ','                          ===    ==     o                        ','                      o  E      ==     ==           ===       T  ','  P             o    #########  o  E               o ####  ######','######   #########   #########  #########################  ######','######   #########  ^#########  ######################### ^######'],
-['                                                                   ','                                                                   ','                                                                   ','                                                                   ','                                                                   ','                                                                   ','                                                                   ','                                                                   ','                        o                                          ','                    ======                            ====         ','                   ===                                          T  ','  P        E Eo              o               o       E o  #########','######   ########################  #####  ######  ######  #########','######^  ########################  #####  ###### ^###### ^#########'],
-['                                                                    ','                                                                    ','                                                                    ','                                                                    ','                                                                    ','                                                                    ','                                                                    ','                                                                    ','                                                                    ','                            ==        ===                           ','                               ==         === ####                  ','  P         o         o     EE      o     o   #### E       o     T  ','######   ####  ########   #############  ################  #########','######^  ####  ########   #############  ################^^#########'],
-['                                                                      ','                                                                      ','                                                                      ','                                                                      ','                                                                      ','                                                          ==          ','                                                           ==         ','                              o  ===           o   o     E            ','                         ==  ======           #######  ########       ','                         E           o        #######  ########    T  ','               ===      ##############  ####  #######  ###############','  P          o      ##################  ####  #######  ###############','##################  ##################  ####  #######  ###############','##################  ################## ^####^ ####### ^###############']
+['                                                                                     ','                                                                                     ','                                                                                     ','                                                                                     ','                                                                                     ','                                                                                     ','                                                                                     ','                                         o    o                                      ','                                             ===                                     ','                                                                                     ','                                                                                     ','                                           ===                                       ','                                                                                     ','                                ====                                                 ','                        ==== ===         ===   ==  o       o                         ','                                             === ===       ===        ====o          ','  P               o   o###########                      ====              ===     T  ','##############  ##################  ###############              o            #######','##############  ##################  ######################################### #######','##############  ##################  ######################################### #######'],
+['                                                                                           ','                                                                                           ','                                                                                           ','                                                                                           ','                                                                                           ','                                                                                           ','                                                                                           ','                                                           o                               ','                                                          ===                              ','                                                                                           ','                                                            o                              ','                                                            ===                            ','                                                                                           ','                                                               o                           ','               o                                o             ===            ==            ','             ====   ====       ====        === ====                   ==  ====             ','  P                      ==                ====                                  o      T  ','#######  o      E   o          ##########         ########  ###############  ##############','#############################  #################  ########  ###############  ##############','#############################  #################  ########  ###############  ##############'],
+['                                                                                                 ','                                                                                                 ','                                                                                                 ','                                                                                                 ','                                                                                                 ','                                                                                                 ','                                                                                                 ','                                                                                                 ','                                                                                                 ','                                                                                                 ','                                                                                                 ','                                                                                                 ','                                                                                                 ','         ====                                                                                    ','                                                            o                     ===            ','           o                 =====   ===            o==   ====              ==                   ','  P      ####                       ====           ===          o       o                        ','#######  ####  #######    o        o          E               #########################o      T  ','#######  ####  ##################################################################################','#######  ####  ##################################################################################'],
+['                                                                                                       ','                                                                                                       ','                                                                                                       ','                                                                o                                      ','                                                               ===                                     ','                                                                                                       ','                                                                                                       ','                                                                 ===                                   ','                                                                                                       ','                                                                    o                                  ','                                                                   ===                                 ','                                                                                                       ','                                                                              o                        ','          o                                                          ===  ======                       ','         ===                                               ===      ==                    o            ','                                                                                         ==         T  ','  P             ===   ===            ==       o             o        #############            #########','#######  ####              o        E    ##########  ##################################################','#######  ##########################################  ##################################################','#######  ##########################################  ##################################################'],
+['                                                                                                             ','                                                                                                             ','                                                                                                             ','                                                                            o                                ','                                                                           ===                               ','                                                                                                             ','                                                                                                             ','                                                                         ===                                 ','                                                                                                             ','                                                                        o                                    ','                                                                       ===                                   ','                                                                                                             ','                                                            o                       o            ====        ','                                                            ====   =====   o       ==                        ','                                                   ==        ==      ==    ==   ==                        T  ','                      ===                        ==         E          o           ########  ################','  P                                     E     o         ################  #################  ################','#######            o  #####  ##############  #########  ################  #################  ################','##############  ####  #####  ##############  #########  ################  #################  ################','##############  ####^^#####^ ##############  #########  ################  #################  ################'],
+['                                                                                                                   ','                                                                                                                   ','                                                                                                                   ','                                           o    o                                                                  ','                                               ===                                                                 ','                                                                                                                   ','                                                                                                                   ','                                             ===                                                                   ','                                                                                                                   ','                                                                                         ==                        ','                                           ===       ===                 ====                                      ','                               ==== o     ==     E            ==       ====                         ===            ','                                == ====        ############### o      o      o      === ######  ====               ','                                    ################################  #########         ######                     ','                         ^    ######################################  #########  #####  ######  ######    o     T  ','         ======      ###############################################  #########  #####  ######  ######  ###########','  P           E     o###############################################  #########  #####  ######  ######  ###########','####################################################################  #########  #####  ######  ######  ###########','####################################################################  #########  #####  ######  ######  ###########','#################################################################### ^#########  ##### ^######  ###### ^###########'],
+['                                                                                                                         ','                                                                                                                         ','                                                                                                                         ','                                                                                                                         ','                                                                                         o                               ','                                                                                        ===                              ','                                                                                                                         ','                                                                                                                         ','                                                                                      ===                                ','                                                                                                                         ','                                                                                    o                                    ','                        ====      ==                                                ===                                  ','                                            ==                                                                           ','           ==o   o                       ===                                       o                                     ','             #########################  o          o          ====  ======    ==  ===         ====      =====            ','             #########################  ########  #######                 ==    ====                  === ===            ','  P      #############################  ########  #######        E           Eo             E                         T  ','#######  #############################  ########  #####################  ##########  ####################################','#######  #############################  ########  #####################  ##########  ####################################','#######  #############################  ########^^##################### ^##########^ ####################################'],
+['                                                                                                                               ','                                                                                                                               ','                                                                                                                               ','                                                                                                                               ','                                                                                                                               ','                                                            ===                                                                ','                                                                                                                               ','                                                               o                                           ===                 ','                                                              ===                                                              ','                                                                                                          o                    ','                                                                                                         ===                   ','                                                                ===                                                            ','                                                                              o                                                ','                                                                   o          ===                      ===  ===========        ','                                     =====                  ====  ======           ====               ==     ===               ','                         ===     ====      ====                           o                                 o               T  ','  P      ==== ===                                       === ######     #############   == == ==   #############################','#######      o       ##########  ########    E              ########################             o#############################','###################  ##########  ##############################################################################################','###################  ##########  ##############################################################################################'],
+['                                                                                                                                     ','                                                                                                                                     ','                                                                                                                                     ','                                                                                                                                     ','                                                                                                                                     ','                                                                                                                                     ','                                                                                                                                     ','                                                                                                                                     ','                                                                                                             o                       ','                                                                                                            ===                      ','                                                                                                                                     ','                                                                                     ===                                             ','                                                                                 ===                      ===                        ','                                              ==          ==  o                                             ===                      ','               ==                                      ====  ======            ###############           o            o              ','             ===      ==           o                 E                         ###############          ===        ====   o          ','  P        ====                 #######  ##################  ######  #########################  #####  ==########        ==          ','#######   o   o########################  ##################  ######  #########################  #####    ########                 T  ','#######  ##############################  ##################  ######  #########################  #################  ##################','#######  ##############################  ##################  ######  ######################### ^#################  ##################'],
+['                                                                                                                                           ','                                                                                                                                           ','                                                                                                                                           ','                                                                                                                                           ','                                                      o                                                                                    ','                                                     ===                                                                                   ','                                                                                                                                           ','                                                                                                                                           ','                                                       ===                                                                                 ','                                                                                                                                           ','                                                          o                                                                                ','                                                         ===                                                                               ','                                                                                                                                           ','                        ====                                                                                                               ','                                                           =======                       ==                       ===    ===               ','                      o                       ====     ======            ===    o          ====    ===               o      o           T  ','  P      ####        #######                           ====        E           ########      o     ==   == === ############################','#######  ####    E   #######       o                      #####################################                ############################','#######  ####  #################  ######  ###################################################################  ############################','#######  ####^ ################# ^######  ###################################################################  ############################'],
+['                                                                                                                                                 ','                                                                                                                                                 ','                                                                                                                                                 ','                                                                                                                                                 ','                                                                                ===                                                              ','                                                                                                                                                 ','                                                                                   o                                                             ','                                                      o                           ===                                                            ','                                                     ====               ====                   o                ==                               ','                                                  ==                              o      ==   ======       ====                                  ','                         ==     ====                   o   #########  ###############   ====                   o                      ====       ','                            === ===            #####################  ###############     o  E          #########                    ====        ','                                 ^ o     ####  #####################  ################################  #########         ########            T  ','         ===  ==        ###############  ####  #####################  ################################  ################  #######################','         ===            ###############  ####  #####################  ################################  ################  #######################','                  #####################  ####  #####################  ################################  ################  #######################','  P    ################################  ####  #####################  ################################  ################  #######################','#######################################  ####  #####################  ################################  ################  #######################','#######################################  ####  #####################  ################################  ################  #######################','#######################################  ####  ##################### ^################################^ ################^^#######################'],
+['                                                                                                                                                       ','                                                                                                                                                       ','                                                                                                                                                       ','                                                                                                                                                       ','                                                                                                                                                       ','                                                                                                                                                       ','                                                                                                                                                       ','                                                                                                                                                       ','                                                                                                                          ===                          ','                                                                                                                                                       ','                                                                                                                         o                             ','                                                                              ======                                    ===                            ','                                                                              ===                                                                      ','                                                            ==                                                              o                          ','                                 ====       ==                            ##########                       =====      ===  ==               ==         ','          ====   ====                      ===    ######   o       #####  ##########        ===                   ==    ==                             ','  P                      ==                   Eo  ######  #######  #####  ###############           ==                                              T  ','#######  o        o        o^    ######  ###############  #######  #####  ###############              o  ####  ##################  ######  ###########','##############  #######  ##############  ###############  #######  #####  ###############  #####  ######  ####  ##################  ######  ###########','##############  ####### ^##############  ############### ^#######^ ##### ^###############  #####^ ###### ^####  ##################  ######^ ###########'],
+['                                                                                                                                                             ','                                                                                                                                                             ','                                                                                          o                                                                  ','                                                                                         ===                                                                 ','                                                                                                                                                             ','                                                                                                                                                             ','                                                                                       ===                                                                   ','                                                                                                                                                             ','                                                                                      o                                                                      ','                                                                                     ===          ===        ====      ====                                  ','                                                                   o             ==                                ==    ===                                 ','                                                   ==      ===    ====            E              o    o   E       o             ===  ====        ===         ','                        ====        ==               E         ==         ====##########  #########  ######################    ====    ########              ','                       ====                 ==    ######      o        ^  o   ##########  #########  ######################            ########           T  ','             ====                                 ##########################  ##########  #########  ######################  ################################','              ==== ########  #########  ########  ##########################  ##########  #########  ######################  ################################','  P                ########  #########  ########  ##########################  ##########  #########  ######################  ################################','#######  ##################  #########  ########  ##########################  ##########  #########  ######################  ################################','#######  ##################  #########  ########  ##########################  ##########  #########  ######################  ################################','#######^ ##################  #########  ########^^########################## ^##########  #########  ######################  ################################'],
+['                                                                                                                                                                   ','                                                                                                                                                                   ','                                                                                                                                                                   ','                                                                                 ===                                                                               ','                                                               o                                                                                   ===             ','                                                           ===                      o                                                                              ','                                                                                   ===                                                            o                ','                                                                                                                                                 ===               ','                                                             ===                                                                                                   ','                                                                                     ===                                                                           ','                                                                                                                                      ===      ===  ===            ','                                                          ==== ===  ==          o       o                                                               ==         ','                                         ==            ===                      ===    ===                   o                    ==    o                       T  ','                                     ===                                     == ==         ====            ====        ===    ==== ################################','             ===          ==                       #########  ##########                                                    ===####################################','                ====           #######  #####      #########  #####################  #######  ##############           o   E   ####################################','  P         E       ===  #############  #####  #############  #####################  #######  #######################  ############################################','#######  ########        #############  #####  #############  #####################  #######  #######################  ############################################','#######  ##############  #############  #####  #############  #####################  #######  #######################  ############################################','#######  ##############  #############  #####^^#############  #####################  ####### ^#######################  ############################################'],
+['                                                                                                                                                                         ','                                                                                                                                                                         ','                                                                                                                         o                                               ','                                                                                                                        ===           o    o                             ','                                                                                                                                     ===                                 ','                                                                                                                                                                         ','                                                                                                                          ===                                            ','                                                                                                                                       ===                               ','                                                                                                                             o                                           ','                                                                                                                            ===                                          ','                                                                                                                                         ===                             ','                                                                            o                                                                                            ','                                                                            ==                                             ======                                        ','                                                                                                                              ===          ===                           ','                                                         ====    ===  ==                               ===       ===                   ====                              ','                                            ====  o      ==            #######                ========             ====    #####      ===                       o     T  ','  P             == ====          ====       =======                    #######                            o                #########      ##########  #######  ##########','#######                                      E  E     ########  ##########################  ########  #####  ############  #########  ##############  #######  ##########','##############  ########  ########  ##########################  ##########################  ########  #####  ############  #########  ##############  #######  ##########','############## ^########  ########  ##########################^^##########################^^########^ #####^^############^ #########  ##############  #######  ##########'],
+['                                                                                                                                                                               ','                                                                                                                                                                               ','                                                                                                                                                 o                             ','                                                                                                                                                       ===                     ','                                                                                                                                                                               ','                                                                                                                                                      o                        ','                                                                                                    ===                                              ===                       ','                                                                                                                                                                               ','                                                                                                       o                                                                       ','                                                                                                      ===                                          ===                         ','                                                                                                                                                                               ','                                                                                                                                                 o                             ','                                                                                                        ===      ===   ===          ====  ===    ===                           ','         ===                                   o       o                                                ==          ====                                                       ','              ===   ====                       ==== ====                          o                            o  E                                 ^              ==          ','                          ==                                                   ====   ====             ######  ################################  ############               T  ','  P    #######     E              E               ^            ===    ===       ==       ==   ###############  ################################  ############  ################','############################  #######         ########                                        ###############  ################################  ############  ################','############################  ##############  ##################  ##########  ####  ########  ###############  ################################  ############  ################','############################^ ##############^ ##################  ##########  ####^ ######## ^###############^ ################################^ ############ ^################'],
+['                                                                                                                                                                                     ','                                                                                                                                                                                     ','                                                                                                                                                                                     ','                                                                                                             o                                                                       ','                                                                                                            ===                                                                      ','                                                                                                                                                                                     ','                                                                                                                                                                                     ','                                                                                 ==                           ===                           ===                                      ','                                                                       o            ==   ====                                     ==                ==                    o          ','                                                                     ====             E           o              o     ==== ====  ^ E                                     ====       ','                                                                    ====   ====  ##########       ====          ===          ##################        o                          T  ','                                                  =======           o            ##########    E        ====       ############################  ##################  ################','           ===      ====                  ====                    #####  ######  ##########  #########          o  ############################  ##################  ################','                   ===                == ===                      #####  ######  ##########  #########  #########  ############################  ##################  ################','                   ^                              ##############  #####  ######  ##########  #########  #########  ############################  ##################  ################','       #######  ##############  ####  ##########  ##############  #####  ######  ##########  #########  #########  ############################  ##################  ################','  P    #######  ##############  ####  ##########  ##############  #####  ######  ##########  #########  #########  ############################  ##################  ################','##############  ##############  ####  ##########  ##############  #####  ######  ##########  #########  #########  ############################  ##################  ################','##############  ##############  ####  ##########  ##############  #####  ######  ##########  #########  #########  ############################  ##################  ################','############## ^############## ^####^^##########^ ##############  #####  ######^ ########## ^#########  #########^ ############################^^##################  ################'],
+['                                                                                                                                                                                           ','                                                                                                                                                                                           ','                                                                                                                                                                                           ','                                                                                                                                                                                           ','                                                                                                                        ===            o                                                   ','                                                                                                                                      ===                       o                          ','                                                                                                                       o                                            ===                    ','                                                                                                                      ===                                                                  ','                                                                                                                                        ===                                                ','                                                                                                                                                                  ===                      ','                                                                                                                    ===                    o                                               ','                                    ===                                                                                        ==         ======                                           ','                                ====                                                                                          ==== ===                          ===                        ','                                          ====        ==         ===               ====      ======    ===        ===         o        E E       ====        ===                           ','                     ==         #####                  o            ==               ====              ==                    ##################   ==     o         E                    T  ','              ====      E       #####  ########  #########                                             E         ^           ##################       #######################  ############','  P          o      ##########  #####  ########  #################              #########  ################  ########  ####  #######################  #######################  ############','#######  #########  ##########  #####  ########  #################  ##########  #########  ################  ########  ####  #######################  #######################  ############','#######  #########  ##########  #####  ########  #################  ##########  #########  ################  ########  ####  #######################  #######################  ############','#######^ #########  ##########  #####  ########^ #################  ##########  #########  ################  ########^ ####  #######################  #######################  ############'],
+['                                                                                                                                                                                                 ','                                                                                                                                                                                                 ','                                                                                                                                                                                                 ','                                                                                                                                                                                                 ','                                                                                                                                                                                                 ','                                                                                                                                                                                                 ','                                             o                                                                                                                                                   ','                                            ===                                                                                                                                                  ','                                                                                                                                                                                                 ','                                                                                                                                                                                                 ','                                              ===                                                                                                                                                ','                                                                           ===  ===                                                                                                              ','                      ====                       o                         ===  ====                  ===                                                                                        ','                     ==== ===                   ===        == ===        ==  E                           ===                                              ===    ===                             ','                         o                             ====            ====########               o          ====                  o                  o                    ====                  ','         ######################                          ^E    o           ########  ###########  ######                 ==     ====                 ==           ===              ===o          ','  P      ######################  #########  #####  #############  #################  ###########  ############                ====     ==       ====      ########                  ===          ','#######  ######################  #########  #####  #############  #################  ###########  ############                                            ########         ####               T  ','#######  ######################  #########  #####  #############  #################  ###########  ############  #####  ##################  #######  ####  ###############  #############  #######','#######  ######################  #########^ #####  #############  ################# ^########### ^############  #####  ##################^ #######^^####  ############### ^#############  #######'],
+['                                                                                                                                                                                                       ','                                                                                                                                                                                                       ','                                                                                                                                                                                                       ','                                                                                                                                                                                                       ','                                                                                        o                                                          o                                                   ','                                                                                       ===                                                           ===                                               ','                                                                                                                                                                                                       ','                                                                                                                                                     o                                                 ','                                                                                         ===                                                       ===   ====         ===                              ','                                                                                                                                    ==== ===           ==           == ====        ===                 ','                                                                                            o                                                         ^                        ====       ==           ','                                                                                           ===                    o ==     o      #########  ################  ############               E         T  ','                                                                           o                                      ===   ########  #########  ################  ############  #########  ###############','                                                                          ===         ====            ====    ==        ########  #########  ################  ############  #########  ###############','         ===     ====    ==                                   ===                  ^         ===       ==   ===  #####  ########  #########  ################  ############  #########  ###############','                 ===                                                  ==######  ##########                       #####  ########  #########  ################  ############  #########  ###############','  P         o          E    ==    ===                         E         ######  ##########      ###############  #####  ########  #########  ################  ############  #########  ###############','#######  ##################           E  E           #############  ##########  ##############  ###############  #####  ########  #########  ################  ############  #########  ###############','#######  ##########################################  #############  ##########  ##############  ###############  #####  ########  #########  ################  ############  #########  ###############','#######  ##########################################  #############^^##########^ ############## ^###############  #####^ ########^ ######### ^################ ^############  #########^^###############']
 ];
   const TILE=32, ROWS=14;
-  const G=2000, JUMP=660, SPEED=210, MAXVAL=760;
+  const G=2000, JUMP=650, SPEED=190, MAXVAL=760;
   const COYOTE=0.10, BUFFER=0.12;
   const KANA=['あ','い','う','え','お','か','き','く','け','こ','さ','し','す','せ','そ','た','ち','つ','て','と','な','に','ぬ','ね','の'];
   const ROMAJI={'あ':'a','い':'i','う':'u','え':'e','お':'o','か':'ka','き':'ki','く':'ku','け':'ke','こ':'ko','さ':'sa','し':'shi','す':'su','せ':'se','そ':'so','た':'ta','ち':'chi','つ':'tsu','て':'te','と':'to','な':'na','に':'ni','ぬ':'nu','ね':'ne','の':'no'};
-  const BELONING=lvl=>3+Math.floor(lvl/4);      // 3..7 munten
-  const BONUS=2;                                 // extra bij alle kana
+  const BELONING=lvl=>4+Math.floor(lvl/4);      // 4..9 munten
+  const BONUS=3;                                 // extra bij alle kana
 
   const LS={get:(k,f)=>{try{const v=localStorage.getItem(k);return v==null?f:JSON.parse(v);}catch(e){return f;}},set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}};
   const pad=n=>String(n).padStart(2,'0');const fmt=s=>`${Math.floor(s/60)}:${pad(s%60)}`;
 
   let root,view,cur,voortgang,cv,ctx,VW,VH,scale;
-  let kaart,W,speler,vijanden,kanas,doel,camX,toetsen,raf,laatste,dood,gewonnen,startT,tijd,jumpBuf,coyote,keyH,keyU,pauze;
+  let kaart,W,speler,vijanden,kanas,doel,camX,camY,toetsen,raf,laatste,dood,gewonnen,startT,tijd,jumpBuf,coyote,keyH,keyU,pauze;
 
   function start(container){root=container;voortgang=LS.get('ninja-voortgang',{});view='select';renderSelect();}
 
@@ -3401,7 +3469,7 @@ const LEVELS=[
   function laad(l){
     cur=l;view='play';
     const rijen=LEVELS[l-1];
-    W=rijen[0].length;
+    W=rijen[0].length;ROWS=rijen.length;
     kaart=rijen.map(r=>r.split(''));
     vijanden=[];kanas=[];doel=null;
     let kIdx=(l*7)%KANA.length;
@@ -3412,7 +3480,7 @@ const LEVELS=[
       else if(c==='o'){kanas.push({x:x*TILE+16,y:y*TILE+16,teken:KANA[kIdx%KANA.length],op:false});kIdx++;kaart[y][x]=' ';}
       else if(c==='T'){doel={x:x*TILE,y:y*TILE};kaart[y][x]=' ';}
     }
-    camX=0;dood=false;gewonnen=false;pauze=false;tijd=0;startT=performance.now();
+    camX=0;camY=Math.max(0,(ROWS-ZICHT)*TILE);dood=false;gewonnen=false;pauze=false;tijd=0;startT=performance.now();
     jumpBuf=0;coyote=0;toetsen={l:false,r:false,j:false};
     renderSpel();
   }
@@ -3454,9 +3522,9 @@ const LEVELS=[
   function maatCanvas(){
     const wrap=root.querySelector('.nj-cvwrap');if(!wrap||!cv)return;
     const bw=Math.min(wrap.clientWidth||360,520);
-    VW=Math.round(bw); VH=Math.round(bw*0.58);
+    VW=Math.round(bw); VH=Math.round(bw*0.62);
     cv.width=VW;cv.height=VH;cv.style.width=VW+'px';cv.style.height=VH+'px';
-    scale=VH/(ROWS*TILE);
+    scale=VH/(ZICHT*TILE);
   }
   function stopSpel(){if(raf)cancelAnimationFrame(raf);raf=null;
     if(keyH){window.removeEventListener('keydown',keyH);keyH=null;}
@@ -3535,8 +3603,10 @@ const LEVELS=[
     // doel
     if(doel&&Math.abs((speler.x+speler.w/2)-(doel.x+TILE/2))<26&&Math.abs((speler.y+speler.h)-(doel.y+TILE))<40)win();
     // camera
-    const doelCam=speler.x+speler.w/2-(VW/scale)/2;
-    camX+=(Math.max(0,Math.min(W*TILE-(VW/scale),doelCam))-camX)*Math.min(1,dt*8);
+    const doelCamX=speler.x+speler.w/2-(VW/scale)/2;
+    camX+=(Math.max(0,Math.min(Math.max(0,W*TILE-(VW/scale)),doelCamX))-camX)*Math.min(1,dt*8);
+    const doelCamY=speler.y+speler.h/2-(VH/scale)*0.58;
+    camY+=(Math.max(0,Math.min(Math.max(0,ROWS*TILE-(VH/scale)),doelCamY))-camY)*Math.min(1,dt*5);
     const t=root.querySelector('#nj-timer');if(t)t.textContent=fmt(Math.floor(tijd));
   }
 
@@ -3581,10 +3651,11 @@ const LEVELS=[
     ctx.fillStyle='rgba(90,120,130,.30)';
     for(let i=0;i<6;i++){const bx=(i*260-camX*0.25)%(VW+520)-160;
       ctx.beginPath();ctx.moveTo(bx,VH*0.72);ctx.lineTo(bx+120,VH*0.34);ctx.lineTo(bx+240,VH*0.72);ctx.closePath();ctx.fill();}
-    ctx.setTransform(scale,0,0,scale,-camX*scale,0);
+    ctx.setTransform(scale,0,0,scale,-camX*scale,-camY*scale);
     const x0=Math.floor(camX/TILE)-1, x1=Math.ceil((camX+VW/scale)/TILE)+1;
+    const y0=Math.max(0,Math.floor(camY/TILE)-1), y1=Math.min(ROWS,Math.ceil((camY+VH/scale)/TILE)+1);
     // tegels
-    for(let y=0;y<ROWS;y++)for(let x=Math.max(0,x0);x<Math.min(W,x1);x++){
+    for(let y=y0;y<y1;y++)for(let x=Math.max(0,x0);x<Math.min(W,x1);x++){
       const c=kaart[y][x];const px=x*TILE,py=y*TILE;
       if(c==='#'){
         ctx.fillStyle='#6b5540';ctx.fillRect(px,py,TILE,TILE);
