@@ -3642,7 +3642,7 @@ const LEVELS=[
   function sterf(){
     if(dood)return;dood=true;
     toonOverlay(`<div class="nj-msg nj-fail">💥 Oeps!<button class="btn" id="nj-retry">Opnieuw proberen</button></div>`);
-    const b=root.querySelector('#nj-retry');if(b)b.onclick=()=>laad(cur);
+    const b=root.querySelector('#nj-retry');if(b)b.onclick=()=>{if(extern)laadRijen(laatsteRijen,null);else laad(cur);};
   }
   function win(){
     if(gewonnen)return;gewonnen=true;
