@@ -3480,9 +3480,15 @@ const LEVELS=[
     laadRijen(LEVELS[l-1], l);
   }
   // speel een willekeurig level (editor, gedeelde levels)
-  function speelCustom(rijen, naam, terugFn, opGehaald){
+  function speelCustom(rijen, naam, terugFn, opGehaald, container){
+    // werkgebied kan nog ontbreken als de speler niet via het menu is geopend
+    const el=container||root||document.getElementById('ninja-root');
+    if(!el){console.warn('Kana Ninja: geen speelveld gevonden');return false;}
+    root=el;
+    voortgang=voortgang||LS.get('ninja-voortgang',{});
     extern={naam:naam||'Zelfgemaakt', terug:terugFn||null, opGehaald:opGehaald||null};
     laadRijen(rijen, null);
+    return true;
   }
   let laatsteRijen=null;
   function kaartNaarRijen(){return laatsteRijen;}
@@ -3964,12 +3970,12 @@ const LEVELS=[
     const mijnRijen=rijen();
     (window.switchScreen||function(){})('screen-ninja');
     const el=document.getElementById('ninja-root');
-    window.KanaNinja.speelCustom(mijnRijen, naam||'Test', ()=>{
+    const gelukt=window.KanaNinja.speelCustom(mijnRijen, naam||'Test', ()=>{
       (window.switchScreen||function(){})('screen-studio');
       const s=document.getElementById('studio-root');if(s)start(s);
       if(getest)melding('Uitgespeeld! Je kunt nu publiceren. 🎉','ok');
-    }, res=>{ getest=true; LS.set('studio-getest',{rijen:mijnRijen,tijd:res.tijd}); });
-    if(el)window.KanaNinja.start?0:0;
+    }, res=>{ getest=true; LS.set('studio-getest',{rijen:mijnRijen,tijd:res.tijd}); }, el);
+    if(!gelukt){(window.switchScreen||function(){})('screen-studio');melding('Kon de speler niet starten.','fout');}
   }
 
   async function publiceren(){
