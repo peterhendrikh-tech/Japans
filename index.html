@@ -3907,10 +3907,11 @@ const LEVELS=[
   let root, tab, kaart, W, gekozenTegel, penseel, camX, getest, naam, mijnLevels, lijst, lijstSort, bezigTekenen;
 
   function start(container){
-    root=container;tab='bouw';gekozenTegel='#';penseel=1;camX=0;getest=false;lijstSort='nieuw';
+    root=container;tab='bouw';gekozenTegel='#';penseel=1;camX=0;lijstSort='nieuw';
     const bewaard=LS.get('studio-concept',null);
     if(bewaard&&Array.isArray(bewaard.kaart)){kaart=bewaard.kaart.map(r=>r.split(''));W=kaart[0].length;naam=bewaard.naam||'';}
     else nieuwKaart();
+    herstelTest();          // testbewijs blijft geldig zolang het level niet is gewijzigd
     render();
   }
   function nieuwKaart(){
@@ -3921,6 +3922,12 @@ const LEVELS=[
     getest=false;
   }
   const rijen=()=>kaart.map(r=>r.join(''));
+  function testBewijs(){
+    const b=LS.get('studio-getest',null);
+    if(!b||!Array.isArray(b.rijen))return null;
+    return JSON.stringify(b.rijen)===JSON.stringify(rijen())?b:null;
+  }
+  function herstelTest(){getest=!!testBewijs();}
   function bewaarConcept(){LS.set('studio-concept',{kaart:rijen(),naam});}
 
   // ---------- validatie ----------
@@ -3996,8 +4003,8 @@ const LEVELS=[
     sl.oninput=()=>{camX=+sl.value;bouwGrid();};
     root.querySelector('#ns-links').onclick=()=>{camX=Math.max(0,camX-5);sl.value=camX;bouwGrid();};
     root.querySelector('#ns-rechts').onclick=()=>{camX=Math.min(+sl.max,camX+5);sl.value=camX;bouwGrid();};
-    root.querySelector('#ns-breder').onclick=()=>{if(W>=MAX_W)return;for(let y=0;y<H;y++)for(let i=0;i<10;i++)kaart[y].push(y>=H-2?'#':' ');W+=10;getest=false;renderBouw();bewaarConcept();};
-    root.querySelector('#ns-smaller').onclick=()=>{if(W<=MIN_W+10)return;for(let y=0;y<H;y++)kaart[y].splice(W-10,10);W-=10;camX=Math.min(camX,Math.max(0,W-zichtbreedte()));getest=false;renderBouw();bewaarConcept();};
+    root.querySelector('#ns-breder').onclick=()=>{if(W>=MAX_W)return;for(let y=0;y<H;y++)for(let i=0;i<10;i++)kaart[y].push(y>=H-2?'#':' ');W+=10;herstelTest();renderBouw();bewaarConcept();};
+    root.querySelector('#ns-smaller').onclick=()=>{if(W<=MIN_W+10)return;for(let y=0;y<H;y++)kaart[y].splice(W-10,10);W-=10;camX=Math.min(camX,Math.max(0,W-zichtbreedte()));herstelTest();renderBouw();bewaarConcept();};
     root.querySelector('#ns-leeg').onclick=()=>{if(confirm('Level leegmaken?')){nieuwKaart();camX=0;renderBouw();bewaarConcept();}};
     root.querySelector('#ns-naamveld').oninput=e=>{naam=e.target.value;bewaarConcept();};
     root.querySelector('#ns-test').onclick=testen;
@@ -4037,7 +4044,7 @@ const LEVELS=[
       for(let yy=0;yy<H;yy++)for(let xx=0;xx<W;xx++)if(kaart[yy][xx]===gekozenTegel)kaart[yy][xx]=' ';
     }
     kaart[y][x]=gekozenTegel;
-    getest=false;bouwGrid();updateInfo();updatePubKnop();
+    herstelTest();bouwGrid();updateInfo();updatePubKnop();
   }
   function updateInfo(){
     const el=root.querySelector('#ns-info');if(!el)return;
@@ -4067,6 +4074,7 @@ const LEVELS=[
       (window.switchScreen||function(){})('screen-studio');
       const s=document.getElementById('studio-root');if(s)start(s);
       if(getest)melding('Uitgespeeld! Je kunt nu publiceren. 🎉','ok');
+      else melding('Nog niet uitgespeeld — haal de torii ⛩️ om te kunnen publiceren.','fout');
     }, res=>{ getest=true; LS.set('studio-getest',{rijen:mijnRijen,tijd:res.tijd}); }, el);
     if(!gelukt){(window.switchScreen||function(){})('screen-studio');melding('Kon de speler niet starten.','fout');}
   }
@@ -4076,8 +4084,8 @@ const LEVELS=[
     const f=controle();
     if(f.length){melding('Nog niet klaar:<br>• '+f.join('<br>• '),'fout');return;}
     if(!hasCloud()){melding('Log in om te publiceren; je level blijft lokaal bewaard.','fout');return;}
-    const bewijs=LS.get('studio-getest',null);
-    const tijd=bewijs&&JSON.stringify(bewijs.rijen)===JSON.stringify(rijen())?bewijs.tijd:null;
+    const bewijs=testBewijs();
+    const tijd=bewijs?bewijs.tijd:null;
     if(tijd===null){melding('Je level is aangepast na de test — test het opnieuw.','fout');getest=false;updatePubKnop();return;}
     melding('Bezig met publiceren…');
     try{
