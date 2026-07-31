@@ -347,6 +347,7 @@
             <button class="btn" style="background:var(--budou);" onclick="startPatchesInit()">◧ Patches (lappendeken)</button>
             <button class="btn" style="background:var(--kincha);" onclick="startWoordzoekerInit()">🔤 Woordzoeker (Japans)</button>
             <button class="btn" style="background:var(--ai);" onclick="startBuizenInit()">🚰 Buizenpuzzel</button>
+            <button class="btn" style="background:#2f6d7a;" onclick="startBuizenPlusInit()">🚰 Buizen extra (4 varianten)</button>
             <button class="btn" style="background:var(--sumi);" onclick="startNonogramInit()">🖼️ Nonogram (Picross)</button>
             <button class="btn" style="background:var(--shu);" onclick="startZipInit()">🔗 Zip</button>
             <button class="btn" style="background:var(--kincha);" onclick="startAkariInit()">🏮 Akari (Light-up)</button>
@@ -485,6 +486,10 @@
 
     <div id="screen-buizen" class="screen">
         <div id="buizen-root"></div>
+    </div>
+
+    <div id="screen-buizenplus" class="screen">
+        <div id="buizenplus-root"></div>
     </div>
 
     <div id="screen-nonogram" class="screen">
@@ -1608,6 +1613,7 @@
     }
 </script>
 <script id="patches-engine">
+
 /* ============================================================
    Kana Master · Patches (パッチ) — polyomino-legpuzzel
    Vul het raster met de gegeven lappen. Vormen zijn vrij (L, T,
@@ -1960,8 +1966,10 @@
   window.startPatchesInit=function(){(window.switchScreen||function(){})('screen-patches');const el=document.getElementById('patches-root');if(el)start(el);};
 })();
 
+
 </script>
 <script id="woordzoeker-engine">
+
 /* ============================================================
    Kana Master · Woordzoeker (Japans) — dagelijkse puzzel
    Verstopt woorden uit je eigen woordenData in een kana-rooster.
@@ -2169,8 +2177,10 @@
   window.startWoordzoekerInit=function(){(window.switchScreen||function(){})('screen-woordzoeker');const el=document.getElementById('woordzoeker-root');if(el)start(el);};
 })();
 
+
 </script>
 <script id="buizen-engine">
+
 /* ============================================================
    Kana Master · Buizenpuzzel (Net/Pipes) — dagelijkse puzzel
    Draai de tegels tot alle buizen op de bron (⛩️) zijn
@@ -2332,8 +2342,467 @@
   window.startBuizenInit=function(){(window.switchScreen||function(){})('screen-buizen');const el=document.getElementById('buizen-root');if(el)start(el);};
 })();
 
+
+</script>
+<script id="buizenplus-engine">
+/* ============================================================
+   Kana Master · Buizen — extra varianten (配管)
+   Vier dagelijkse puzzels naast de klassieke Buizenpuzzel:
+     ① Rondom   — het raster loopt door aan de randen
+     ② Kringloop — maak één gesloten lus
+     ③ Drie netten — gescheiden leidingen die elkaar niet raken
+     ④ Leggen   — leg zelf buizen van de bron naar de put
+   Blootgesteld: window.startBuizenPlusInit(), window.KanaBuizenPlus
+   ============================================================ */
+(function () {
+  // bitmasker: 1=boven 2=rechts 4=onder 8=links
+  const DIR=[[0,-1,1,4],[1,0,2,8],[0,1,4,1],[-1,0,8,2]];
+  const MODI=[
+    {id:'rondom',  naam:'Rondom',     icoon:'🔄', N:9,  coins:18, uitleg:'Draai alle buizen tot één netwerk. Let op: het raster loopt door aan de randen — een buis die rechts naar buiten wijst, komt er links weer in.'},
+    {id:'kringloop',naam:'Kringloop', icoon:'➰', N:8,  coins:20, uitleg:'Draai alle stukken tot ze samen één gesloten kringloop vormen die door elk vakje gaat. Elk vakje heeft precies twee aansluitingen.'},
+    {id:'netten',  naam:'Drie netten',icoon:'🎨', N:9,  coins:22, uitleg:'Er lopen drie gescheiden leidingnetten door het raster. Draai elk stuk goed; netten van verschillende kleur mogen elkaar nooit raken.'},
+    {id:'leggen',  naam:'Leggen',     icoon:'🧩', N:8,  coins:16, uitleg:'Leg zelf de buizen van de bron 💧 naar de put 🏺. Kies een stuk uit de voorraad en tik op het raster. Alle stukken moeten op.'}
+  ];
+  const KLEUR=['--ai','--shu','--matsuba'];
+
+  function hashStr(s){let h=2166136261>>>0;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0;}
+  function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+  const pad=n=>String(n).padStart(2,'0');const fmt=s=>`${Math.floor(s/60)}:${pad(s%60)}`;
+  function todayStr(){const d=new Date();return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;}
+  const nlDate=s=>{const[y,m,d]=s.split('-');return `${d}-${m}-${y}`;};
+  const LS={get:(k,f)=>{try{const v=localStorage.getItem(k);return v==null?f:JSON.parse(v);}catch(e){return f;}},set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}};
+  const roteer=m=>((m<<1)|(m>>3))&15;   // 90° met de klok mee
+
+  // ---------- generatoren ----------
+  function spanningTree(N,rng,wrap){
+    const cel=Array.from({length:N},()=>Array(N).fill(0));
+    const bez=Array.from({length:N},()=>Array(N).fill(false));
+    const st=[[Math.floor(rng()*N),Math.floor(rng()*N)]];
+    bez[st[0][1]][st[0][0]]=true;let n=1;
+    while(n<N*N&&st.length){
+      const idx=Math.floor(rng()*st.length);const [x,y]=st[idx];const opties=[];
+      for(const [dx,dy,bit,tegen] of DIR){
+        let nx=x+dx,ny=y+dy;
+        if(wrap){nx=(nx+N)%N;ny=(ny+N)%N;}
+        else if(nx<0||nx>=N||ny<0||ny>=N)continue;
+        if(bez[ny][nx])continue;
+        opties.push([nx,ny,bit,tegen]);
+      }
+      if(!opties.length){st.splice(idx,1);continue;}
+      const [nx,ny,bit,tegen]=opties[Math.floor(rng()*opties.length)];
+      cel[y][x]|=bit;cel[ny][nx]|=tegen;bez[ny][nx]=true;st.push([nx,ny]);n++;
+    }
+    return cel;
+  }
+  function kringloop(N){
+    const route=[];
+    for(let x=0;x<N;x++)route.push([x,0]);
+    for(let y=1;y<N;y++){
+      if(y%2===1)for(let x=N-1;x>=1;x--)route.push([x,y]);
+      else for(let x=1;x<N;x++)route.push([x,y]);
+    }
+    for(let y=N-1;y>=1;y--)route.push([0,y]);
+    const cel=Array.from({length:N},()=>Array(N).fill(0));
+    for(let i=0;i<route.length;i++){
+      const [x1,y1]=route[i],[x2,y2]=route[(i+1)%route.length];
+      for(const [dx,dy,bit,tegen] of DIR)
+        if(x1+dx===x2&&y1+dy===y2){cel[y1][x1]|=bit;cel[y2][x2]|=tegen;}
+    }
+    return cel;
+  }
+  function meerkleur(N,rng,K){
+    const eig=Array.from({length:N},()=>Array(N).fill(-1));
+    const cel=Array.from({length:N},()=>Array(N).fill(0));
+    const fronts=[];
+    for(let k=0;k<K;k++){let x,y,p=0;
+      do{x=Math.floor(rng()*N);y=Math.floor(rng()*N);p++;}while(eig[y][x]>=0&&p<200);
+      eig[y][x]=k;fronts.push([[x,y]]);}
+    let n=K,ronde=0;
+    while(n<N*N&&ronde<N*N*20){
+      ronde++;let gegroeid=false;
+      for(let k=0;k<K;k++){
+        if(!fronts[k].length){
+          const her=[];
+          for(let yy=0;yy<N;yy++)for(let xx=0;xx<N;xx++){
+            if(eig[yy][xx]!==k)continue;
+            for(const [dx,dy] of DIR){const nx=xx+dx,ny=yy+dy;
+              if(nx>=0&&nx<N&&ny>=0&&ny<N&&eig[ny][nx]<0){her.push([xx,yy]);break;}}
+          }
+          fronts[k]=her;
+        }
+        const f=fronts[k];if(!f.length)continue;
+        const idx=Math.floor(rng()*f.length);const [x,y]=f[idx];const opties=[];
+        for(const [dx,dy,bit,tegen] of DIR){const nx=x+dx,ny=y+dy;
+          if(nx<0||nx>=N||ny<0||ny>=N||eig[ny][nx]>=0)continue;
+          opties.push([nx,ny,bit,tegen]);}
+        if(!opties.length){f.splice(idx,1);continue;}
+        const [nx,ny,bit,tegen]=opties[Math.floor(rng()*opties.length)];
+        cel[y][x]|=bit;cel[ny][nx]|=tegen;eig[ny][nx]=k;f.push([nx,ny]);n++;gegroeid=true;
+      }
+      if(!gegroeid){
+        let toe=false;
+        for(let y=0;y<N&&!toe;y++)for(let x=0;x<N;x++){
+          if(eig[y][x]>=0)continue;
+          for(const [dx,dy,bit,tegen] of DIR){const nx=x+dx,ny=y+dy;
+            if(nx<0||nx>=N||ny<0||ny>=N||eig[ny][nx]<0)continue;
+            eig[y][x]=eig[ny][nx];cel[y][x]|=bit;cel[ny][nx]|=tegen;n++;toe=true;break;}
+          if(toe)break;
+        }
+        if(!toe)break;
+      }
+    }
+    return {cel,eig};
+  }
+  function legPad(N,rng,minL,maxL){
+    const start=[0,Math.floor(rng()*N)],eind=[N-1,Math.floor(rng()*N)];
+    const bez=Array.from({length:N},()=>Array(N).fill(false));
+    let route=null;bez[start[1]][start[0]]=true;
+    (function dfs(x,y,r){
+      if(route||r.length>maxL)return;
+      if(x===eind[0]&&y===eind[1]){if(r.length>=minL)route=r.slice();return;}
+      const o=DIR.slice().sort(()=>rng()-0.5);
+      for(const [dx,dy] of o){
+        const nx=x+dx,ny=y+dy;
+        if(nx<0||nx>=N||ny<0||ny>=N||bez[ny][nx])continue;
+        bez[ny][nx]=true;r.push([nx,ny]);dfs(nx,ny,r);
+        if(route)return;
+        r.pop();bez[ny][nx]=false;
+      }
+    })(start[0],start[1],[[start[0],start[1]]]);
+    return {start,eind,route};
+  }
+
+  function buildDaily(dateStr,mi){
+    const m=MODI[mi],N=m.N;
+    const rng=mulberry32(hashStr(dateStr+'#buisplus#'+m.id));
+    if(m.id==='rondom'||m.id==='kringloop'){
+      const opl=m.id==='rondom'?spanningTree(N,rng,true):kringloop(N);
+      const cel=opl.map(r=>r.slice());
+      for(let y=0;y<N;y++)for(let x=0;x<N;x++){
+        const k=Math.floor(rng()*4);for(let i=0;i<k;i++)cel[y][x]=roteer(cel[y][x]);
+      }
+      return {mode:m.id,N,cel,opl,wrap:m.id==='rondom'};
+    }
+    if(m.id==='netten'){
+      const {cel,eig}=meerkleur(N,rng,3);
+      const opl=cel.map(r=>r.slice());
+      const gedraaid=cel.map(r=>r.slice());
+      for(let y=0;y<N;y++)for(let x=0;x<N;x++){
+        const k=Math.floor(rng()*4);for(let i=0;i<k;i++)gedraaid[y][x]=roteer(gedraaid[y][x]);
+      }
+      return {mode:'netten',N,cel:gedraaid,opl,eig,wrap:false};
+    }
+    // leggen
+    for(let a=0;a<30;a++){
+      const r=legPad(N,mulberry32(hashStr(dateStr+'#buisplus#leg#'+a)),14,22);
+      if(!r.route)continue;
+      const route=r.route;
+      const vast=new Set([r.start[1]*N+r.start[0], r.eind[1]*N+r.eind[0]]);
+      const doelMask=Array.from({length:N},()=>Array(N).fill(0));
+      for(let i=0;i<route.length;i++){
+        const [x,y]=route[i];
+        if(i>0){const [px,py]=route[i-1];for(const [dx,dy,bit] of DIR)if(x+dx===px&&y+dy===py)doelMask[y][x]|=bit;}
+        if(i<route.length-1){const [nx,ny]=route[i+1];for(const [dx,dy,bit] of DIR)if(x+dx===nx&&y+dy===ny)doelMask[y][x]|=bit;}
+      }
+      const voorraad=[];
+      for(let i=1;i<route.length-1;i++){const [x,y]=route[i];voorraad.push(doelMask[y][x]);}
+      for(let i=voorraad.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[voorraad[i],voorraad[j]]=[voorraad[j],voorraad[i]];}
+      return {mode:'leggen',N,start:r.start,eind:r.eind,route,doelMask,voorraad,vast};
+    }
+    return null;
+  }
+
+  // ---------- status ----------
+  let root,date,mi,puz,N,cel,gelegd,voorraad,gekozen,startT,clockId,cdId,elapsed,klaar;
+
+  function start(container){root=container;date=todayStr();mi=eersteOpen();renderShell();laad(mi);}
+  const sleutel=i=>`kp-buisplus-${date}-${MODI[i].id}`;
+  const isKlaar=i=>!!LS.get(sleutel(i),null);
+  const aantalKlaar=()=>{let n=0;for(let i=0;i<MODI.length;i++)if(isKlaar(i))n++;return n;};
+  function eersteOpen(){for(let i=0;i<MODI.length;i++)if(!isKlaar(i))return i;return 0;}
+  function volgendeOpen(i){for(let j=1;j<=MODI.length;j++){const k=(i+j)%MODI.length;if(!isKlaar(k))return k;}return null;}
+
+  function renderShell(){
+    root.innerHTML=`
+      <div class="bp-wrap">
+        <div class="bp-head">
+          <div><div class="bp-title">🚰 Buizen extra</div><div class="bp-date">${nlDate(date)}</div></div>
+          <div class="bp-meta"><span class="bp-chip">🔥 <span id="bp-streak">${LS.get('kp-buisplus-streak',0)}</span></span><span class="bp-chip">📅 <span id="bp-prog">${aantalKlaar()}</span>/${MODI.length}</span></div>
+        </div>
+        <div class="bp-picker" id="bp-picker"></div>
+        <div id="bp-body"></div>
+        <button class="btn" id="bp-back" style="background:var(--muted);margin-top:12px;">← Menu</button>
+      </div>`;
+    injectStyle();
+    root.querySelector('#bp-back').onclick=()=>{stop();(window.switchScreen||function(){})('screen-menu');};
+    tekenPicker();
+  }
+  function tekenPicker(){
+    const p=root.querySelector('#bp-picker');p.innerHTML='';
+    MODI.forEach((m,i)=>{
+      const b=document.createElement('button');
+      b.className='bp-tab'+(i===mi?' bp-tab-on':'')+(isKlaar(i)?' bp-tab-done':'');
+      b.innerHTML=`<span class="bp-tab-i">${m.icoon}</span><span class="bp-tab-n">${m.naam}</span><span class="bp-tab-c">${isKlaar(i)?'✓':'🪙'+m.coins}</span>`;
+      b.onclick=()=>{if(i!==mi){mi=i;laad(i);tekenPicker();}};
+      p.appendChild(b);
+    });
+  }
+
+  function laad(i){
+    stop();
+    puz=buildDaily(date,i);
+    if(!puz){root.querySelector('#bp-body').innerHTML='<p class="bp-uitleg">Kon de puzzel niet opbouwen.</p>';return;}
+    N=puz.N;elapsed=0;klaar=isKlaar(i);gekozen=null;
+    if(puz.mode==='leggen'){
+      gelegd=Array.from({length:N},()=>Array(N).fill(-1));
+      gelegd[puz.start[1]][puz.start[0]]=puz.doelMask[puz.start[1]][puz.start[0]];
+      gelegd[puz.eind[1]][puz.eind[0]]=puz.doelMask[puz.eind[1]][puz.eind[0]];
+      voorraad=puz.voorraad.slice();
+      gekozen=0;
+    } else {
+      cel=puz.cel.map(r=>r.slice());
+    }
+    renderSpel();
+    if(klaar){if(puz.mode!=='leggen')cel=puz.opl.map(r=>r.slice());else vulOplossing();tekenBord();toonKlaar(LS.get(sleutel(i)).time||0,false);}
+    else{startT=Date.now();startClock();}
+  }
+  function vulOplossing(){for(let y=0;y<N;y++)for(let x=0;x<N;x++)if(puz.doelMask[y][x])gelegd[y][x]=puz.doelMask[y][x];voorraad=[];}
+  function startClock(){clearInterval(clockId);clockId=setInterval(()=>{elapsed=Math.floor((Date.now()-startT)/1000);const t=root.querySelector('#bp-timer');if(t)t.textContent=fmt(elapsed);},1000);}
+  function stop(){clearInterval(clockId);clearInterval(cdId);}
+
+  function renderSpel(){
+    const m=MODI[mi];
+    root.querySelector('#bp-body').innerHTML=`
+      <p class="bp-uitleg">${m.uitleg}</p>
+      <div class="bp-timerbar">⏱️ <span id="bp-timer">${fmt(elapsed)}</span></div>
+      <div class="bp-boardwrap"><div class="bp-grid" id="bp-grid" style="--n:${N}"></div></div>
+      <div class="bp-status" id="bp-status"></div>
+      ${puz.mode==='leggen'?'<div class="bp-voorraad" id="bp-voorraad"></div>':'<div class="bp-btns"><button class="btn bp-b2" id="bp-schud">🔀 Opnieuw schudden</button></div>'}`;
+    bouwBord();
+    if(puz.mode==='leggen')tekenVoorraad();
+    else{const b=root.querySelector('#bp-schud');if(b)b.onclick=()=>{
+      if(klaar)return;
+      const rng=mulberry32(Date.now());
+      for(let y=0;y<N;y++)for(let x=0;x<N;x++){const k=Math.floor(rng()*4);for(let i=0;i<k;i++)cel[y][x]=roteer(cel[y][x]);}
+      tekenBord();updateStatus();};}
+    updateStatus();
+  }
+  function bouwBord(){
+    const g=root.querySelector('#bp-grid');let html='';
+    for(let y=0;y<N;y++)for(let x=0;x<N;x++)html+=`<div class="bp-cel" data-x="${x}" data-y="${y}"><canvas width="60" height="60"></canvas></div>`;
+    g.innerHTML=html;
+    g.querySelectorAll('.bp-cel').forEach(el=>{
+      const x=+el.dataset.x,y=+el.dataset.y;
+      el.onclick=()=>tik(x,y);
+    });
+    tekenBord();
+  }
+  function tik(x,y){
+    if(klaar)return;
+    if(puz.mode==='leggen'){
+      const k=puz.vast.has(y*N+x);
+      if(k)return;
+      if(gelegd[y][x]>=0){ // terugnemen
+        voorraad.push(gelegd[y][x]);gelegd[y][x]=-1;tekenBord();tekenVoorraad();updateStatus();return;
+      }
+      if(gekozen===null||gekozen>=voorraad.length)return;
+      gelegd[y][x]=voorraad[gekozen];voorraad.splice(gekozen,1);
+      if(gekozen>=voorraad.length)gekozen=voorraad.length?voorraad.length-1:null;
+      tekenBord();tekenVoorraad();updateStatus();checkWin();
+      return;
+    }
+    cel[y][x]=roteer(cel[y][x]);
+    tekenBord();updateStatus();checkWin();
+  }
+  function tekenVoorraad(){
+    const v=root.querySelector('#bp-voorraad');if(!v)return;
+    if(!voorraad.length){v.innerHTML='<div class="bp-leeg">Alle stukken gelegd</div>';return;}
+    v.innerHTML=voorraad.map((m,i)=>`<button class="bp-stuk${i===gekozen?' bp-stuk-on':''}" data-i="${i}"><canvas width="46" height="46"></canvas></button>`).join('');
+    v.querySelectorAll('.bp-stuk').forEach((b,i)=>{
+      tekenBuis(b.querySelector('canvas'),voorraad[i],'--ai',false);
+      b.onclick=()=>{gekozen=i;tekenVoorraad();};
+    });
+  }
+
+  // ---------- tekenen ----------
+  function tekenBuis(canvas,masker,kleurVar,aan){
+    const c=canvas.getContext('2d'),S=canvas.width,mid=S/2,dik=Math.max(4,S*0.17);
+    c.clearRect(0,0,S,S);
+    if(!masker)return;
+    const kleur=getComputedStyle(document.body).getPropertyValue(kleurVar).trim()||'#2c4a5e';
+    c.strokeStyle=kleur;c.lineWidth=dik;c.lineCap='round';
+    c.globalAlpha=aan?1:0.55;
+    const einden=[];
+    if(masker&1)einden.push([mid,0]);
+    if(masker&2)einden.push([S,mid]);
+    if(masker&4)einden.push([mid,S]);
+    if(masker&8)einden.push([0,mid]);
+    for(const [ex,ey] of einden){c.beginPath();c.moveTo(mid,mid);c.lineTo(ex,ey);c.stroke();}
+    let n=0;for(const b of [1,2,4,8])if(masker&b)n++;
+    c.globalAlpha=1;
+    c.fillStyle=kleur;
+    c.beginPath();c.arc(mid,mid,n===1?dik*0.85:dik*0.55,0,6.28);c.fill();
+    if(n===1){c.fillStyle='rgba(255,255,255,.55)';c.beginPath();c.arc(mid,mid,dik*0.35,0,6.28);c.fill();}
+  }
+  function verbondenVanaf(x0,y0){
+    const seen=new Set([y0*N+x0]);const st=[[x0,y0]];
+    const bron=puz.mode==='leggen'?gelegd:cel;
+    while(st.length){const [x,y]=st.pop();
+      const m=bron[y][x];if(m<=0)continue;
+      for(const [dx,dy,bit,tegen] of DIR){
+        if(!(m&bit))continue;
+        let nx=x+dx,ny=y+dy;
+        if(puz.wrap){nx=(nx+N)%N;ny=(ny+N)%N;}
+        else if(nx<0||nx>=N||ny<0||ny>=N)continue;
+        const bm=bron[ny][nx];if(bm<=0||!(bm&tegen))continue;
+        const k=ny*N+nx;if(!seen.has(k)){seen.add(k);st.push([nx,ny]);}
+      }}
+    return seen;
+  }
+  function tekenBord(){
+    root.querySelectorAll('.bp-cel').forEach(el=>{
+      const x=+el.dataset.x,y=+el.dataset.y;
+      const cv=el.querySelector('canvas');
+      el.className='bp-cel';
+      if(puz.mode==='leggen'){
+        const m=gelegd[y][x];
+        if(puz.vast.has(y*N+x))el.classList.add(x===puz.start[0]&&y===puz.start[1]?'bp-bron':'bp-put');
+        tekenBuis(cv,m>0?m:0,'--ai',true);
+      } else {
+        const kv=puz.mode==='netten'?KLEUR[puz.eig[y][x]%KLEUR.length]:'--ai';
+        tekenBuis(cv,cel[y][x],kv,true);
+      }
+    });
+    // stroom aanduiden bij leggen
+    if(puz.mode==='leggen'){
+      const bereikt=verbondenVanaf(puz.start[0],puz.start[1]);
+      root.querySelectorAll('.bp-cel').forEach(el=>{
+        const x=+el.dataset.x,y=+el.dataset.y;
+        if(bereikt.has(y*N+x)&&gelegd[y][x]>0)el.classList.add('bp-stroom');
+      });
+    }
+  }
+  function updateStatus(){
+    const st=root.querySelector('#bp-status');if(!st||klaar)return;
+    if(puz.mode==='leggen'){
+      st.textContent=`nog ${voorraad.length} stukken te leggen`;
+    } else if(puz.mode==='netten'){
+      let goed=0,tot=0;
+      for(let y=0;y<N;y++)for(let x=0;x<N;x++){tot++;if(cel[y][x]===puz.opl[y][x])goed++;}
+      st.textContent=`${goed}/${tot} stukken op hun plek`;
+    } else {
+      const s=verbondenVanaf(0,0);
+      st.textContent=`${s.size}/${N*N} vakjes verbonden`;
+    }
+  }
+  function checkWin(){
+    if(puz.mode==='leggen'){
+      if(voorraad.length)return;
+      for(let y=0;y<N;y++)for(let x=0;x<N;x++)if(gelegd[y][x]!==(puz.doelMask[y][x]||-1)&&puz.doelMask[y][x])return;
+      const s=verbondenVanaf(puz.start[0],puz.start[1]);
+      if(!s.has(puz.eind[1]*N+puz.eind[0]))return;
+      win();return;
+    }
+    if(puz.mode==='netten'){
+      for(let y=0;y<N;y++)for(let x=0;x<N;x++)if(cel[y][x]!==puz.opl[y][x])return;
+      win();return;
+    }
+    // rondom & kringloop: alles verbonden én geen losse einden buiten het net
+    const s=verbondenVanaf(0,0);
+    if(s.size!==N*N)return;
+    for(let y=0;y<N;y++)for(let x=0;x<N;x++){
+      const m=cel[y][x];
+      for(const [dx,dy,bit,tegen] of DIR){
+        if(!(m&bit))continue;
+        let nx=x+dx,ny=y+dy;
+        if(puz.wrap){nx=(nx+N)%N;ny=(ny+N)%N;}
+        else if(nx<0||nx>=N||ny<0||ny>=N)return;   // buis wijst naar buiten
+        if(!(cel[ny][nx]&tegen))return;            // niet aangesloten
+      }
+    }
+    win();
+  }
+
+  function win(){
+    stop();klaar=true;const m=MODI[mi],time=elapsed;
+    LS.set(sleutel(mi),{time,coins:m.coins});
+    try{if(typeof window.wijsGachaMuntToe==='function')window.wijsGachaMuntToe(m.coins);}catch(e){console.warn('Munt buizen+ mislukt:',e);}
+    if(aantalKlaar()===MODI.length){
+      const laatste=LS.get('kp-buisplus-last',null);
+      if(laatste!==date){const y=new Date();y.setDate(y.getDate()-1);const yStr=`${y.getFullYear()}-${pad(y.getMonth()+1)}-${pad(y.getDate())}`;
+        let s=LS.get('kp-buisplus-streak',0);s=(laatste===yStr)?s+1:1;
+        LS.set('kp-buisplus-streak',s);LS.set('kp-buisplus-last',date);}
+    }
+    const sc=root.querySelector('#bp-streak');if(sc)sc.textContent=LS.get('kp-buisplus-streak',0);
+    const pc=root.querySelector('#bp-prog');if(pc)pc.textContent=aantalKlaar();
+    tekenPicker();feest(m.coins);
+    setTimeout(()=>toonKlaar(time,true),700);
+  }
+  function toonKlaar(time,vers){
+    const alles=aantalKlaar()===MODI.length,volgende=volgendeOpen(mi);
+    const st=root.querySelector('#bp-status');if(!st)return;
+    st.innerHTML=`<div class="bp-done">🎉 ${vers?`${MODI[mi].naam} opgelost! +🪙 ${MODI[mi].coins}`:'Vandaag al opgelost'} · ⏱️ ${fmt(time)}
+      ${alles?`<div class="bp-count">Alle vier klaar! 🔥 Streak ${LS.get('kp-buisplus-streak',0)} · nieuw over <b id="bp-cd">–</b></div>`
+        :(volgende!==null?`<button class="btn bp-next" id="bp-next">Volgende: ${MODI[volgende].naam} →</button>`:'')}</div>`;
+    const nb=root.querySelector('#bp-next');if(nb)nb.onclick=()=>{mi=volgende;laad(volgende);tekenPicker();};
+    if(alles){const c=root.querySelector('#bp-cd');if(c){const upd=()=>{const now=new Date(),m2=new Date(now);m2.setHours(24,0,0,0);let s=Math.floor((m2-now)/1000);const h=s/3600|0;s%=3600;c.textContent=`${pad(h)}:${pad(s/60|0)}:${pad(s%60)}`;};upd();clearInterval(cdId);cdId=setInterval(upd,1000);}}
+  }
+  function feest(reward){const c=document.createElement('div');c.className='bp-coinpop';c.textContent=`+🪙${reward}`;root.appendChild(c);setTimeout(()=>c.remove(),1400);
+    const em=['💧','✨','🎉','🚰'];for(let i=0;i<12;i++){const s=document.createElement('div');s.className='bp-confetti';s.textContent=em[i%em.length];s.style.left=(Math.random()*100)+'%';s.style.animationDelay=(Math.random()*0.3)+'s';root.appendChild(s);setTimeout(()=>s.remove(),1600);}}
+
+  function injectStyle(){
+    if(document.getElementById('bp-style'))return;
+    const s=document.createElement('style');s.id='bp-style';s.textContent=`
+      .bp-wrap{position:relative}
+      .bp-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:8px}
+      .bp-title{font-family:var(--font-display);font-size:24px;font-weight:800;color:var(--dark)}
+      .bp-date{font-size:13px;color:var(--muted)}
+      .bp-meta{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+      .bp-chip{background:var(--input-bg);border:1px solid var(--border);border-radius:20px;padding:4px 10px;font-size:14px;font-weight:700;white-space:nowrap}
+      .bp-picker{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px}
+      .bp-tab{display:flex;flex-direction:column;align-items:center;gap:1px;padding:7px 2px;background:var(--input-bg);border:1px solid var(--border);border-radius:10px;cursor:pointer;font-family:var(--font-body);color:var(--text)}
+      .bp-tab-on{border-color:var(--primary);box-shadow:0 0 0 2px var(--primary) inset}
+      .bp-tab-done{background:color-mix(in srgb,var(--success) 15%,var(--input-bg))}
+      .bp-tab-i{font-size:16px;line-height:1}
+      .bp-tab-n{font-size:10px;color:var(--muted);font-weight:700;text-align:center;line-height:1.1}
+      .bp-tab-c{font-size:10px;font-weight:700;color:var(--accent)}.bp-tab-done .bp-tab-c{color:var(--success)}
+      .bp-uitleg{font-size:12.5px;color:var(--muted);line-height:1.5;margin:0 0 8px}
+      .bp-timerbar{text-align:center;font-size:14px;font-weight:700;color:var(--muted);margin-bottom:8px}
+      .bp-boardwrap{display:flex;justify-content:center}
+      .bp-grid{display:grid;grid-template-columns:repeat(var(--n),1fr);width:100%;max-width:min(94vw,400px);aspect-ratio:1;background:var(--input-bg);border:3px solid var(--sumi);border-radius:8px;overflow:hidden;touch-action:manipulation;user-select:none}
+      .bp-cel{position:relative;aspect-ratio:1;border:1px solid color-mix(in srgb,var(--sumi) 10%,transparent);cursor:pointer;display:flex;align-items:center;justify-content:center}
+      .bp-cel canvas{width:100%;height:100%;display:block}
+      .bp-stroom{background:color-mix(in srgb,var(--ai) 14%,transparent)}
+      .bp-bron{background:color-mix(in srgb,var(--matsuba) 26%,transparent)}
+      .bp-bron::after{content:"💧";position:absolute;font-size:11px;top:1px;left:2px}
+      .bp-put{background:color-mix(in srgb,var(--kincha) 26%,transparent)}
+      .bp-put::after{content:"🏺";position:absolute;font-size:11px;top:1px;left:2px}
+      .bp-status{text-align:center;font-size:13px;color:var(--muted);margin:12px 0 8px;min-height:18px;font-weight:700}
+      .bp-btns{display:grid;grid-template-columns:1fr;gap:8px}
+      .bp-b2{background:var(--input-bg)!important;color:var(--text)!important;border:1px solid var(--border)!important;box-shadow:none!important;margin:0!important}
+      .bp-voorraad{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;padding-top:10px;border-top:1px dashed var(--border);min-height:44px}
+      .bp-stuk{width:46px;height:46px;padding:2px;background:var(--input-bg);border:1px solid var(--border);border-radius:9px;cursor:pointer}
+      .bp-stuk-on{border-color:var(--kincha);box-shadow:0 0 0 2px var(--kincha) inset}
+      .bp-stuk canvas{width:100%;height:100%;display:block}
+      .bp-leeg{font-size:12.5px;color:var(--muted);font-weight:700;padding:8px}
+      .bp-done{text-align:center;font-weight:700;color:var(--success);background:color-mix(in srgb,var(--matsuba) 12%,var(--input-bg));border:1px solid var(--success);border-radius:10px;padding:10px}
+      .bp-count{font-size:12.5px;color:var(--muted);font-weight:400;margin-top:6px}
+      .bp-next{margin-top:8px}
+      .bp-coinpop{position:absolute;top:38%;left:50%;transform:translateX(-50%);font-size:34px;font-weight:900;color:var(--accent);text-shadow:0 2px 6px rgba(0,0,0,.3);pointer-events:none;animation:bp-coin 1.4s ease-out forwards;z-index:60}
+      @keyframes bp-coin{0%{opacity:0;transform:translate(-50%,10px) scale(.6)}20%{opacity:1;transform:translate(-50%,0) scale(1.1)}70%{opacity:1;transform:translate(-50%,-30px) scale(1)}100%{opacity:0;transform:translate(-50%,-60px) scale(.9)}}
+      .bp-confetti{position:absolute;top:-10px;font-size:22px;pointer-events:none;animation:bp-fall 1.5s ease-in forwards;z-index:50}
+      @keyframes bp-fall{to{transform:translateY(500px) rotate(220deg);opacity:0}}
+    `;
+    document.head.appendChild(s);
+  }
+
+  window.KanaBuizenPlus={start,buildDaily,MODI};
+  window.startBuizenPlusInit=function(){(window.switchScreen||function(){})('screen-buizenplus');const el=document.getElementById('buizenplus-root');if(el)start(el);};
+})();
+
 </script>
 <script id="nonogram-engine">
+
 /* ============================================================
    Kana Master · Nonogram (Picross) — 2 dagelijkse formaten
    Elke dag: 1× 10x10 en 1x 20x20. Sumi-inkt op washi.
@@ -2553,8 +3022,10 @@
   window.startNonogramInit=function(){(window.switchScreen||function(){})('screen-nonogram');const el=document.getElementById('nonogram-root');if(el)start(el);};
 })();
 
+
 </script>
 <script id="zip-engine">
+
 /* ============================================================
    Kana Master · Zip — teken één doorlopende lijn die elk vakje
    precies één keer vult en de nummers in volgorde (1→2→3…) aandoet.
@@ -2798,8 +3269,10 @@
   window.startZipInit=function(){(window.switchScreen||function(){})('screen-zip');const el=document.getElementById('zip-root');if(el)start(el);window.addEventListener('resize',()=>{try{const g=document.querySelector('#zp-grid');if(g){const wrap=document.querySelector('.zp-boardwrap');const avail=Math.min(wrap.clientWidth||360,440);const n=+g.style.getPropertyValue('--n');const maxCell=n<=6?52:(n<=10?36:22);g.style.setProperty('--cell',Math.max(15,Math.min(maxCell,Math.floor((avail-6)/n)))+'px');}}catch(e){}});};
 })();
 
+
 </script>
 <script id="akari-engine">
+
 /* ============================================================
    Kana Master · Akari (灯り / Light-up) — dagelijkse 7×7 puzzel
    Plaats lampen (🏮) op witte vakken zodat alles verlicht is,
@@ -2942,8 +3415,10 @@
   window.startAkariInit=function(){(window.switchScreen||function(){})('screen-akari');const el=document.getElementById('akari-root');if(el)start(el);};
 })();
 
+
 </script>
 <script id="flow-engine">
+
 /* ============================================================
    Kana Master · Flow (Numberlink) — dagelijkse 7×7 puzzel
    Verbind elk gekleurd puntpaar met een pad; vul het hele raster,
@@ -3080,8 +3555,10 @@
   window.startFlowInit=function(){(window.switchScreen||function(){})('screen-flow');const el=document.getElementById('flow-root');if(el)start(el);};
 })();
 
+
 </script>
 <script id="flood-engine">
+
 /* ============================================================
    Kana Master · Flood-It (色ぬり) — dagelijkse puzzel
    Overspoel het hele bord naar één kleur vanuit de hoek,
@@ -3202,8 +3679,10 @@
   window.startFloodInit=function(){(window.switchScreen||function(){})('screen-flood');const el=document.getElementById('flood-root');if(el)start(el);};
 })();
 
+
 </script>
 <script id="sokoban-engine">
+
 /* ============================================================
    Kana Master · Sokoban (倉庫番) — levelpakket
    300 vaste, altijd speelbare levels die oplopen in grootte
@@ -3395,8 +3874,10 @@
   window.startSokobanInit=function(){(window.switchScreen||function(){})('screen-sokoban');const el=document.getElementById('sokoban-root');if(el)start(el);};
 })();
 
+
 </script>
 <script id="ninja-engine">
+
 /* ============================================================
    Kana Master · Kana Ninja (かなニンジャ) — platformer
    20 vaste levels: ren, spring, verzamel kana en bereik de
@@ -3939,8 +4420,10 @@ const LEVELS=[
   window.startNinjaInit=function(){(window.switchScreen||function(){})('screen-ninja');const el=document.getElementById('ninja-root');if(el)start(el);};
 })();
 
+
 </script>
 <script id="studio-engine">
+
 /* ============================================================
    Kana Master · Ninja Studio (忍者スタジオ)
    Bouw je eigen Kana Ninja-levels, test ze, publiceer ze met een
@@ -4340,8 +4823,10 @@ const LEVELS=[
   window.startStudioInit=function(){(window.switchScreen||function(){})('screen-studio');const el=document.getElementById('studio-root');if(el)start(el);};
 })();
 
+
 </script>
 <script id="frogger-engine">
+
 /* ============================================================
    Kana Master · Frogger (かえる) — dagelijkse arcade-uitdaging
    Langer bord (6 rivier- + 6 weglanen). Respawn-genade zodat je
@@ -4517,8 +5002,10 @@ const LEVELS=[
   window.startFroggerInit=function(){(window.switchScreen||function(){})('screen-frogger');const el=document.getElementById('frogger-root');if(el)start(el);};
 })();
 
+
 </script>
 <script id="kanadle-engine">
+
 /* ============================================================
    Kana Master · Kanadle (かなドル) — Wordle met kana
    Elke dag 2 puzzels: 3 tekens en 4 tekens, uit woordenData.
@@ -4811,8 +5298,10 @@ const LEVELS=[
   window.startKanadleInit=function(){(window.switchScreen||function(){})('screen-kanadle');const el=document.getElementById('kanadle-root');if(el)start(el);};
 })();
 
+
 </script>
 <script id="sudoku-engine">
+
 /* ============================================================
    Kana Master · Kanji-sudoku (漢数字ナンプレ)
    Klassieke 9×9 sudoku met kanji-telwoorden 一〜九 (of kana)
@@ -5139,8 +5628,10 @@ const LEVELS=[
   window.startSudokuInit=function(){(window.switchScreen||function(){})('screen-sudoku');const el=document.getElementById('sudoku-root');if(el)start(el);};
 })();
 
+
 </script>
 <script id="hashi-engine">
+
 /* ============================================================
    Kana Master · Hashiwokakero (橋をかけろ) — bruggen bouwen
    Dagelijkse 9×9 puzzel met gegarandeerd unieke oplossing.
@@ -5384,8 +5875,10 @@ const LEVELS=[
   window.startHashiInit=function(){(window.switchScreen||function(){})('screen-hashi');const el=document.getElementById('hashi-root');if(el)start(el);};
 })();
 
+
 </script>
 <script id="slither-engine">
+
 /* ============================================================
    Kana Master · Slitherlink (スリザーリンク) — één gesloten lus
    Dagelijkse 6×6 puzzel met gegarandeerd unieke oplossing.
@@ -5670,8 +6163,10 @@ const LEVELS=[
   window.startSlitherInit=function(){(window.switchScreen||function(){})('screen-slither');const el=document.getElementById('slither-root');if(el)start(el);};
 })();
 
+
 </script>
 <script id="koi-engine">
+
 /* ============================================================
    Kana Master · Koi-vijver (鯉の池) v2 — kweken/fokken
    Elke koi heeft genen (basiskleur, patroon, patroonkleur, finish).
@@ -6039,8 +6534,10 @@ const LEVELS=[
   window.startKoiInit=function(){(window.switchScreen||function(){})('screen-koi');const el=document.getElementById('koi-root');if(el)start(el);};
 })();
 
+
 </script>
 <script id="hout-engine">
+
 /* ============================================================
    Kana Master · Houtberekening (NEN-EN 1995-1-1 / EC5)
    Ligger op twee steunpunten of uitkraging. Zelfde invulvelden
@@ -6326,8 +6823,10 @@ const LEVELS=[
   window.startHoutInit=function(){(window.switchScreen||function(){})('screen-hout');const el=document.getElementById('hout-root');if(el)start(el);};
 })();
 
+
 </script>
 <script id="staal-engine">
+
 /* ============================================================
    Kana Master · Stalen ligger op 2 steunpunten
    NEN-EN 1993-1-1 + Nationale Bijlage (NL).
@@ -6649,8 +7148,10 @@ const LEVELS=[
   window.startStaalInit=function(){(window.switchScreen||function(){})('screen-staal');const el=document.getElementById('staal-root');if(el)start(el);};
 })();
 
+
 </script>
 <script id="gacha-extra">
+
 /* ============================================================
    Kana Master · Gacha-uitbreiding (capsule-skins)
    ADDITIEF: raakt de bestaande gacha-code niet aan, maar breidt
@@ -6754,6 +7255,7 @@ const LEVELS=[
     const o=window[n]; if(typeof o==='function') window[n]=function(){ const t=g('gacha-tab-capsule'); if(t)t.classList.remove('active'); return o.apply(this,arguments); };
   });
 })();
+
 
 </script>
 </body>

@@ -3,7 +3,7 @@
 // versie zodra er internet is; de cache is puur een offline-vangnet.
 // Cloud-functies (Supabase, leaderboard, marktplaats) blijven het netwerk nodig hebben.
 
-const CACHE_NAAM = 'kana-master-v10'; // ← Bump dit nummer bij elke release!
+const CACHE_NAAM = 'kana-master-v11'; // ← Bump dit nummer bij elke release!
 const APP_SHELL = [
     './',
     './index.html',
