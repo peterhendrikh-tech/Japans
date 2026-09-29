@@ -4490,7 +4490,7 @@
   let gekozen=-1, legaalCache=[], laatsteZet=null, premove=null, animBezig=false;
   let opties, statistiek, pijlen=[], denk=false, promoWacht=null;
   let evalWaarde=0, klok=null, klokId=null, historie=[], huidigePly=0;
-  let trainer=null, sleep=null;
+  let trainer=null, sleep=null, hints=0;
   let idKaart=new Int32Array(128), idTeller=1;
 
   const standaardOpties=()=>({thema:'washi',legaleZetten:true,coordinaten:true,premoves:true,
@@ -4601,7 +4601,7 @@
     st=S.laadFen(S.nieuwBord(),S.START_FEN);
     mijnKleur = cfg.vrij ? null : (cfg.kleur||WIT);
     bordOm = mijnKleur===ZWART;
-    gekozen=-1;laatsteZet=null;premove=null;pijlen=[];historie=[];huidigePly=0;evalWaarde=0;herbouwIds();
+    gekozen=-1;laatsteZet=null;premove=null;pijlen=[];historie=[];huidigePly=0;evalWaarde=0;hints=0;herbouwIds();
     modus = cfg.vrij ? 'vrij' : 'partij';
     trainer=null;
     klok = (cfg.klokMin&&cfg.klokMin>0) ? {wit:cfg.klokMin*60,zwart:cfg.klokMin*60,loopt:false} : null;
@@ -4619,31 +4619,37 @@
           <div class="ch-titelmini">${train?trainer.op.naam:(vrij?'Vrij bord':'Partij · niveau '+niveau)}</div>
           <button class="ch-mini" id="ch-flip">⇅</button>
         </div>
-        ${train?`<div class="ch-trainkop" id="ch-trainkop"></div>`:''}
-        <div class="ch-spelerbalk" id="ch-boven"></div>
-        <div class="ch-bordzone">
-          ${opties.evalbalk&&!train?'<div class="ch-evalbalk"><div class="ch-evalvul" id="ch-evalvul"></div><span class="ch-evalcijfer" id="ch-evalcijfer">0.0</span></div>':''}
-          <div class="ch-bordwrap">
-            <div class="ch-bord" id="ch-bord"></div>
-            <svg class="ch-pijlen" id="ch-pijlen" viewBox="0 0 8 8"></svg>
-            <div class="ch-melding" id="ch-melding"></div>
+        <div class="ch-layout">
+          <div class="ch-kol-bord">
+            ${train?`<div class="ch-trainkop" id="ch-trainkop"></div>`:''}
+            <div class="ch-spelerbalk" id="ch-boven"></div>
+            <div class="ch-bordzone">
+              ${opties.evalbalk&&!train?'<div class="ch-evalzuil"><div class="ch-evalbalk"><div class="ch-evalvul" id="ch-evalvul"></div></div><span class="ch-evalcijfer" id="ch-evalcijfer">0.0</span></div>':''}
+              <div class="ch-bordwrap">
+                <div class="ch-bord" id="ch-bord"></div>
+                <svg class="ch-pijlen" id="ch-pijlen" viewBox="0 0 8 8"></svg>
+                <div class="ch-melding" id="ch-melding"></div>
+              </div>
+            </div>
+            <div class="ch-spelerbalk" id="ch-onder"></div>
+          </div>
+          <div class="ch-kol-zij">
+            <div class="ch-statusregel" id="ch-status"></div>
+            <div class="ch-knoppen">
+              ${train?`
+                <button class="ch-actie" id="ch-hint">💡 Hint<span class="ch-teller" id="ch-hintteller"></span></button>
+                <button class="ch-actie" id="ch-terugzet">↶ Terug</button>
+                <button class="ch-actie" id="ch-opnieuw">↺ Opnieuw</button>
+                <button class="ch-actie" id="ch-volgende">⏭ Volgende</button>`
+              :`
+                <button class="ch-actie" id="ch-terugzet">↶ Terug</button>
+                <button class="ch-actie" id="ch-hint">💡 Hint<span class="ch-teller" id="ch-hintteller"></span></button>
+                <button class="ch-actie" id="ch-nieuw">↺ Nieuw</button>
+                <button class="ch-actie" id="${vrij?'ch-fen':'ch-pgn'}">${vrij?'⛭ FEN':'📋 PGN'}</button>`}
+            </div>
+            <div class="ch-zetlijst" id="ch-zetlijst"></div>
           </div>
         </div>
-        <div class="ch-spelerbalk" id="ch-onder"></div>
-        <div class="ch-statusregel" id="ch-status"></div>
-        <div class="ch-knoppen">
-          ${train?`
-            <button class="ch-actie" id="ch-hint">💡 Hint</button>
-            <button class="ch-actie" id="ch-terugzet">↶ Terug</button>
-            <button class="ch-actie" id="ch-opnieuw">↺ Opnieuw</button>
-            <button class="ch-actie" id="ch-volgende">⏭ Volgende</button>`
-          :`
-            <button class="ch-actie" id="ch-terugzet">↶ Terug</button>
-            <button class="ch-actie" id="ch-hint">💡 Hint</button>
-            <button class="ch-actie" id="ch-nieuw">↺ Nieuw</button>
-            <button class="ch-actie" id="${vrij?'ch-fen':'ch-pgn'}">${vrij?'⛭ FEN':'📋 PGN'}</button>`}
-        </div>
-        <div class="ch-zetlijst" id="ch-zetlijst"></div>
       </div>`;
     injectStijl();
     bouwVelden();
@@ -4656,7 +4662,14 @@
     const fn=root.querySelector('#ch-fen');if(fn)fn.onclick=vraagFen;
     const op=root.querySelector('#ch-opnieuw');if(op)op.onclick=()=>startTrainer(trainer.op);
     const vo=root.querySelector('#ch-volgende');if(vo)vo.onclick=volgendeOpening;
+    werkHintTellerBij();
     tekenAlles();
+  }
+  function werkHintTellerBij(){
+    const el=root.querySelector('#ch-hintteller');if(!el)return;
+    const n = modus==='trainer' ? (trainer?trainer.hints:0) : hints;
+    el.textContent = n>0 ? ' · '+n : '';
+    el.classList.toggle('ch-teller-aan',n>0);
   }
 
   function bouwVelden(){
@@ -4853,13 +4866,16 @@
     let html='';
     for(let i=0;i<historie.length;i+=2){
       const nr=i/2+1;
-      html+=`<span class="ch-zl-nr">${nr}.</span>`;
+      html+=`<div class="ch-zl-rij"><span class="ch-zl-nr">${nr}.</span>`;
       html+=`<button class="ch-zl-zet${huidigePly===i+1?' ch-zl-nu':''}" data-p="${i+1}">${historie[i].san}</button>`;
-      if(historie[i+1])html+=`<button class="ch-zl-zet${huidigePly===i+2?' ch-zl-nu':''}" data-p="${i+2}">${historie[i+1].san}</button>`;
+      html+= historie[i+1]
+        ? `<button class="ch-zl-zet${huidigePly===i+2?' ch-zl-nu':''}" data-p="${i+2}">${historie[i+1].san}</button>`
+        : '<span class="ch-zl-leegvak"></span>';
+      html+='</div>';
     }
     el.innerHTML=html;
     el.querySelectorAll('.ch-zl-zet').forEach(b=>b.onclick=()=>spoelNaar(+b.dataset.p));
-    el.scrollLeft=el.scrollWidth;
+    el.scrollLeft=el.scrollWidth;el.scrollTop=el.scrollHeight;
   }
   function spoelNaar(ply){
     if(ply>=historie.length)return;
@@ -5080,6 +5096,8 @@
 
   function geefHint(){
     if(modus==='trainer')return trainerHint();
+    if(denk)return;
+    hints++;werkHintTellerBij();
     denk=true;tekenStatus();
     setTimeout(()=>{
       const r=E.besteZet(st,Math.min(6,niveau+2));
@@ -5116,8 +5134,11 @@
       if(toestand==='mat'){gewonnen?statistiek.gewonnen=(statistiek.gewonnen||0)+1:statistiek.verloren=(statistiek.verloren||0)+1;}
       else statistiek.remise=(statistiek.remise||0)+1;
       LS.set('schaak-stats',statistiek);
-      if(gewonnen)beloon(4+niveau*2, 'schaak-winst');
+      statistiek.hints=(statistiek.hints||0)+hints;
+      LS.set('schaak-stats',statistiek);
+      if(gewonnen)beloon(Math.max(2,4+niveau*2-hints*2), 'schaak-winst');
     }
+    if(modus==='partij')tekst += hints ? ` Je gebruikte ${hints} hint${hints===1?'':'s'}.` : ' Zonder hints gespeeld.';
     toonOverlay(titel,tekst, modus==='vrij'
       ? [{tekst:'↺ Nieuw bord',actie:()=>startPartij({vrij:true}),primair:true},
          {tekst:'← Menu',actie:renderMenu}]
@@ -5360,7 +5381,7 @@
     const san=trainer.op.zetten[trainer.index];
     const z=san?S.vanSan(st,san):null;
     if(z){
-      trainer.hints++;
+      trainer.hints++;werkHintTellerBij();
       pijlen=[{type:'pijl',van:veld0x88NaarZicht(z.van),naar:veld0x88NaarZicht(z.naar),hint:true}];
       toonMelding('Theoriezet: '+san);tekenPijlen();
     }
@@ -5465,9 +5486,10 @@
       .ch-klok{font-family:var(--font-display);font-weight:800;font-size:15px;color:var(--muted);background:var(--card-bg);border:1px solid var(--border);border-radius:7px;padding:1px 8px}
       .ch-klok-actief{color:var(--dark);border-color:var(--primary)}
       .ch-bordzone{display:flex;gap:7px;justify-content:center;align-items:stretch}
-      .ch-evalbalk{position:relative;width:16px;border-radius:8px;overflow:hidden;background:#2b2420;border:2px solid var(--sumi);flex:0 0 auto}
+      .ch-evalzuil{display:flex;flex-direction:column;align-items:center;gap:3px;flex:0 0 auto}
+      .ch-evalbalk{position:relative;width:16px;flex:1;border-radius:8px;overflow:hidden;background:#2b2420;border:2px solid var(--sumi)}
       .ch-evalvul{position:absolute;left:0;right:0;bottom:0;height:50%;background:#f4efe2;transition:height .45s cubic-bezier(.4,0,.2,1)}
-      .ch-evalcijfer{position:absolute;bottom:3px;left:0;right:0;text-align:center;font-size:8px;font-weight:800;color:var(--sumi);z-index:2}
+      .ch-evalcijfer{font-size:10px;font-weight:800;color:var(--muted);font-variant-numeric:tabular-nums;letter-spacing:-.3px}
       .ch-bordwrap{position:relative;width:100%;max-width:min(92vw,440px);aspect-ratio:1}
       .ch-bord{position:absolute;inset:0;display:grid;grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(8,1fr);
         border:3px solid var(--bordrand,#3a2f24);border-radius:8px;overflow:hidden;touch-action:none;user-select:none;
@@ -5502,6 +5524,8 @@
       .ch-actie{padding:10px 2px;background:var(--input-bg);border:1px solid var(--border);border-radius:10px;font-weight:700;font-size:12px;color:var(--text);cursor:pointer;font-family:var(--font-body)}
       .ch-actie:active{background:var(--border)}
       .ch-zetlijst{display:flex;flex-wrap:wrap;gap:3px;align-items:center;margin-top:12px;padding-top:10px;border-top:1px dashed var(--border);max-height:92px;overflow-y:auto}
+      .ch-zl-rij{display:flex;align-items:center;gap:2px}
+      .ch-zl-leegvak{display:none}
       .ch-zl-nr{font-size:11px;color:var(--muted);font-weight:700;margin-left:4px}
       .ch-zl-zet{background:none;border:none;font-family:var(--font-body);font-size:12.5px;font-weight:700;color:var(--dark);padding:2px 5px;border-radius:5px;cursor:pointer}
       .ch-zl-nu{background:var(--kincha);color:#fff8ee}
@@ -5547,6 +5571,45 @@
       .ch-schakel b{display:block;font-size:13px;color:var(--dark)}
       .ch-schakel span{display:block;font-size:11px;color:var(--muted);line-height:1.4}
       .ch-schakel input{width:20px;height:20px;flex:0 0 auto;accent-color:var(--primary)}
+      .ch-teller{font-weight:800;color:var(--muted)}
+      .ch-teller-aan{color:var(--kincha)}
+      .ch-layout{display:flex;flex-direction:column}
+      .ch-kol-bord,.ch-kol-zij{min-width:0}
+
+      /* breed scherm: bord groot links, informatie in een kolom ernaast */
+      @media (min-width:880px){
+        .container:has(#screen-schaak.active){max-width:1120px}
+        .ch-layout{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:20px;align-items:start}
+        .ch-bordwrap{max-width:min(62vw,640px,70vh)}
+        .ch-kol-zij{display:flex;flex-direction:column;position:sticky;top:12px}
+        .ch-statusregel{margin:0 0 10px;font-size:14px;padding:9px;background:var(--input-bg);border:1px solid var(--border);border-radius:10px}
+        .ch-knoppen{grid-template-columns:1fr 1fr;gap:8px}
+        .ch-actie{padding:12px 4px;font-size:13px}
+        .ch-zetlijst{flex-direction:column;flex-wrap:nowrap;align-items:stretch;gap:1px;
+          max-height:min(46vh,420px);margin-top:12px;padding:8px;background:var(--input-bg);
+          border:1px solid var(--border);border-radius:10px;border-top:1px solid var(--border)}
+        .ch-zl-rij{display:grid;grid-template-columns:26px 1fr 1fr;gap:3px;align-items:center;padding:1px 0}
+        .ch-zl-rij:nth-child(odd){background:color-mix(in srgb,var(--sumi) 4%,transparent);border-radius:5px}
+        .ch-zl-nr{margin-left:2px;text-align:right;padding-right:2px}
+        .ch-zl-zet{text-align:left;padding:3px 6px;font-size:13px}
+        .ch-zl-leegvak{display:block}
+        .ch-speler{padding:9px 12px;font-size:13.5px}
+        .ch-sp-buit{font-size:15px}
+        .ch-evalbalk{width:22px}
+        .ch-evalcijfer{font-size:12px}
+        .ch-trainkop .ch-tk-uit{font-size:12.5px}
+        .ch-kaarten{grid-template-columns:repeat(3,1fr)}
+        .ch-kaart{grid-template-columns:1fr;grid-template-rows:auto auto auto;text-align:center;gap:6px}
+        .ch-k-ico{grid-row:auto;font-size:34px}
+        .ch-oplijst{grid-template-columns:1fr 1fr}
+        .ch-niveaus{max-width:520px}
+        .ch-themas{max-width:560px}
+      }
+      @media (min-width:1280px){
+        .container:has(#screen-schaak.active){max-width:1240px}
+        .ch-layout{grid-template-columns:minmax(0,1fr) 330px}
+        .ch-bordwrap{max-width:min(58vw,700px,74vh)}
+      }
     `;
     document.head.appendChild(s);
   }
