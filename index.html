@@ -354,6 +354,7 @@
             <button class="btn" style="background:var(--matsuba);" onclick="startFlowInit()">🔵 Flow (Numberlink)</button>
             <button class="btn" style="background:var(--special);" onclick="startFloodInit()">🎨 Kleurnet (Flood-It)</button>
             <button class="btn" style="background:#4a3b2a;" onclick="startSchaakInit()">♞ Schaak (partij &amp; openingen)</button>
+            <button class="btn" style="background:var(--kincha);" onclick="startKintsugiInit()">🏺 Kintsugi (10 tot 100 scherven)</button>
             <button class="btn" style="background:var(--ai);" onclick="startSokobanInit()">📦 Sokoban (300 levels)</button>
             <button class="btn" style="background:#7a4a2a;" onclick="startNinjaInit()">🥷 Kana Ninja (platformer)</button>
             <button class="btn" style="background:#8a5a2a;" onclick="startStudioInit()">🛠️ Ninja Studio (levels maken)</button>
@@ -515,6 +516,10 @@
 
     <div id="screen-schaak" class="screen">
         <div id="schaak-root"></div>
+    </div>
+
+    <div id="screen-kintsugi" class="screen">
+        <div id="kintsugi-root"></div>
     </div>
 
     <div id="screen-sokoban" class="screen">
@@ -2076,10 +2081,41 @@
     return history[z.van*128+z.naar]||0;
   }
 
+  // ---- Zobrist-sleutel: veel sneller dan een FEN-string per knoop ----
+  const ZOB=(function(){
+    let x=0x2545F491;
+    const rnd=()=>{x^=x<<13;x|=0;x^=x>>>17;x^=x<<5;x|=0;return x>>>0;};
+    const stuk=new Array(2);
+    for(let h=0;h<2;h++){stuk[h]=new Uint32Array(24*128);for(let i=0;i<24*128;i++)stuk[h][i]=rnd();}
+    const beurt=[rnd(),rnd()], rok=[[rnd(),rnd()],[rnd(),rnd()],[rnd(),rnd()],[rnd(),rnd()]];
+    const epv=new Uint32Array(8);for(let i=0;i<8;i++)epv[i]=rnd();
+    return{stuk,beurt,rok,epv};
+  })();
+
+  function sleutelVan(st){
+    let a=0,b=0;
+    const bd=st.bord;
+    for(let i=0;i<128;i++){
+      if(i&0x88){i+=7;continue;}
+      const p=bd[i];
+      if(!p)continue;
+      const k=p*128+i;
+      a^=ZOB.stuk[0][k]; b^=ZOB.stuk[1][k];
+    }
+    a^=ZOB.beurt[st.aanZet===WIT?0:1];
+    const r=st.rokade;
+    a^=ZOB.rok[0][r.wK?1:0]; b^=ZOB.rok[1][r.wQ?1:0];
+    a^=ZOB.rok[2][r.zK?1:0]; b^=ZOB.rok[3][r.zQ?1:0];
+    if(st.ep>=0){const f=kolVan(st.ep)&7; a^=ZOB.epv[f]; b^=ZOB.epv[7-f];}
+    // 53-bits sleutel in Ã©Ã©n Number, geen stringallocatie
+    return (a>>>0)*2097152+(b>>>11);
+  }
+
   function quiescence(st, alfa, beta, ctx){
     ctx.knopen++;
     const staand=evalueer(st);
-    if(staand>=beta)return beta;
+    if(staand>=beta)return staand;          // fail-soft: echte waarde teruggeven
+    let best=staand;
     if(staand>alfa)alfa=staand;
     const slagen=S.genereer(st,true)
       .map(z=>({z,s:(WAARDE[soort(z.slag||0)]||0)*10-(WAARDE[soort(st.bord[z.van])]||0)}))
@@ -2090,21 +2126,23 @@
       if(S.schaak(st,mij)){S.neemTerug(st);continue;}
       const sc=-quiescence(st,-beta,-alfa,ctx);
       S.neemTerug(st);
-      if(sc>=beta)return beta;
+      if(sc>best)best=sc;
+      if(sc>=beta)return best;
       if(sc>alfa)alfa=sc;
     }
-    return alfa;
+    return best;
   }
 
   function zoek(st, diepte, alfa, beta, ctx, ply){
     if(ctx.stop||Date.now()>ctx.deadline){ctx.stop=true;return 0;}
     ctx.knopen++;
-    const sleutel=S.naarFen(st).split(' ').slice(0,4).join(' ');
+    const sleutel=sleutelVan(st);
     const tt=ctx.tt.get(sleutel);
     if(tt&&tt.diepte>=diepte&&ply>0){
-      if(tt.vlag===0)return tt.score;
-      if(tt.vlag===1&&tt.score<=alfa)return alfa;
-      if(tt.vlag===2&&tt.score>=beta)return beta;
+      const ts=uitTt(tt.score,ply);
+      if(tt.vlag===0)return ts;
+      if(tt.vlag===1&&ts<=alfa)return ts;      // bovengrens
+      if(tt.vlag===2&&ts>=beta)return ts;      // ondergrens
     }
     if(diepte<=0)return quiescence(st,alfa,beta,ctx);
 
@@ -2115,7 +2153,7 @@
     zetten=zetten.map(z=>({z,s:zetScore(st,z,tt&&tt.beste,ctx.killers,ply,ctx.history)}))
                  .sort((a,b)=>b.s-a.s).map(o=>o.z);
 
-    let beste=null, legaal=0, origAlfa=alfa;
+    let beste=null, legaal=0, origAlfa=alfa, best=-ONEINDIG;
     for(const z of zetten){
       const mij=st.aanZet;
       S.doeZet(st,z);
@@ -2129,8 +2167,9 @@
       }
       S.neemTerug(st);
       if(ctx.stop)return 0;
+      if(sc>best){best=sc;beste=z;}
       if(sc>alfa){
-        alfa=sc; beste=z;
+        alfa=sc;
         if(!z.slag){
           ctx.history[z.van*128+z.naar]=(ctx.history[z.van*128+z.naar]||0)+diepte*diepte;
         }
@@ -2141,26 +2180,34 @@
               ctx.killers[ply][1]=ctx.killers[ply][0];ctx.killers[ply][0]=z;
             }
           }
-          ctx.tt.set(sleutel,{diepte,score:beta,vlag:2,beste:z});
-          return beta;
+          bewaar(ctx,sleutel,{diepte,score:inTt(best,ply),vlag:2,beste:z});
+          return best;                        // fail-soft: echte score
         }
       }
     }
     if(legaal===0) return inSchaak ? -MAT+ply : 0;     // mat of pat
-    ctx.tt.set(sleutel,{diepte,score:alfa,vlag:alfa>origAlfa?0:1,beste});
-    return alfa;
+    bewaar(ctx,sleutel,{diepte,score:inTt(best,ply),vlag:best>origAlfa?0:1,beste});
+    return best;
+  }
+
+  // matscores in de tabel zijn relatief aan de knoop, niet aan de wortel
+  function inTt(sc,ply){ return sc>MAT-1000?sc+ply : (sc<-(MAT-1000)?sc-ply:sc); }
+  function uitTt(sc,ply){ return sc>MAT-1000?sc-ply : (sc<-(MAT-1000)?sc+ply:sc); }
+  function bewaar(ctx,sleutel,post){
+    if(ctx.tt.size>350000)ctx.tt.clear();     // geheugenrem bij diepe zoektochten
+    ctx.tt.set(sleutel,post);
   }
 
   // niveaus: diepte, denktijd (ms), ruis (fouten maken), kans op blunder
   const NIVEAUS={
-    1:{diepte:1, tijd:120,  ruis:130, blunder:0.35},
-    2:{diepte:2, tijd:220,  ruis:90,  blunder:0.22},
-    3:{diepte:3, tijd:400,  ruis:55,  blunder:0.12},
-    4:{diepte:4, tijd:700,  ruis:30,  blunder:0.05},
-    5:{diepte:5, tijd:1100, ruis:15,  blunder:0.02},
-    6:{diepte:6, tijd:1800, ruis:6,   blunder:0},
-    7:{diepte:8, tijd:3000, ruis:0,   blunder:0},
-    8:{diepte:12,tijd:6000, ruis:0,   blunder:0}
+    1:{diepte:1, tijd:150,  ruis:220, blunder:0.30},
+    2:{diepte:2, tijd:300,  ruis:140, blunder:0.16},
+    3:{diepte:3, tijd:500,  ruis:80,  blunder:0.07},
+    4:{diepte:4, tijd:800,  ruis:45,  blunder:0.02},
+    5:{diepte:5, tijd:1200, ruis:20,  blunder:0},
+    6:{diepte:7, tijd:1800, ruis:0,   blunder:0},
+    7:{diepte:9, tijd:3000, ruis:0,   blunder:0},
+    8:{diepte:14,tijd:6000, ruis:0,   blunder:0}
   };
 
   function besteZet(st, niveau){
@@ -2171,6 +2218,9 @@
     if(!wortel.length)return null;
     if(wortel.length===1)return {zet:wortel[0],score:0,diepte:0,knopen:0};
 
+    // marge: zetten binnen deze marge van de beste krijgen een EXACTE score,
+    // zodat de ruis-selectie hieronder op echte waarden werkt en niet op afkapgrenzen.
+    const marge=cfg.ruis>0?cfg.ruis+1:0;
     let beste=wortel[0], besteScore=-ONEINDIG, bereikt=0, gescoord=[];
     for(let d=1;d<=cfg.diepte;d++){
       let alfa=-ONEINDIG, lokaalBeste=null; const lijst=[];
@@ -2182,7 +2232,8 @@
         const mij=st.aanZet;
         S.doeZet(st,z);
         if(S.schaak(st,mij)){S.neemTerug(st);continue;}
-        const sc=-zoek(st,d-1,-ONEINDIG,-alfa,ctx,1);
+        const kindBeta = alfa===-ONEINDIG ? ONEINDIG : -(alfa-marge);
+        const sc=-zoek(st,d-1,-ONEINDIG,kindBeta,ctx,1);
         S.neemTerug(st);
         if(ctx.stop)break;
         lijst.push({zet:z,score:sc});
@@ -2198,7 +2249,10 @@
     if(cfg.ruis>0&&gescoord.length>1){
       const kandidaten=gescoord.filter(o=>o.score>=besteScore-cfg.ruis);
       if(Math.random()<cfg.blunder&&gescoord.length>2){
-        const zwak=gescoord.slice().sort((a,b)=>a.score-b.score).slice(0,Math.max(2,Math.floor(gescoord.length/3)));
+        // een echte fout: kies uit de zwakkere helft, maar nooit iets wat direct mat geeft
+        const zwak=gescoord.slice().sort((a,b)=>a.score-b.score)
+                           .filter(o=>o.score>-(MAT-1000))
+                           .slice(0,Math.max(2,Math.floor(gescoord.length/3)));
         const keus=zwak[Math.floor(Math.random()*zwak.length)];
         if(keus)return {zet:keus.zet,score:keus.score,diepte:bereikt,knopen:ctx.knopen};
       }
@@ -5054,14 +5108,84 @@
     b.classList.add('ch-schud');setTimeout(()=>b.classList.remove('ch-schud'),260);
   }
 
+  // ---- Denktank: de engine rekent in een Web Worker, zodat het bord soepel blijft ----
+  const Denker=(function(){
+    let worker=null, gestart=false, stuk=false, teller=0;
+    const wacht=new Map();
+
+    function bron(){
+      const pak=id=>{const e=document.getElementById(id);return e?e.textContent:null;};
+      const kern=pak('chess-core'), motor=pak('chess-engine');
+      if(!kern||!motor)return null;
+      // in een Worker bestaat 'window' niet; de twee bestanden verwachten hem wel
+      return 'var window=self;\n'+kern+'\n'+motor+'\n'+
+        'onmessage=function(ev){var d=ev.data,S=self.Schaak,E=self.SchaakEngine;try{'+
+        'var st=S.nieuwBord();S.laadFen(st,d.fen);'+
+        'var r=E.besteZet(st,d.niveau);'+
+        'postMessage({id:d.id,zet:r?{van:r.zet.van,naar:r.zet.naar,promo:r.zet.promo||0}:null,'+
+        'score:r?r.score:0,diepte:r?r.diepte:0});'+
+        '}catch(e){postMessage({id:d.id,fout:String(e&&e.message||e)});}};';
+    }
+
+    function start(){
+      if(gestart||stuk)return;
+      gestart=true;
+      try{
+        const b=bron();
+        if(!b)throw new Error('enginebron niet gevonden');
+        const url=URL.createObjectURL(new Blob([b],{type:'text/javascript'}));
+        worker=new Worker(url);
+        worker.onmessage=e=>{
+          const w=wacht.get(e.data.id);
+          if(!w)return;
+          wacht.delete(e.data.id);clearTimeout(w.klok);
+          w.klaar(e.data.fout?null:e.data);
+        };
+        worker.onerror=()=>sluit();
+      }catch(e){ sluit(); }
+    }
+    function sluit(){
+      stuk=true;
+      if(worker){try{worker.terminate();}catch(e){}worker=null;}
+      wacht.forEach(w=>{clearTimeout(w.klok);w.klaar(null);});
+      wacht.clear();
+    }
+    // vraagt de beste zet; roept klaar(null) als de worker niet beschikbaar is,
+    // zodat de aanroeper synchroon kan terugvallen
+    function besteZet(fen,niveau,klaar){
+      start();
+      if(stuk||!worker)return klaar(null);
+      const id=++teller;
+      const limiet=((E.NIVEAUS[niveau]||{}).tijd||2000)+8000;
+      const klok=setTimeout(()=>{if(wacht.has(id)){wacht.delete(id);sluit();klaar(null);}},limiet);
+      wacht.set(id,{klaar,klok});
+      try{ worker.postMessage({id,fen,niveau}); }
+      catch(e){ wacht.delete(id);clearTimeout(klok);sluit();klaar(null); }
+    }
+    return {besteZet, beschikbaar:()=>!stuk};
+  })();
+
+  // zoekt de echte zet in de huidige stelling die bij een workerantwoord hoort
+  function zetVanVelden(van,naar,promo){
+    const kand=S.legaleZetten(st).filter(z=>z.van===van&&z.naar===naar);
+    if(!kand.length)return null;
+    return promo?(kand.find(z=>z.promo===promo)||kand[0]):kand[0];
+  }
+
   function computerZet(){
     if(modus!=='partij')return;
     if(S.status(st)==='mat'||S.status(st)==='pat')return;
     denk=true;tekenStatus();
-    setTimeout(()=>{
-      const r=E.besteZet(st,niveau);
+    const fenNu=S.naarFen(st);
+    Denker.besteZet(fenNu,niveau,antwoord=>{
+      // stelling kan intussen veranderd zijn (nieuwe partij, zet terug) — dan negeren
+      if(modus!=='partij'||S.naarFen(st)!==fenNu){denk=false;return;}
+      let zet=null,score=0;
+      if(antwoord&&antwoord.zet){zet=zetVanVelden(antwoord.zet.van,antwoord.zet.naar,antwoord.zet.promo);score=antwoord.score;}
+      if(!zet){const t=E.besteZet(st,niveau);if(t){zet=t.zet;score=t.score;}}   // terugval: synchroon
+      const r={zet,score};
       denk=false;
-      if(!r){tekenStatus();return;}
+      if(!r.zet){tekenStatus();return;}
       const san=S.naarSan(st,r.zet);
       const slaat=!!(r.zet.slag||r.zet.ep);
       verhuisIds(r.zet);
@@ -5080,7 +5204,7 @@
         if(kand.length)setTimeout(()=>voerUit(kand[0].promo?(kand.find(z=>z.promo===Q)||kand[0]):kand[0]),140);
         else tekenAlles();
       }
-    },60);
+    });
   }
 
   function neemTerug(){
@@ -5099,15 +5223,19 @@
     if(denk)return;
     hints++;werkHintTellerBij();
     denk=true;tekenStatus();
-    setTimeout(()=>{
-      const r=E.besteZet(st,Math.min(6,niveau+2));
+    const fenNu=S.naarFen(st), hintNiveau=Math.min(7,niveau+2);
+    Denker.besteZet(fenNu,hintNiveau,antwoord=>{
+      if(S.naarFen(st)!==fenNu){denk=false;return;}
+      let zet=null;
+      if(antwoord&&antwoord.zet)zet=zetVanVelden(antwoord.zet.van,antwoord.zet.naar,antwoord.zet.promo);
+      if(!zet){const t=E.besteZet(st,hintNiveau);if(t)zet=t.zet;}
       denk=false;
-      if(r){
-        pijlen=[{type:'pijl',van:veld0x88NaarZicht(r.zet.van),naar:veld0x88NaarZicht(r.zet.naar),hint:true}];
-        toonMelding('Voorstel: '+S.naarSan(st,r.zet));
+      if(zet){
+        pijlen=[{type:'pijl',van:veld0x88NaarZicht(zet.van),naar:veld0x88NaarZicht(zet.naar),hint:true}];
+        toonMelding('Voorstel: '+S.naarSan(st,zet));
       }
       tekenAlles();
-    },40);
+    });
   }
 
   function einde(toestand){
@@ -9109,6 +9237,1035 @@ const LEVELS=[
 })();
 
 
+
+</script>
+<script id="kintsugi-engine">
+/* ============================================================
+   Kana Master · Kintsugi (金継ぎ)
+   Leg de gebroken theekom terug en vul de naden met goud.
+   Zes formaten van 10 tot 100 scherven, zoomen en schuiven,
+   optioneel draaien en een kana-modus.
+   Blootgesteld: window.startKintsugiInit(), window.KanaKintsugi
+   ============================================================ */
+(function () {
+  'use strict';
+
+  const LS = {
+    get: (k, f) => { try { const v = localStorage.getItem(k); return v == null ? f : JSON.parse(v); } catch (e) { return f; } },
+    set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { } }
+  };
+  const pad2 = n => String(n).padStart(2, '0');
+  const fmtTijd = s => `${Math.floor(s / 60)}:${pad2(Math.max(0, Math.floor(s % 60)))}`;
+  function vandaag() { const d = new Date(); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
+  const wil = (a, b) => a + Math.random() * (b - a);
+  const klem = (v, a, b) => Math.max(a, Math.min(b, v));
+
+  const FORMATEN = [
+    { n: 10, naam: 'Eerste barst', munt: 2 },
+    { n: 20, naam: 'Gevallen kom', munt: 3 },
+    { n: 35, naam: 'Scherven', munt: 5 },
+    { n: 50, naam: 'Fijn breukwerk', munt: 7 },
+    { n: 75, naam: 'Mozaïek', munt: 10 },
+    { n: 100, naam: 'Meesterproef', munt: 14 }
+  ];
+
+  const KANA = [
+    ['あ', 'a'], ['い', 'i'], ['う', 'u'], ['え', 'e'], ['お', 'o'],
+    ['か', 'ka'], ['き', 'ki'], ['く', 'ku'], ['け', 'ke'], ['こ', 'ko'],
+    ['さ', 'sa'], ['し', 'shi'], ['す', 'su'], ['せ', 'se'], ['そ', 'so'],
+    ['た', 'ta'], ['ち', 'chi'], ['つ', 'tsu'], ['て', 'te'], ['と', 'to'],
+    ['な', 'na'], ['に', 'ni'], ['ぬ', 'nu'], ['ね', 'ne'], ['の', 'no'],
+    ['は', 'ha'], ['ひ', 'hi'], ['ふ', 'fu'], ['へ', 'he'], ['ほ', 'ho'],
+    ['ま', 'ma'], ['み', 'mi'], ['む', 'mu'], ['め', 'me'], ['も', 'mo'],
+    ['や', 'ya'], ['ゆ', 'yu'], ['よ', 'yo'],
+    ['ら', 'ra'], ['り', 'ri'], ['る', 'ru'], ['れ', 're'], ['ろ', 'ro'],
+    ['わ', 'wa'], ['を', 'wo'], ['ん', 'n']
+  ];
+
+  // ---------- meetkunde ----------
+  // veelhoek doorsnijden met een lijn (punt p, normaal n) → twee helften
+  function snij(vlak, px, py, nx, ny) {
+    const a = [], b = [];
+    const kant = (x, y) => (x - px) * nx + (y - py) * ny;
+    for (let i = 0; i < vlak.length; i += 2) {
+      const x1 = vlak[i], y1 = vlak[i + 1];
+      const j = (i + 2) % vlak.length;
+      const x2 = vlak[j], y2 = vlak[j + 1];
+      const d1 = kant(x1, y1), d2 = kant(x2, y2);
+      if (d1 >= 0) a.push(x1, y1); else b.push(x1, y1);
+      if ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) {
+        const t = d1 / (d1 - d2);
+        const cx = x1 + (x2 - x1) * t, cy = y1 + (y2 - y1) * t;
+        a.push(cx, cy); b.push(cx, cy);
+      }
+    }
+    return [a, b];
+  }
+  function oppervlak(v) {
+    let s = 0;
+    for (let i = 0; i < v.length; i += 2) { const j = (i + 2) % v.length; s += v[i] * v[j + 1] - v[j] * v[i + 1]; }
+    return Math.abs(s) / 2;
+  }
+  function zwaartepunt(v) {
+    let x = 0, y = 0;
+    for (let i = 0; i < v.length; i += 2) { x += v[i]; y += v[i + 1]; }
+    return [x / (v.length / 2), y / (v.length / 2)];
+  }
+
+  // ---------- toestand ----------
+  let root, modus = 'menu';
+  let doek, ctx, achter, achterCtx;
+  let W = 0, Hh = 0, dpr = 1;               // wereldmaat in CSS-pixels
+  let zoom = 1, panX = 0, panY = 0;
+  let scherven = [], omtrek = [], komCx = 0, komCy = 0, komR = 0;
+  let naadPad = null;                        // alle gouden naden als één vectorpad
+  let stof = [], sleep = null, gekozen = null;
+  let aantal = 20, geplaatstN = 0, hints = 0, start0 = 0, klokId = 0, klaar = false;
+  let lus = 0, bezig = false, vuil = true, glansFase = 0, feestOp = 0;
+  let prompt = null;                          // kana-modus: gevraagde lezing
+  const opties = {
+    draaien: LS.get('kintsugi-draaien', false),
+    kana: LS.get('kintsugi-kana', false),
+    omtrek: LS.get('kintsugi-omtrek', true),
+    wijzer: LS.get('kintsugi-wijzer', true),
+    geluid: LS.get('kintsugi-geluid', true)
+  };
+  let audioCtx = null;
+
+  function bewaarOpties() {
+    LS.set('kintsugi-draaien', opties.draaien);
+    LS.set('kintsugi-kana', opties.kana);
+    LS.set('kintsugi-omtrek', opties.omtrek);
+    LS.set('kintsugi-wijzer', opties.wijzer);
+    LS.set('kintsugi-geluid', opties.geluid);
+  }
+
+  function piep(soort) {
+    if (!opties.geluid) return;
+    try {
+      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.connect(g); g.connect(audioCtx.destination);
+      const f = { vast: 660, fout: 170, klaar: 880, pak: 330 }[soort] || 440;
+      o.frequency.value = f; o.type = 'sine';
+      g.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.13, audioCtx.currentTime + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.17);
+      o.start(); o.stop(audioCtx.currentTime + 0.19);
+    } catch (e) { }
+  }
+  function beloon(n, sleutel) {
+    const key = sleutel + '-' + vandaag();
+    const al = LS.get(key, 0);
+    if (al >= 60) return 0;
+    const geef = Math.min(n, 60 - al);
+    LS.set(key, al + geef);
+    try { if (typeof window.wijsGachaMuntToe === 'function') window.wijsGachaMuntToe(geef); } catch (e) { }
+    return geef;
+  }
+  function melding(tekst) {
+    const el = root && root.querySelector('#ki-melding');
+    if (!el) return;
+    el.textContent = tekst;
+    el.classList.add('ki-melding-aan');
+    clearTimeout(el._t);
+    el._t = setTimeout(() => el.classList.remove('ki-melding-aan'), 1700);
+  }
+
+  // ---------- de kom breken ----------
+  function bouwKom() {
+    const factor = aantal <= 20 ? 0.34 : aantal <= 50 ? 0.32 : 0.30;
+    komR = Math.min(W, Hh) * factor;
+    komCx = W / 2; komCy = Hh * 0.47;
+    const v = [];
+    const a0 = -0.62, a1 = Math.PI + 0.62, n = 46;
+    for (let i = 0; i <= n; i++) {
+      const h = a0 + (i / n) * (a1 - a0);
+      v.push(komCx + Math.cos(h) * komR * 1.06, komCy + Math.sin(h) * komR * 0.98);
+    }
+    return v;
+  }
+
+  function breek() {
+    omtrek = bouwKom();
+    const totaal = oppervlak(omtrek);
+    const minOpp = totaal / (aantal * 3.2);
+    let stukken = [omtrek.slice()], wacht = 0;
+    while (stukken.length < aantal && wacht < aantal * 60) {
+      wacht++;
+      stukken.sort((p, q) => oppervlak(q) - oppervlak(p));
+      const k = stukken[(Math.random() * Math.min(4, stukken.length)) | 0];
+      const [zx, zy] = zwaartepunt(k);
+      const spreid = Math.sqrt(oppervlak(k)) * 0.30;
+      const h = Math.random() * Math.PI;
+      const [a, b] = snij(k, zx + wil(-spreid, spreid), zy + wil(-spreid, spreid), Math.cos(h), Math.sin(h));
+      if (a.length >= 6 && b.length >= 6 && oppervlak(a) > minOpp && oppervlak(b) > minOpp) {
+        stukken.splice(stukken.indexOf(k), 1, a, b);
+      }
+    }
+
+    scherven = [];
+    for (const p of stukken) {
+      const [hx, hy] = zwaartepunt(p);
+      const lokaal = [];
+      for (let i = 0; i < p.length; i += 2) lokaal.push(p[i] - hx, p[i + 1] - hy);
+      let straal = 0;
+      for (let i = 0; i < lokaal.length; i += 2) straal = Math.max(straal, Math.hypot(lokaal[i], lokaal[i + 1]));
+      const kp = KANA[(Math.random() * KANA.length) | 0];
+      scherven.push({
+        lokaal, thuisX: hx, thuisY: hy, straal,
+        x: hx, y: hy, hoek: 0, vx: 0, vy: 0, vh: 0,
+        geplaatst: false, goud: 0, tint: wil(-6, 6), licht: wil(-5, 5),
+        kana: kp[0], romaji: kp[1], verloop: null
+      });
+    }
+
+    // uiteen laten spatten — bovenaanzicht, dus geen zwaartekracht
+    for (const s of scherven) {
+      const dx = s.x - komCx, dy = s.y - komCy;
+      const l = Math.hypot(dx, dy) || 1;
+      const kracht = wil(2.6, 5.6);
+      s.vx = (dx / l) * kracht + wil(-1.2, 1.2);
+      s.vy = (dy / l) * kracht + wil(-1.2, 1.2);
+      s.vh = opties.draaien ? wil(-0.14, 0.14) : 0;
+      s.hoek = opties.draaien ? wil(-Math.PI, Math.PI) : 0;
+    }
+    bepaalBuren();
+    geplaatstN = 0; hints = 0; klaar = false; feestOp = 0; stof = []; sleep = null; gekozen = null;
+    naadPad = new Path2D();
+    nieuwePrompt();
+    vuil = true;
+  }
+
+  // Voor elke rand van elke scherf: welke scherf ligt daarachter (-1 = buitenrand).
+  // Een naad hoort er pas te zijn als BEIDE buren liggen — zo groeit het goud mee.
+  function inVlak(s, px, py) {
+    let binnen = false;
+    const n = s.lokaal.length;
+    for (let i = 0, j = n - 2; i < n; j = i, i += 2) {
+      const xi = s.thuisX + s.lokaal[i], yi = s.thuisY + s.lokaal[i + 1];
+      const xj = s.thuisX + s.lokaal[j], yj = s.thuisY + s.lokaal[j + 1];
+      if ((yi > py) !== (yj > py) && px < (xj - xi) * (py - yi) / (yj - yi) + xi) binnen = !binnen;
+    }
+    return binnen;
+  }
+
+  function bepaalBuren() {
+    for (const s of scherven) {
+      s.buren = [];
+      const n = s.lokaal.length;
+      for (let i = 0; i < n; i += 2) {
+        const j = (i + 2) % n;
+        const x1 = s.thuisX + s.lokaal[i], y1 = s.thuisY + s.lokaal[i + 1];
+        const x2 = s.thuisX + s.lokaal[j], y2 = s.thuisY + s.lokaal[j + 1];
+        const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+        // een klein stukje loodrecht naar buiten stappen en kijken wie daar ligt
+        const dx = x2 - x1, dy = y2 - y1;
+        const l = Math.hypot(dx, dy) || 1;
+        let nx = -dy / l, ny = dx / l;
+        // normaal moet van het zwaartepunt AF wijzen
+        if (nx * (mx - s.thuisX) + ny * (my - s.thuisY) < 0) { nx = -nx; ny = -ny; }
+        let buur = -1;
+        for (const stap of [1.2, 3.0, 5.5]) {
+          const px = mx + nx * stap, py = my + ny * stap;
+          for (let k = 0; k < scherven.length; k++) {
+            const t = scherven[k];
+            if (t === s) continue;
+            if (Math.hypot(t.thuisX - px, t.thuisY - py) > t.straal + 6) continue;
+            if (inVlak(t, px, py)) { buur = k; break; }
+          }
+          if (buur >= 0) break;
+        }
+        s.buren.push(buur);
+      }
+    }
+  }
+
+  // ---------- kana-modus ----------
+  function nieuwePrompt() {
+    if (!opties.kana) { prompt = null; return; }
+    const los = scherven.filter(s => !s.geplaatst);
+    if (!los.length) { prompt = null; return; }
+    prompt = los[(Math.random() * los.length) | 0].romaji;
+  }
+
+  // ---------- naadpad opnieuw opbouwen ----------
+  function bouwNaden() {
+    naadPad = new Path2D();
+    for (let a = 0; a < scherven.length; a++) {
+      const s = scherven[a];
+      if (!s.geplaatst) continue;
+      const n = s.lokaal.length;
+      for (let i = 0; i < n; i += 2) {
+        const buur = s.buren[i / 2];
+        if (buur < 0) continue;                       // buitenrand van de kom
+        if (!scherven[buur].geplaatst) continue;      // buur ligt er nog niet
+        const j = (i + 2) % n;
+        const x1 = s.thuisX + s.lokaal[i], y1 = s.thuisY + s.lokaal[i + 1];
+        const x2 = s.thuisX + s.lokaal[j], y2 = s.thuisY + s.lokaal[j + 1];
+        const f = Math.min(1, Math.min(s.goud, scherven[buur].goud) || s.goud);
+        naadPad.moveTo(x1, y1);
+        naadPad.lineTo(x1 + (x2 - x1) * f, y1 + (y2 - y1) * f);
+      }
+    }
+  }
+
+  // ---------- tekenen ----------
+  function padVan(c, s) {
+    c.beginPath();
+    const co = Math.cos(s.hoek), si = Math.sin(s.hoek);
+    for (let i = 0; i < s.lokaal.length; i += 2) {
+      const x = s.x + s.lokaal[i] * co - s.lokaal[i + 1] * si;
+      const y = s.y + s.lokaal[i] * si + s.lokaal[i + 1] * co;
+      i ? c.lineTo(x, y) : c.moveTo(x, y);
+    }
+    c.closePath();
+  }
+
+  function padLokaal(c, s) {
+    c.beginPath();
+    for (let i = 0; i < s.lokaal.length; i += 2) {
+      i ? c.lineTo(s.lokaal[i], s.lokaal[i + 1]) : c.moveTo(s.lokaal[i], s.lokaal[i + 1]);
+    }
+    c.closePath();
+  }
+
+  function tekenAchtergrond() {
+    if (!achter) { achter = document.createElement('canvas'); achterCtx = achter.getContext('2d'); }
+    achter.width = Math.max(1, W * dpr); achter.height = Math.max(1, Hh * dpr);
+    const c = achterCtx;
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const bg = c.createRadialGradient(W / 2, Hh * 0.42, 20, W / 2, Hh * 0.5, Math.max(W, Hh) * 0.75);
+    bg.addColorStop(0, '#fffdf8');
+    bg.addColorStop(1, '#ebe1cb');
+    c.fillStyle = bg; c.fillRect(0, 0, W, Hh);
+    c.globalAlpha = 0.09;
+    const sch = c.createRadialGradient(komCx, komCy + komR * 0.55, 4, komCx, komCy + komR * 0.55, komR * 1.3);
+    sch.addColorStop(0, '#2b2420'); sch.addColorStop(1, 'rgba(43,36,32,0)');
+    c.fillStyle = sch; c.fillRect(0, 0, W, Hh);
+    c.globalAlpha = 1;
+  }
+
+  function tekenScherf(c, s, opgepakt) {
+    const r = s.straal;
+    if (!s.verloop) {
+      // in lokale coördinaten, dus geldig waar de scherf ook ligt
+      const t = s.tint | 0, L = s.licht || 0;
+      const g = c.createLinearGradient(-r, -r * 1.2, r * 0.8, r * 1.2);
+      g.addColorStop(0, `hsl(${28 + t},12%,${33 + L}%)`);
+      g.addColorStop(0.45, `hsl(${26 + t},14%,${23 + L}%)`);
+      g.addColorStop(1, `hsl(${24 + t},16%,${15 + L * 0.6}%)`);
+      const gl = c.createLinearGradient(-r * 0.7, -r, r * 0.2, r * 0.2);
+      gl.addColorStop(0, 'rgba(255,250,235,.85)');
+      gl.addColorStop(1, 'rgba(255,250,235,0)');
+      s.verloop = g; s._glans = gl;
+    }
+    c.save();
+    c.translate(s.x, s.y);
+    if (s.hoek) c.rotate(s.hoek);
+
+    if (opgepakt) {
+      c.save(); c.globalAlpha = 0.22; c.translate(6 / zoom, 9 / zoom);
+      padLokaal(c, s); c.fillStyle = '#2b2420'; c.fill(); c.restore();
+    }
+    c.fillStyle = s.verloop; padLokaal(c, s); c.fill();
+    c.globalAlpha = 0.20; c.fillStyle = s._glans; padLokaal(c, s); c.fill(); c.globalAlpha = 1;
+    padLokaal(c, s);
+    c.strokeStyle = opgepakt ? 'rgba(184,137,63,.95)' : 'rgba(12,10,8,.7)';
+    c.lineWidth = (opgepakt ? 2 : 1.1) / zoom;
+    c.stroke();
+
+    // kana alleen als de scherf er groot genoeg voor is
+    if (opties.kana && !s.geplaatst && r * zoom > 17) {
+      if (s.hoek) c.rotate(-s.hoek);            // tekst rechtop houden
+      c.fillStyle = prompt === s.romaji ? 'rgba(246,212,128,.95)' : 'rgba(238,228,208,.55)';
+      c.font = `600 ${Math.min(r * 0.7, 22)}px "Shippori Mincho", serif`;
+      c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText(s.kana, 0, 0);
+    }
+    c.restore();
+  }
+
+  function tekenAlles(nu) {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = '#efe7d4';
+    ctx.fillRect(0, 0, doek.width / dpr, doek.height / dpr);
+    ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, panX * dpr, panY * dpr);
+
+    ctx.drawImage(achter, 0, 0, W, Hh);
+
+    // stippellijn waar de kom hoort te staan
+    if (opties.omtrek && !klaar) {
+      ctx.save();
+      ctx.setLineDash([6 / zoom, 8 / zoom]);
+      ctx.strokeStyle = 'rgba(138,122,100,.45)';
+      ctx.lineWidth = 1.4 / zoom;
+      ctx.beginPath();
+      ctx.moveTo(omtrek[0], omtrek[1]);
+      for (let i = 2; i < omtrek.length; i += 2) ctx.lineTo(omtrek[i], omtrek[i + 1]);
+      ctx.closePath(); ctx.stroke();
+      ctx.restore();
+    }
+
+    for (const s of scherven) if (s.geplaatst) tekenScherf(ctx, s, false);
+
+    // alle naden in één vectorpad: scherp bij elke zoomstand en vrijwel gratis
+    if (naadPad) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(omtrek[0], omtrek[1]);
+      for (let i = 2; i < omtrek.length; i += 2) ctx.lineTo(omtrek[i], omtrek[i + 1]);
+      ctx.closePath(); ctx.clip();
+      const b = klem(komR / 190, 0.55, 1.6);
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.strokeStyle = 'rgba(92,58,18,.85)'; ctx.lineWidth = 5.4 * b; ctx.stroke(naadPad);
+      ctx.strokeStyle = '#d3a558'; ctx.lineWidth = 3.6 * b; ctx.stroke(naadPad);
+      ctx.strokeStyle = 'rgba(255,246,218,.75)'; ctx.lineWidth = 1.3 * b; ctx.stroke(naadPad);
+
+      // feestelijke lichtveeg over het goud als de kom af is
+      if (feestOp) {
+        const t = (nu - feestOp) / 2600;
+        if (t < 1) {
+          const bx = komCx - komR * 1.6 + t * komR * 3.2;
+          const g = ctx.createLinearGradient(bx - komR * 0.5, 0, bx + komR * 0.5, 0);
+          g.addColorStop(0, 'rgba(255,246,218,0)');
+          g.addColorStop(0.5, 'rgba(255,246,218,.95)');
+          g.addColorStop(1, 'rgba(255,246,218,0)');
+          ctx.globalCompositeOperation = 'lighter';
+          ctx.strokeStyle = g; ctx.lineWidth = 4.2 * b; ctx.stroke(naadPad);
+          ctx.globalCompositeOperation = 'source-over';
+        }
+      }
+      ctx.restore();
+    }
+
+    const los = scherven.filter(s => !s.geplaatst && s !== (sleep && sleep.scherf));
+    for (const s of los) tekenScherf(ctx, s, false);
+
+    // aanwijzing dat de opgepakte scherf bijna goed zit
+    if (sleep && sleep.scherf) {
+      const s = sleep.scherf;
+      const d = Math.hypot(s.x - s.thuisX, s.y - s.thuisY);
+      const bereik = snapAfstand(s);
+      if (opties.wijzer && d < bereik * 2.4) {
+        ctx.save();
+        ctx.globalAlpha = 0.55 * (1 - d / (bereik * 2.4));
+        ctx.strokeStyle = '#b8893f'; ctx.lineWidth = 2.4 / zoom;
+        padVan(ctx, { lokaal: s.lokaal, x: s.thuisX, y: s.thuisY, hoek: 0 });
+        ctx.stroke();
+        ctx.restore();
+      }
+      tekenScherf(ctx, s, true);
+    }
+
+    if (stof.length) {
+      ctx.globalCompositeOperation = 'lighter';
+      for (const p of stof) {
+        ctx.globalAlpha = p.leven * 0.9;
+        ctx.fillStyle = p.kleur;
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 6.283); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = 'source-over';
+    }
+  }
+
+  function snapAfstand(s) { return klem(s.straal * 0.55, 12, 44); }
+
+  // ---------- lus ----------
+  function stap(nu) {
+    if (!bezig) return;
+    lus = requestAnimationFrame(stap);
+    glansFase = (nu / 2600) % 1;
+
+    let beweegt = false;
+    for (const s of scherven) {
+      if (s === (sleep && sleep.scherf) || s.geplaatst) continue;
+      if (Math.abs(s.vx) > 0.02 || Math.abs(s.vy) > 0.02 || Math.abs(s.vh) > 0.001) {
+        s.x += s.vx; s.y += s.vy; s.hoek += s.vh;
+        s.vx *= 0.94; s.vy *= 0.94; s.vh *= 0.93;
+        beweegt = true;
+      } else { s.vx = s.vy = s.vh = 0; }
+    }
+
+    if (scheidUitElkaar()) beweegt = true;
+
+    let goudGroeide = false;
+    for (const s of scherven) {
+      if (s.geplaatst && s.goud < 1) { s.goud = Math.min(1, s.goud + 0.05); goudGroeide = true; }
+    }
+    if (goudGroeide) { bouwNaden(); beweegt = true; }
+    for (let i = stof.length - 1; i >= 0; i--) {
+      const p = stof[i];
+      p.x += p.vx; p.y += p.vy; p.vx *= 0.97; p.vy *= 0.97; p.leven -= 0.017;
+      if (p.leven <= 0) stof.splice(i, 1);
+      beweegt = true;
+    }
+    if (feestOp && nu - feestOp < 2800) beweegt = true;
+
+    if (beweegt || vuil || sleep) { tekenAlles(nu); vuil = false; }
+  }
+
+  // scherven duwen elkaar weg zodat er geen onbruikbare stapel ontstaat
+  function scheidUitElkaar() {
+    const los = scherven.filter(s => !s.geplaatst && s !== (sleep && sleep.scherf));
+    if (los.length < 2) return false;
+    let verplaatst = false;
+    const factor = los.length > 60 ? 0.42 : los.length > 30 ? 0.50 : 0.58;
+    for (let a = 0; a < los.length; a++) {
+      const p = los[a];
+      for (let b = a + 1; b < los.length; b++) {
+        const q = los[b];
+        const dx = q.x - p.x, dy = q.y - p.y;
+        const d2 = dx * dx + dy * dy;
+        const min = (p.straal + q.straal) * factor;
+        if (d2 < min * min && d2 > 0.0001) {
+          const d = Math.sqrt(d2);
+          if (min - d < 0.4) continue;              // dode zone: anders blijft het trillen
+          const duw = (min - d) / d * 0.16;
+          p.x -= dx * duw; p.y -= dy * duw;
+          q.x += dx * duw; q.y += dy * duw;
+          verplaatst = true;
+        }
+      }
+      // uit het doelgebied van de kom houden, zodat de stippellijn zichtbaar blijft
+      const kx = p.x - komCx, ky = p.y - komCy;
+      const kd = Math.hypot(kx, ky) || 1;
+      const grens = komR * 1.02 + p.straal * 0.55;
+      if (kd < grens - 0.4) {
+        const duw = (grens - kd) / kd * 0.22;
+        p.x += kx * duw; p.y += ky * duw;
+        verplaatst = true;
+      }
+      const m = p.straal * 0.66;
+      const nx = klem(p.x, m, W - m), ny = klem(p.y, m, Hh - m);
+      if (nx !== p.x || ny !== p.y) { p.x = nx; p.y = ny; verplaatst = true; }
+    }
+    return verplaatst;
+  }
+
+  // ---------- plaatsen ----------
+  function plaats(s) {
+    s.x = s.thuisX; s.y = s.thuisY; s.hoek = 0;
+    s.geplaatst = true; s.goud = 0; s.verloop = null;
+    geplaatstN++;
+    const n = Math.min(30, 12 + Math.round(s.straal / 3));
+    for (let i = 0; i < n; i++) {
+      const h = Math.random() * 6.283, v = wil(0.4, 2.2);
+      stof.push({
+        x: s.x + wil(-s.straal * 0.5, s.straal * 0.5), y: s.y + wil(-s.straal * 0.5, s.straal * 0.5),
+        vx: Math.cos(h) * v, vy: Math.sin(h) * v,
+        r: wil(0.8, 2.2), leven: 1, kleur: Math.random() < 0.5 ? '#f4cf78' : '#b8893f'
+      });
+    }
+    bouwNaden();
+    piep('vast');
+    nieuwePrompt();
+    werkStatusBij();
+    if (geplaatstN >= scherven.length) voltooi();
+  }
+
+  function voltooi() {
+    klaar = true;
+    feestOp = performance.now();
+    stopKlok();
+    piep('klaar');
+    const tijd = Math.round((Date.now() - start0) / 1000);
+    const sleutel = 'kintsugi-best-' + aantal;
+    const oud = LS.get(sleutel, null);
+    const record = oud == null || tijd < oud;
+    if (record) LS.set(sleutel, tijd);
+    const fmt = FORMATEN.find(f => f.n === aantal);
+    const basis = fmt ? fmt.munt : 3;
+    const munten = beloon(Math.max(1, basis - hints), 'kintsugi-' + aantal);
+    setTimeout(() => toonEinde(tijd, record, munten), 2600);
+  }
+
+  // ---------- besturing ----------
+  function naarWereld(e) {
+    const r = doek.getBoundingClientRect();
+    return [(e.clientX - r.left - panX) / zoom, (e.clientY - r.top - panY) / zoom];
+  }
+  // afstand van een punt tot de scherf (0 als het punt erbinnen ligt)
+  function afstandTot(s, x, y) {
+    const co = Math.cos(s.hoek), si = Math.sin(s.hoek), n = s.lokaal.length;
+    let binnen = false, best = Infinity;
+    for (let i = 0, j = n - 2; i < n; j = i, i += 2) {
+      const xi = s.x + s.lokaal[i] * co - s.lokaal[i + 1] * si;
+      const yi = s.y + s.lokaal[i] * si + s.lokaal[i + 1] * co;
+      const xj = s.x + s.lokaal[j] * co - s.lokaal[j + 1] * si;
+      const yj = s.y + s.lokaal[j] * si + s.lokaal[j + 1] * co;
+      if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) binnen = !binnen;
+      const dx = xj - xi, dy = yj - yi;
+      const l2 = dx * dx + dy * dy || 1;
+      const t = klem(((x - xi) * dx + (y - yi) * dy) / l2, 0, 1);
+      const ax = xi + dx * t - x, ay = yi + dy * t - y;
+      const d = ax * ax + ay * ay;
+      if (d < best) best = d;
+    }
+    return binnen ? 0 : Math.sqrt(best);
+  }
+
+  function raak(x, y) {
+    // eerst een echte treffer, van boven naar beneden
+    for (let i = scherven.length - 1; i >= 0; i--) {
+      const s = scherven[i];
+      if (s.geplaatst) continue;
+      if (Math.hypot(s.x - x, s.y - y) > s.straal * 1.15) continue;   // snelle voorselectie
+      if (afstandTot(s, x, y) === 0) return s;
+    }
+    // anders de dichtstbijzijnde binnen een marge: dunne splinters zijn
+    // anders bijna niet te raken, zeker met een vinger
+    const marge = 14 / zoom;
+    let beste = null, bestAf = marge;
+    for (let i = scherven.length - 1; i >= 0; i--) {
+      const s = scherven[i];
+      if (s.geplaatst) continue;
+      if (Math.hypot(s.x - x, s.y - y) > s.straal + marge) continue;
+      const d = afstandTot(s, x, y);
+      if (d < bestAf) { bestAf = d; beste = s; }
+    }
+    return beste;
+  }
+
+  function neer(e) {
+    if (klaar) return;
+    const [x, y] = naarWereld(e);
+    const s = raak(x, y);
+    try { doek.setPointerCapture(e.pointerId); } catch (err) { }
+    if (!s) { sleep = { pan: true, x0: e.clientX, y0: e.clientY, px: panX, py: panY }; return; }
+    sleep = { scherf: s, dx: s.x - x, dy: s.y - y };
+    gekozen = s;
+    s.vx = s.vy = s.vh = 0;
+    piep('pak');
+    vuil = true;
+    e.preventDefault();
+  }
+  function beweeg(e) {
+    if (!sleep) return;
+    if (sleep.pan) {
+      panX = sleep.px + (e.clientX - sleep.x0);
+      panY = sleep.py + (e.clientY - sleep.y0);
+      begrensPan(); vuil = true; return;
+    }
+    const [x, y] = naarWereld(e);
+    sleep.scherf.x = x + sleep.dx;
+    sleep.scherf.y = y + sleep.dy;
+    if (!opties.draaien) sleep.scherf.hoek *= 0.8;
+    vuil = true;
+    e.preventDefault();
+  }
+  function omhoog() {
+    if (!sleep) return;
+    const s = sleep.scherf;
+    sleep = null;
+    if (!s) return;
+    const d = Math.hypot(s.x - s.thuisX, s.y - s.thuisY);
+    let hoekOk = true;
+    if (opties.draaien) {
+      let h = s.hoek % 6.283; if (h > Math.PI) h -= 6.283; if (h < -Math.PI) h += 6.283;
+      hoekOk = Math.abs(h) < 0.30;
+    }
+    if (d < snapAfstand(s) && hoekOk) {
+      if (opties.kana && prompt && s.romaji !== prompt) {
+        melding(`Eerst ${prompt.toUpperCase()} — deze is ${s.romaji.toUpperCase()}`);
+        piep('fout');
+        s.vx = wil(-2, 2); s.vy = wil(-2, 2);
+      } else plaats(s);
+    }
+    vuil = true;
+  }
+  function wiel(e) {
+    if (klaar) return;
+    if (opties.draaien && gekozen && !gekozen.geplaatst && sleep && sleep.scherf === gekozen) {
+      gekozen.hoek += (e.deltaY > 0 ? 1 : -1) * 0.2618;   // 15 graden
+      vuil = true; e.preventDefault(); return;
+    }
+    zetZoom(zoom * (e.deltaY > 0 ? 0.9 : 1.1), e);
+    e.preventDefault();
+  }
+  function zetZoom(nieuw, e) {
+    const oud = zoom;
+    zoom = klem(nieuw, minZoom(), 3);
+    if (zoom === oud) return;
+    // rond de muispositie (of het midden) in zoomen
+    const r = doek.getBoundingClientRect();
+    const cx = e ? e.clientX - r.left : r.width / 2;
+    const cy = e ? e.clientY - r.top : r.height / 2;
+    panX = cx - (cx - panX) * (zoom / oud);
+    panY = cy - (cy - panY) * (zoom / oud);
+    begrensPan();
+    vuil = true;
+    const el = root && root.querySelector('#ki-zoomwaarde');
+    if (el) el.textContent = Math.round(zoom * 100) + '%';
+  }
+  function minZoom() {
+    const r = doek.getBoundingClientRect();
+    return Math.min(1, Math.min(r.width / W, r.height / Hh));
+  }
+  function begrensPan() {
+    const r = doek.getBoundingClientRect();
+    const bw = W * zoom, bh = Hh * zoom;
+    panX = bw <= r.width ? (r.width - bw) / 2 : klem(panX, r.width - bw, 0);
+    panY = bh <= r.height ? (r.height - bh) / 2 : klem(panY, r.height - bh, 0);
+  }
+
+  function sorteer() {
+    const los = scherven.filter(s => !s.geplaatst);
+    if (!los.length) return;
+    // netjes op een ring rond de kom leggen
+    let i = 0;
+    const ringen = Math.ceil(los.length / 18);
+    for (const s of los) {
+      const ring = Math.floor(i / Math.ceil(los.length / ringen));
+      const inRing = Math.ceil(los.length / ringen);
+      const hoek = ((i % inRing) / inRing) * 6.283;
+      const r = komR * 1.18 + s.straal * 0.7 + ring * (Math.min(W, Hh) * 0.10);
+      s.x = klem(komCx + Math.cos(hoek) * r, s.straal * 0.66, W - s.straal * 0.66);
+      s.y = klem(komCy + Math.sin(hoek) * r * 0.92, s.straal * 0.66, Hh - s.straal * 0.66);
+      s.vx = s.vy = 0;
+      i++;
+    }
+    vuil = true;
+    melding('Scherven op een rij gelegd');
+  }
+
+  function hint() {
+    if (klaar) return;
+    const los = scherven.filter(s => !s.geplaatst && (!opties.kana || !prompt || s.romaji === prompt));
+    const keus = los.length ? los : scherven.filter(s => !s.geplaatst);
+    if (!keus.length) return;
+    hints++;
+    werkStatusBij();
+    plaats(keus[(Math.random() * keus.length) | 0]);
+  }
+
+  // ---------- klok en status ----------
+  function startKlok() {
+    start0 = Date.now();
+    stopKlok();
+    klokId = setInterval(werkStatusBij, 500);
+  }
+  function stopKlok() { if (klokId) clearInterval(klokId); klokId = 0; }
+
+  function werkStatusBij() {
+    if (!root) return;
+    const t = root.querySelector('#ki-tijd'); if (t) t.textContent = fmtTijd((Date.now() - start0) / 1000);
+    const v = root.querySelector('#ki-voortgang');
+    if (v) v.textContent = `${geplaatstN} / ${scherven.length}`;
+    const b = root.querySelector('#ki-balk');
+    if (b) b.style.width = (scherven.length ? (geplaatstN / scherven.length) * 100 : 0) + '%';
+    const h = root.querySelector('#ki-hintteller');
+    if (h) { h.textContent = hints ? ' · ' + hints : ''; h.classList.toggle('ki-teller-aan', hints > 0); }
+    const p = root.querySelector('#ki-prompt');
+    if (p) {
+      if (opties.kana && prompt && !klaar) { p.style.display = ''; p.innerHTML = `Zoek <b>${prompt.toUpperCase()}</b>`; }
+      else p.style.display = 'none';
+    }
+  }
+
+  // ---------- schermen ----------
+  function renderMenu() {
+    modus = 'menu';
+    stopKlok(); bezig = false; cancelAnimationFrame(lus);
+    root.innerHTML = `
+      <div class="ki-wrap">
+        <h2 class="ki-titel">金継ぎ Kintsugi</h2>
+        <p class="ki-sub">Leg de gebroken kom terug. Elke naad die je sluit, vult zich met goud.</p>
+        <div class="ki-formaten" id="ki-formaten"></div>
+        <div class="ki-opties">
+          <label class="ki-optie"><input type="checkbox" id="ki-o-draaien"> <span>Scherven draaien <em>(moeilijker)</em></span></label>
+          <label class="ki-optie"><input type="checkbox" id="ki-o-kana"> <span>Kana-modus <em>(lees voor je legt)</em></span></label>
+          <label class="ki-optie"><input type="checkbox" id="ki-o-omtrek"> <span>Omtrek van de kom tonen</span></label>
+          <label class="ki-optie"><input type="checkbox" id="ki-o-wijzer"> <span>Plek aanwijzen bij oppakken <em>(makkelijker)</em></span></label>
+          <label class="ki-optie"><input type="checkbox" id="ki-o-geluid"> <span>Geluid</span></label>
+        </div>
+        <button class="ki-terug" id="ki-uit">← Terug naar het menu</button>
+      </div>`;
+    const lijst = root.querySelector('#ki-formaten');
+    lijst.innerHTML = FORMATEN.map(f => {
+      const best = LS.get('kintsugi-best-' + f.n, null);
+      return `<button class="ki-kaart" data-n="${f.n}">
+        <span class="ki-k-aantal">${f.n}</span>
+        <span class="ki-k-naam">${f.naam}</span>
+        <span class="ki-k-meta">${best != null ? '🏆 ' + fmtTijd(best) : 'nog niet gedaan'} · 🪙 ${f.munt}</span>
+      </button>`;
+    }).join('');
+    lijst.querySelectorAll('.ki-kaart').forEach(b => b.onclick = () => startSpel(+b.dataset.n));
+    const zet = (id, sleutel) => {
+      const el = root.querySelector(id);
+      el.checked = opties[sleutel];
+      el.onchange = () => { opties[sleutel] = el.checked; bewaarOpties(); };
+    };
+    zet('#ki-o-draaien', 'draaien'); zet('#ki-o-kana', 'kana');
+    zet('#ki-o-omtrek', 'omtrek'); zet('#ki-o-wijzer', 'wijzer'); zet('#ki-o-geluid', 'geluid');
+    root.querySelector('#ki-uit').onclick = () => (window.switchScreen || function () { })('screen-menu');
+  }
+
+  function startSpel(n) {
+    aantal = n;
+    modus = 'spel';
+    root.innerHTML = `
+      <div class="ki-wrap ki-spel">
+        <div class="ki-kop">
+          <button class="ki-knop ki-klein" id="ki-menu">←</button>
+          <div class="ki-kopmidden">
+            <span class="ki-kop-titel">${n} scherven</span>
+            <span class="ki-kop-meta"><span id="ki-voortgang">0 / ${n}</span> · ⏱ <span id="ki-tijd">0:00</span></span>
+          </div>
+          <span class="ki-prompt" id="ki-prompt"></span>
+        </div>
+        <div class="ki-balkbak"><div class="ki-balk" id="ki-balk"></div></div>
+        <div class="ki-doekwrap" id="ki-doekwrap">
+          <canvas id="ki-doek"></canvas>
+          <div class="ki-melding" id="ki-melding"></div>
+        </div>
+        <div class="ki-knoppen">
+          <div class="ki-zoom">
+            <button class="ki-zknop" id="ki-uitzoom" title="Uitzoomen">−</button>
+            <span id="ki-zoomwaarde">100%</span>
+            <button class="ki-zknop" id="ki-inzoom" title="Inzoomen">+</button>
+          </div>
+          <button class="ki-knop" id="ki-sorteer">✦ Sorteren</button>
+          <button class="ki-knop" id="ki-hint">💡 Hint<span id="ki-hintteller"></span></button>
+          <button class="ki-knop" id="ki-draai" style="display:none">↻ Draaien</button>
+          <button class="ki-knop" id="ki-opnieuw">↺ Opnieuw</button>
+        </div>
+        <p class="ki-tip">${opties.draaien
+          ? 'Sleep een scherf en rol met het wiel (of gebruik ↻) om te draaien.'
+          : opties.wijzer
+            ? 'Sleep de scherven naar de stippellijn. Sleep de achtergrond om te schuiven.'
+            : 'Geen aanwijzing: let op de vorm van de rand. Sleep de achtergrond om te schuiven.'}</p>
+      </div>`;
+
+    doek = root.querySelector('#ki-doek');
+    ctx = doek.getContext('2d');
+    root.querySelector('#ki-menu').onclick = renderMenu;
+    root.querySelector('#ki-sorteer').onclick = sorteer;
+    root.querySelector('#ki-hint').onclick = hint;
+    root.querySelector('#ki-opnieuw').onclick = () => startSpel(aantal);
+    root.querySelector('#ki-inzoom').onclick = () => zetZoom(zoom * 1.25, null);
+    root.querySelector('#ki-uitzoom').onclick = () => zetZoom(zoom / 1.25, null);
+    if (opties.draaien) {
+      const d = root.querySelector('#ki-draai');
+      d.style.display = '';
+      d.onclick = () => { if (gekozen && !gekozen.geplaatst) { gekozen.hoek += 0.2618; vuil = true; } };
+    }
+
+    doek.addEventListener('pointerdown', neer);
+    doek.addEventListener('pointermove', beweeg);
+    doek.addEventListener('pointerup', omhoog);
+    doek.addEventListener('pointercancel', omhoog);
+    doek.addEventListener('wheel', wiel, { passive: false });
+    window.addEventListener('resize', maatAanpassen);
+
+    nieuweWereld();
+    maatAanpassen();
+    startKlok();
+    werkStatusBij();
+    bezig = true;
+    cancelAnimationFrame(lus);
+    lus = requestAnimationFrame(stap);
+  }
+
+  // wereldmaat bepalen en de kom breken — alleen bij een nieuw spel
+  function nieuweWereld() {
+    const wrap = root.querySelector('#ki-doekwrap');
+    const r = wrap.getBoundingClientRect();
+    // de wereld is minstens zo groot als het venster, en groter bij veel scherven,
+    // zodat de scherven ook bij 100 stukken aanklikbaar blijven
+    const min = aantal <= 20 ? 420 : aantal <= 35 ? 560 : aantal <= 50 ? 680 : aantal <= 75 ? 820 : 950;
+    W = Math.max(r.width, min);
+    Hh = Math.max(r.height, min * 0.92);
+    breek();
+    tekenAchtergrond();
+  }
+
+  // alleen het doek en de zoomstand aanpassen — de puzzel blijft staan
+  function maatAanpassen() {
+    if (!doek || !root.querySelector('#ki-doekwrap')) return;
+    const r = root.querySelector('#ki-doekwrap').getBoundingClientRect();
+    if (r.width < 2) return;
+    dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    doek.width = Math.round(r.width * dpr);
+    doek.height = Math.round(r.height * dpr);
+    doek.style.width = r.width + 'px';
+    doek.style.height = r.height + 'px';
+    zoom = klem(Math.min(r.width / W, r.height / Hh), 0.15, 3);
+    panX = (r.width - W * zoom) / 2;
+    panY = (r.height - Hh * zoom) / 2;
+    const zv = root.querySelector('#ki-zoomwaarde');
+    if (zv) zv.textContent = Math.round(zoom * 100) + '%';
+    vuil = true;
+  }
+
+  function toonEinde(tijd, record, munten) {
+    const bak = document.createElement('div');
+    bak.className = 'ki-eindbak';
+    bak.innerHTML = `
+      <div class="ki-eind">
+        <div class="ki-eind-ico">金継ぎ</div>
+        <h3>De kom is heel</h3>
+        <p class="ki-eind-tekst">Mooier dan voor de breuk — ${scherven.length} scherven, ${fmtTijd(tijd)}${hints ? `, ${hints} hint${hints > 1 ? 's' : ''}` : ''}.</p>
+        ${record ? '<p class="ki-record">🏆 Nieuwe besttijd</p>' : ''}
+        ${munten ? `<p class="ki-munt">+🪙 ${munten}</p>` : ''}
+        <div class="ki-eind-knoppen">
+          <button class="ki-knop" id="ki-nogeens">Nog eens</button>
+          <button class="ki-knop" id="ki-ander">Ander formaat</button>
+        </div>
+      </div>`;
+    root.querySelector('.ki-doekwrap').appendChild(bak);
+    requestAnimationFrame(() => bak.classList.add('ki-eindbak-aan'));
+    bak.querySelector('#ki-nogeens').onclick = () => startSpel(aantal);
+    bak.querySelector('#ki-ander').onclick = renderMenu;
+  }
+
+  // ---------- opstarten ----------
+  function start(el) {
+    root = el;
+    if (!root) return;
+    stijl();
+    renderMenu();
+  }
+
+  function stijl() {
+    if (document.getElementById('ki-stijl')) return;
+    const s = document.createElement('style');
+    s.id = 'ki-stijl';
+    s.textContent = `
+      .ki-wrap{text-align:left}
+      .ki-titel{font-family:var(--font-display);font-size:23px;margin:0 0 4px}
+      .ki-sub{color:var(--muted);font-size:14px;margin:0 0 16px;line-height:1.5}
+      .ki-formaten{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:18px}
+      .ki-kaart{display:grid;gap:2px;padding:13px 12px;border:1px solid var(--border);background:#fffaf0;
+        border-radius:11px;cursor:pointer;font-family:var(--font-body);text-align:left;transition:.16s}
+      .ki-kaart:hover{border-color:var(--kincha);background:#fff5e4;transform:translateY(-1px)}
+      .ki-k-aantal{font-family:var(--font-display);font-size:24px;font-weight:800;color:var(--kincha);line-height:1}
+      .ki-k-naam{font-weight:700;font-size:14px;color:var(--sumi)}
+      .ki-k-meta{font-size:12px;color:var(--muted)}
+      .ki-opties{display:grid;gap:7px;margin-bottom:16px}
+      .ki-optie{display:flex;align-items:center;gap:9px;font-size:14px;cursor:pointer;color:var(--sumi)}
+      .ki-optie em{color:var(--muted);font-style:normal;font-size:12.5px}
+      .ki-optie input{width:17px;height:17px;accent-color:var(--ai);cursor:pointer}
+      .ki-terug{width:100%;padding:11px;border:1px solid var(--border);background:#fffaf0;border-radius:9px;
+        cursor:pointer;font-family:var(--font-body);font-size:14px;font-weight:700;color:var(--sumi)}
+      .ki-terug:hover{border-color:var(--kincha)}
+
+      .ki-kop{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+      .ki-kopmidden{flex:1;display:flex;flex-direction:column;align-items:center;line-height:1.25}
+      .ki-kop-titel{font-family:var(--font-display);font-weight:800;font-size:16px}
+      .ki-kop-meta{font-size:12.5px;color:var(--muted)}
+      .ki-prompt{min-width:74px;text-align:right;font-size:14px;color:var(--muted)}
+      .ki-prompt b{font-family:var(--font-display);font-size:19px;color:var(--kincha)}
+      .ki-balkbak{height:5px;background:var(--border);border-radius:3px;overflow:hidden;margin-bottom:10px}
+      .ki-balk{height:100%;width:0;background:linear-gradient(90deg,#b8893f,#f4cf78);transition:width .35s}
+
+      .ki-doekwrap{position:relative;border:1px solid var(--border);border-radius:13px;overflow:hidden;
+        aspect-ratio:4/3;background:#f3ecdb}
+      .ki-doekwrap canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+      .ki-doekwrap canvas:active{cursor:grabbing}
+      /* de zoomregelaar staat bewust náást het bord: in het bord zou hij
+         scherven eronder onaanklikbaar maken */
+      .ki-zoom{display:flex;align-items:center;justify-content:center;gap:7px;
+        border:1px solid var(--border);background:#fffaf0;border-radius:9px;padding:0 9px;
+        font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+      .ki-zknop{width:27px;height:27px;border:1px solid var(--border);background:#fffdf8;border-radius:7px;
+        cursor:pointer;font-size:16px;line-height:1;color:var(--sumi);font-family:var(--font-body)}
+      .ki-zknop:hover{border-color:var(--kincha)}
+      .ki-melding{position:absolute;left:50%;top:12px;transform:translate(-50%,-14px);opacity:0;
+        background:rgba(43,36,32,.9);color:#fff8ee;padding:7px 13px;border-radius:8px;font-size:13.5px;
+        pointer-events:none;transition:.22s;white-space:nowrap}
+      .ki-melding-aan{opacity:1;transform:translate(-50%,0)}
+
+      .ki-knoppen{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-top:11px}
+      .ki-knop{padding:10px 13px;border:1px solid var(--border);background:#fffaf0;border-radius:9px;cursor:pointer;
+        font-family:var(--font-body);font-size:14px;font-weight:700;color:var(--sumi)}
+      .ki-knop:hover{border-color:var(--kincha);background:#fff5e4}
+      .ki-klein{padding:8px 12px;min-width:auto}
+      .ki-teller-aan{color:var(--kincha)}
+      .ki-tip{margin:10px 0 0;font-size:12.5px;color:var(--muted);text-align:center}
+
+      /* onderin, zodat de herstelde kom zichtbaar blijft — die is de beloning */
+      .ki-eindbak{position:absolute;left:0;right:0;bottom:0;display:flex;justify-content:center;
+        padding:0 10px 10px;pointer-events:none}
+      .ki-eind{background:rgba(255,253,248,.96);border:1px solid var(--border);border-top:4px solid var(--kincha);
+        border-radius:13px;padding:13px 20px 15px;text-align:center;pointer-events:auto;
+        box-shadow:0 10px 28px rgba(43,36,32,.22);max-width:min(460px,94%);
+        opacity:0;transform:translateY(16px);transition:.45s cubic-bezier(.2,.8,.3,1)}
+      .ki-eindbak-aan .ki-eind{opacity:1;transform:translateY(0)}
+      .ki-eind-ico{font-family:var(--font-display);font-size:22px;color:var(--kincha);margin-bottom:1px}
+      .ki-eind h3{margin:0 0 4px;font-family:var(--font-display);font-size:17px}
+      .ki-eind-tekst{margin:0 0 6px;font-size:13.5px;color:#41382f;line-height:1.5}
+      .ki-record{margin:0 0 2px;font-size:13.5px;font-weight:700;color:var(--kincha)}
+      .ki-munt{margin:0 0 8px;font-size:14px;font-weight:700;color:var(--matsuba)}
+      .ki-eind-knoppen{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+
+      @media (min-width:700px){
+        .ki-formaten{grid-template-columns:repeat(3,1fr)}
+        .ki-doekwrap{aspect-ratio:16/11}
+      }
+      @media (min-width:880px){
+        .container:has(#screen-kintsugi.active){max-width:1000px}
+        .ki-doekwrap{aspect-ratio:16/10}
+      }
+      @media (min-width:1280px){
+        .container:has(#screen-kintsugi.active){max-width:1140px}
+      }
+    `;
+    document.head.appendChild(s);
+  }
+
+  window.KanaKintsugi = {
+    start,
+    _stand: () => ({
+      modus, aantal, scherven: scherven.length, geplaatst: geplaatstN, klaar,
+      zoom: +zoom.toFixed(2), wereld: [Math.round(W), Math.round(Hh)],
+      hints, prompt, wijzer: opties.wijzer,
+      gekozenHoek: gekozen ? +gekozen.hoek.toFixed(3) : null,
+      kleinsteStraal: scherven.length ? Math.round(Math.min(...scherven.map(s => s.straal))) : 0,
+      medianeStraal: scherven.length ? Math.round(scherven.map(s => s.straal).sort((a, b) => a - b)[scherven.length >> 1]) : 0
+    }),
+    // testhulpje: een losse scherf die op het aangewezen punt ook echt bovenop ligt
+    _eersteLosse: () => {
+      const r = doek.getBoundingClientRect();
+      const naarScherm = (wx, wy) => [wx * zoom + panX, wy * zoom + panY];
+      for (let i = scherven.length - 1; i >= 0; i--) {
+        const s = scherven[i];
+        if (s.geplaatst) continue;
+        if (opties.kana && prompt && s.romaji !== prompt) continue;
+        // punten proberen tot er één is waar deze scherf de bovenste is
+        const kandidaten = [[s.x, s.y]];
+        const co = Math.cos(s.hoek), si = Math.sin(s.hoek);
+        for (let k = 0; k < s.lokaal.length; k += 2) {
+          const vx = s.lokaal[k] * co - s.lokaal[k + 1] * si;
+          const vy = s.lokaal[k] * si + s.lokaal[k + 1] * co;
+          kandidaten.push([s.x + vx * 0.45, s.y + vy * 0.45]);
+        }
+        for (const [px, py] of kandidaten) {
+          if (raak(px, py) !== s) continue;
+          const [sx, sy] = naarScherm(px, py);
+          if (sx < 4 || sy < 4 || sx > r.width - 4 || sy > r.height - 4) continue;
+          const [tx, ty] = naarScherm(s.thuisX + (px - s.x), s.thuisY + (py - s.y));
+          return { x: sx, y: sy, thuisX: tx, thuisY: ty, doekB: r.width, doekH: r.height };
+        }
+      }
+      return null;
+    },
+    _sleepInfo: () => {
+      if (!sleep || !sleep.scherf) return { sleept: false, pan: !!(sleep && sleep.pan) };
+      const s = sleep.scherf;
+      return { sleept: true, afstand: +Math.hypot(s.x - s.thuisX, s.y - s.thuisY).toFixed(1),
+               snap: +snapAfstand(s).toFixed(1), straal: Math.round(s.straal), hoek: +s.hoek.toFixed(2) };
+    },
+    _hint: hint, _sorteer: sorteer,
+    _start: startSpel, _opties: opties
+  };
+  window.startKintsugiInit = function () {
+    (window.switchScreen || function () { })('screen-kintsugi');
+    const el = document.getElementById('kintsugi-root');
+    if (el) start(el);
+  };
+})();
 
 </script>
 <script id="gacha-extra">
